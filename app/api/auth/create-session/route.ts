@@ -1,92 +1,92 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { adminDb } from "@/firebaseAdmin";
+import { adminDb, adminAuth } from "@/firebaseAdmin";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
-const MAX_AGE = parseInt(process.env.SESSION_MAX_AGE || "3600", 10); // seconds
-const SALT_ROUNDS = 10;
+const MAX_AGE = parseInt(process.env.SESSION_MAX_AGE || "3600", 10);
+const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
-// Helper to detect if a string looks like a bcrypt hash
-function looksLikeBcryptHash(pw: string | undefined | null) {
-  if (!pw || typeof pw !== "string") return false;
-  // bcrypt hashes typically start with $2a$ or $2b$ or $2y$ and are ~60 chars
-  return /^\$2[aby]\$/.test(pw);
-}
-
-// ✅ POST: Login & create session
+/**
+ * 🔐 Server-Side Login & Session Creation
+ * Handles Firebase Authentication and profile retrieval.
+ */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { email, password } = body;
 
     if (!email || !password) {
-      return NextResponse.json({ error: "Missing email or password" }, { status: 400 });
+      return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
     }
 
-    const snapshot = await adminDb
-      .collection("users")
-      .where("email", "==", email)
-      .limit(1)
-      .get();
+    // 1. Authenticate with Firebase via REST API
+    const signInUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
+    
+    const firebaseRes = await fetch(signInUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    });
 
-    if (snapshot.empty) {
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    const firebaseData = await firebaseRes.json();
+
+    if (!firebaseRes.ok) {
+      const errorCode = firebaseData.error?.message;
+      let userFriendlyMsg = "Invalid email or password.";
+      if (errorCode === "EMAIL_NOT_FOUND" || errorCode === "INVALID_PASSWORD") userFriendlyMsg = "Invalid credentials.";
+      if (errorCode === "USER_DISABLED") userFriendlyMsg = "This account has been disabled.";
+      
+      return NextResponse.json({ error: userFriendlyMsg }, { status: 401 });
     }
 
-    const userDoc = snapshot.docs[0];
-    const userData: any = userDoc.data();
-    const uid = userDoc.id;
+    const { localId: uid, idToken } = firebaseData;
 
-    const stored = userData.password;
+    // 2. Verify the token and get Custom Claims
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
 
-    // If stored is a bcrypt hash -> use bcrypt.compare
-    if (looksLikeBcryptHash(stored)) {
-      const match = await bcrypt.compare(password, stored);
-      if (!match) {
-        return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
-      }
+    // 3. Fetch Extended Profile from Firestore
+    // Strategy: First try direct lookup by UID, then fallback to Email search for legacy records
+    let userDoc = await adminDb.collection("users").doc(uid).get();
+    let userData: any = null;
+
+    if (userDoc.exists) {
+        userData = userDoc.data();
     } else {
-      // stored seems plain text (legacy). Compare plain, and if matches -> upgrade to hash
-      if (password !== stored) {
-        return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
-      }
-
-      // Upgrade: hash the plain password and update the user doc (non-blocking but awaited)
-      try {
-        const newHash = await bcrypt.hash(password, SALT_ROUNDS);
-        await adminDb.collection("users").doc(uid).update({
-          password: newHash,
-          passwordMigratedAt: new Date(),
-        });
-        // console.log("Password migrated to bcrypt for user:", uid);
-      } catch (upErr) {
-        console.error("Password migration error for user", uid, upErr);
-        // Do not fail login if migration update fails — user is already authenticated.
-      }
+        // Fallback: Search by email (useful for users created before UID mapping)
+        const emailSnapshot = await adminDb.collection("users").where("email", "==", email).limit(1).get();
+        if (!emailSnapshot.empty) {
+            userDoc = emailSnapshot.docs[0];
+            userData = userDoc.data();
+            // Optional: Migrating legacy doc to use UID as ID for future performance
+            // await adminDb.collection("users").doc(uid).set(userData);
+            // await adminDb.collection("users").doc(userDoc.id).delete();
+        }
+    }
+    
+    if (!userData) {
+        return NextResponse.json({ error: "Access denied: Official profile not found." }, { status: 403 });
     }
 
-    // Prepare JWT payload (include extra user info)
+    // 4. Create custom JWT Session
     const payload = {
-      uid,
-      email,
-      role: userData.role || "User",
-      name: userData.name || null,
+      uid: uid, // Use Auth UID
+      email: email,
+      role: decodedToken.role || userData.role || "User",
+      name: userData.name || "Official",
       city: userData.city || null,
       district: userData.district || null,
       ps: userData.ps || null,
-      mobile: userData.mobile || null,
+      mobile: userData.phone || userData.mobile || null,
     };
 
-    // JWT sign
-    const token = jwt.sign(payload, SECRET, { expiresIn: `${MAX_AGE}s` });
+    const sessionToken = jwt.sign(payload, SECRET, { expiresIn: `${MAX_AGE}s` });
 
-    // Set cookie
+    // 5. Set Secure HTTP-only Cookie
     const cookieStore = await cookies();
     cookieStore.set({
       name: "sessionToken",
-      value: token,
+      value: sessionToken,
       httpOnly: true,
       path: "/",
       sameSite: "lax",
@@ -94,38 +94,24 @@ export async function POST(req: Request) {
       maxAge: MAX_AGE,
     });
 
-    return NextResponse.json({ success: true, user: payload });
+    return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("create-session POST error:", err);
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
-// ✅ GET: fetch session (decode JWT)
+// ✅ GET: Fetch current session
 export async function GET() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("sessionToken")?.value || null;
-
-  if (!token) {
-    return NextResponse.json({ authenticated: false });
-  }
-
   try {
-    const decoded: any = jwt.verify(token, SECRET);
+    const cookieStore = await cookies();
+    const token = (await cookieStore).get("sessionToken")?.value || null;
 
-    return NextResponse.json({
-      authenticated: true,
-      uid: decoded.uid,
-      email: decoded.email,
-      name: decoded.name,
-      role: decoded.role,
-      city: decoded.city,
-      district: decoded.district,
-      ps: decoded.ps,
-      mobile: decoded.mobile,
-    });
+    if (!token) return NextResponse.json({ authenticated: false });
+
+    const decoded: any = jwt.verify(token, SECRET);
+    return NextResponse.json({ authenticated: true, ...decoded });
   } catch (err) {
-    console.error("create-session GET error:", err);
     return NextResponse.json({ authenticated: false });
   }
 }

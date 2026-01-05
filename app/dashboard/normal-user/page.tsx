@@ -3,47 +3,50 @@
 import React from "react";
 import Image from "next/image";
 import AddApplicationFormNormalUser from "@/components/normaluser/normaluserform";
+import Footer from "@/components/Footer";
 
 export default function UserAddApplication() {
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      {/* ---------- HEADER SECTION ---------- */}
-      <header className="bg-[#0a2c4e] text-white py-4 shadow-md">
-        <div className="container mx-auto flex items-center justify-between px-4 md:px-12">
-          {/* Logo & Title */}
+    <div className="min-h-screen flex flex-col bg-[#f0f4f8] bg-[radial-gradient(#dbeafe_1px,transparent_1px)] [background-size:20px_20px]">
+      
+      {/* ---------- NAVBAR ---------- */}
+      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image
-              src="/logo.png"
-              alt="Sindh Police Logo"
-              width={60}
-              height={60}
-              className="rounded-full border border-white"
-            />
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold tracking-wide">
-                Sindh Police Complaint Portal
+            <div className="relative w-12 h-12">
+               <Image
+                src="/logo.png"
+                alt="Sindh Police Logo"
+                fill
+                className="object-contain"
+              />
+            </div>
+            <div className="hidden md:block">
+              <h1 className="text-xl font-bold text-slate-800 leading-tight">
+                Sindh Police
               </h1>
-              <p className="text-sm text-gray-200">
-                Mobile Snatching / Theft Application Form
+              <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">
+                Complaint Management System
               </p>
             </div>
+          </div>
+          
+          <div className="text-right">
+            <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">
+              Public Portal
+            </span>
           </div>
         </div>
       </header>
 
-      {/* ---------- FORM SECTION ---------- */}
-      <main className="flex-grow flex items-center justify-center py-10 px-4">
-        <div className="w-full max-w-7xl bg-white rounded-2xl shadow-lg p-8 md:p-10 border border-gray-200">
-         
-          {/* Embed your same working form */}
+      {/* ---------- MAIN CONTENT ---------- */}
+      <main className="flex-grow py-8 px-4 md:px-6">
+        <div className="container mx-auto">
           <AddApplicationFormNormalUser />
         </div>
       </main>
 
-      {/* ---------- FOOTER ---------- */}
-      <footer className="bg-[#0a2c4e] text-gray-300 text-center py-3 text-sm">
-        © {new Date().getFullYear()} Sindh Police | All Rights Reserved
-      </footer>
+      <Footer />
     </div>
   );
 }

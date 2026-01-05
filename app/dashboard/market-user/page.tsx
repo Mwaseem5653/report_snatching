@@ -1,24 +1,33 @@
-"use client"
+import { cookies } from "next/headers";
+import jwt from "jsonwebtoken";
+import MarketUserClient from "@/components/dashboard/MarketUserClient";
 
-import SessionHeader from "@/components/session-avtar/page"
-import Sidebar from "@/components/sa-landing/landing-view"
+const SECRET = process.env.SESSION_JWT_SECRET!;
 
-export default function SuperAdminLanding() {
-  return (
-    <div className="h-screen flex flex-col">
-      {/* Header */}
-      <SessionHeader />
+export default async function MarketUserPage() {
+  let session = null;
+  
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("sessionToken")?.value;
 
-      {/* Main Content Area */}
-      <div className="flex flex-1">
-        {/* Sidebar (Vertical Strip) */}
-        <Sidebar />
-
-        {/* Page Content (Future Components Render Here) */}
-        <main className="flex-1 p-4 bg-gray-50">
-          
-        </main>
-      </div>
-    </div>
-  )
+    if (token) {
+      const decoded = jwt.verify(token, SECRET) as any;
+      session = {
+        authenticated: true,
+        uid: decoded.uid,
+        email: decoded.email,
+        name: decoded.name,
+        role: decoded.role,
+        city: decoded.city,
+        district: decoded.district,
+        ps: decoded.ps,
+        mobile: decoded.mobile,
+      };
+    }
+  } catch (err) {
+    console.error("Session error:", err);
+  }
+  
+  return <MarketUserClient initialSession={session} />;
 }

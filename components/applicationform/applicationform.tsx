@@ -13,8 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { uploadFileToStorage } from "@/app/api/uploadhelper/helper";
-import { addApplication } from "@/app/api/update-application/route";
+import { uploadFileToStorage } from "@/lib/uploadHelper";
+import { addApplication } from "@/lib/applicationApi";
 import { locationData } from "@/components/location/location";
 
 type AddApplicationFormProps = {

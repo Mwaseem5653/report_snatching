@@ -1,26 +1,33 @@
-"use client";
+import { cookies } from "next/headers";
+import jwt from "jsonwebtoken";
+import PsUserClient from "@/components/dashboard/PsUserClient";
 
-import SessionHeader from "@/components/session-avtar/page";
-import Sidebar from "@/components/sa-landing/landing-view";
+const SECRET = process.env.SESSION_JWT_SECRET!;
 
-export default function SuperAdminLanding({ children }: { children?: React.ReactNode }) {
-  return (
-    <div className="h-screen flex flex-col w-full overflow-hidden">
-      {/* 🔹 Header */}
-      <SessionHeader />
+export default async function PsUserPage() {
+  let session = null;
+  
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("sessionToken")?.value;
 
-      {/* 🔹 Main Content Area */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* 🔹 Sidebar (Fixed Width) */}
-        <div className="w-full bg-white border-r shadow-sm">
-          <Sidebar />
-        </div>
-
-        {/* 🔹 Page Content */}
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-4">
-          {children /* Page Components Render Here, e.g. <UserManagement /> */}
-        </main>
-      </div>
-    </div>
-  );
+    if (token) {
+      const decoded = jwt.verify(token, SECRET) as any;
+      session = {
+        authenticated: true,
+        uid: decoded.uid,
+        email: decoded.email,
+        name: decoded.name,
+        role: decoded.role,
+        city: decoded.city,
+        district: decoded.district,
+        ps: decoded.ps,
+        mobile: decoded.mobile,
+      };
+    }
+  } catch (err) {
+    console.error("Session error:", err);
+  }
+  
+  return <PsUserClient initialSession={session} />;
 }

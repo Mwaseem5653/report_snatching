@@ -1,149 +1,220 @@
 "use client";
+
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import Footer from "@/components/Footer";
+import Image from "next/image";
+import { 
+  ShieldCheck, 
+  Siren, 
+  Smartphone, 
+  Clock, 
+  Search, 
+  CheckCircle2, 
+  ArrowRight,
+  Shield,
+  FileText,
+  PhoneCall,
+  Info,
+  ExternalLink
+} from "lucide-react";
 
 export default function LandingPage() {
-  const highlights = [
-    { title: "Quick Online Reporting", desc: "Report snatching, theft, or lost items instantly from your phone or computer." },
-    { title: "Faster Police Response", desc: "Your report is sent directly to the relevant police station for immediate attention." },
-    { title: "Track Your Case", desc: "Stay informed about your report’s progress and police action status." },
-  ];
-
-  const steps = [
-    { id: 1, title: "Identify Incident", desc: "Recognize snatching, theft, or any suspicious activity around you." },
-    { id: 2, title: "Report Online", desc: "File your complaint securely and instantly through our online portal." },
-    { id: 3, title: "Police Action", desc: "Authorities review your report and take prompt action." },
+  const publicServices = [
+    { 
+      icon: <FileText className="h-8 w-8" />,
+      title: "Online Complaint", 
+      titleUr: "آن لائن شکایت",
+      desc: "Lodge reports for mobile snatching, theft, or loss from the safety of your home.",
+      link: "/dashboard/normal-user"
+    },
+    { 
+      icon: <Search className="h-8 w-8" />,
+      title: "Verify IMEI", 
+      titleUr: "آئی ایم ای آئی تصدیق",
+      desc: "Check if a mobile device is reported stolen in the Sindh Police database.",
+      link: "/authentication/login" // Or a public search if we enable it
+    },
+    { 
+      icon: <ShieldCheck className="h-8 w-8" />,
+      title: "Character Certificate", 
+      titleUr: "کیریکٹر سرٹیفکیٹ",
+      desc: "Apply for official police character verification certificates online.",
+      link: "#"
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-blue-100 text-gray-800 flex flex-col">
-      {/* ✅ Header */}
-      <header className="flex justify-between items-center px-8 py-4 bg-white/90 backdrop-blur-md shadow-sm sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Sindh Police Logo" className="w-12 h-12" />
-          <div>
-            <h1 className="text-xl font-bold text-blue-800 tracking-wide">Sindh Police</h1>
-            <p className="text-sm text-gray-500">Service • Integrity • Protection</p>
+    <div className="min-h-screen bg-white text-slate-900 flex flex-col font-sans">
+      
+      {/* 🔹 Top Emergency Bar */}
+      <div className="bg-[#0a2c4e] text-white py-2 px-6 border-b border-white/10 hidden md:block">
+        <div className="container mx-auto flex justify-between items-center text-[11px] font-bold tracking-widest uppercase">
+          <div className="flex gap-6">
+            <span className="flex items-center gap-2"><PhoneCall size={14} className="text-red-500" /> Emergency Response: 15</span>
+            <span className="flex items-center gap-2"><Info size={14} className="text-blue-400" /> IGP Complaint Cell: 9110</span>
+          </div>
+          <div className="flex gap-4">
+            <button className="hover:text-blue-300 transition-colors">English</button>
+            <span className="text-white/20">|</span>
+            <button className="hover:text-blue-300 transition-colors font-urdu">اردو</button>
           </div>
         </div>
-        <div className="flex gap-3">
-          <Link href="/authentication/login">
-            <Button
-              variant="outline"
-              className="rounded-full border-blue-700 text-blue-700 hover:bg-blue-700 hover:text-white transition-all"
-            >
-              Login
-            </Button>
-          </Link>
-          <Link href="/dashboard/normal-user">
-            <Button className="rounded-full bg-blue-700 hover:bg-blue-800 text-white px-6 transition-all">
-              Report Snatching
-            </Button>
-          </Link>
+      </div>
+
+      {/* 🔹 Main Institutional Header */}
+      <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white shadow-sm">
+        <div className="container mx-auto px-6 h-24 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative h-16 w-16">
+               <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
+            </div>
+            <div className="leading-none border-l-2 border-slate-100 pl-4">
+              <h1 className="text-2xl font-black text-[#0a2c4e] tracking-tight">SINDH POLICE</h1>
+              <p className="text-[10px] font-bold text-red-600 tracking-[0.3em] uppercase mt-1">Proud to Serve</p>
+            </div>
+          </div>
+
+          <nav className="hidden lg:flex items-center gap-10 text-xs font-black text-slate-600 uppercase tracking-[0.15em]">
+             <Link href="#" className="hover:text-[#0a2c4e] transition-colors border-b-2 border-transparent hover:border-[#0a2c4e] pb-1">About Us</Link>
+             <Link href="#" className="hover:text-[#0a2c4e] transition-colors border-b-2 border-transparent hover:border-[#0a2c4e] pb-1">Public Services</Link>
+             <Link href="#" className="hover:text-[#0a2c4e] transition-colors border-b-2 border-transparent hover:border-[#0a2c4e] pb-1">Contact</Link>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <Link href="/authentication/login">
+              <Button variant="outline" className="font-bold text-[#0a2c4e] border-[#0a2c4e] hover:bg-[#0a2c4e] hover:text-white h-11 px-6 rounded-none uppercase text-xs tracking-widest transition-all">
+                Login
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
-      {/* ✅ Hero Section */}
-      <section className="flex flex-col md:flex-row items-center justify-between px-10 py-20 max-w-7xl mx-auto w-full">
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="max-w-xl space-y-6"
-        >
-          <h2 className="text-5xl font-extrabold text-blue-900 leading-tight">
-            Stop Snatching.<br />Stay Safe. Report Instantly.
-          </h2>
-          <p className="text-gray-600 text-lg leading-relaxed">
-            Your timely report can prevent another incident. Join hands with Sindh Police to build a safer, stronger Karachi.
-          </p>
-          <div className="flex flex-wrap gap-4">
-            <Link href="/dashboard/normal-user">
-              <Button className="rounded-full px-8 py-6 text-lg bg-blue-700 hover:bg-blue-800 text-white shadow-md hover:shadow-lg transition-all">
-                File a Report
-              </Button>
-            </Link>
-            <Link href="/authentication/login">
-              <Button
-                variant="outline"
-                className="rounded-full px-8 py-6 text-lg border-blue-700 text-blue-700 hover:bg-blue-700 hover:text-white shadow-sm transition-all"
-              >
-                Officer Login
-              </Button>
-            </Link>
+      {/* 🔹 Hero Section: Formal & Authoritative */}
+      <section className="relative bg-slate-50 overflow-hidden border-b border-slate-200">
+        <div className="absolute inset-0 z-0 opacity-5">
+           <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+        </div>
+        
+        <div className="container mx-auto px-6 py-16 lg:py-24 relative z-10">
+          <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-24">
+            
+            <motion.div 
+              initial={{ opacity: 0, x: -30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8 }}
+              className="flex-1 space-y-8 text-center lg:text-left"
+            >
+              <div className="inline-flex items-center gap-2 px-4 py-1 bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-sm shadow-lg shadow-red-600/20">
+                <Siren size={14} /> Official Reporting Portal
+              </div>
+              
+              <h1 className="text-5xl lg:text-7xl font-black text-[#0a2c4e] tracking-tighter leading-[0.95]">
+                Dignity. Safety.<br />
+                <span className="text-red-600 underline decoration-slate-200 underline-offset-8">Protection.</span>
+              </h1>
+              
+              <p className="text-lg text-slate-600 leading-relaxed max-w-xl mx-auto lg:mx-0 font-medium border-l-4 border-red-600 pl-6 italic">
+                Sindh Police is committed to providing efficient, transparent, and citizen-centric policing through digital transformation.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start pt-4">
+                <Link href="/dashboard/normal-user">
+                  <Button className="h-14 px-10 rounded-none text-sm font-black uppercase tracking-widest bg-[#0a2c4e] hover:bg-slate-800 text-white shadow-xl transition-all duration-300 w-full sm:w-auto group">
+                    Lodge Complaint <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                </Link>
+                <Link href="/authentication/login">
+                  <Button variant="outline" className="h-14 px-10 rounded-none text-sm font-black uppercase tracking-widest border-2 border-[#0a2c4e] text-[#0a2c4e] hover:bg-[#0a2c4e] hover:text-white w-full sm:w-auto transition-all">
+                    Search Database
+                  </Button>
+                </Link>
+              </div>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 1 }}
+              className="flex-1 w-full"
+            >
+               <div className="relative w-full max-w-lg mx-auto lg:mr-0 aspect-[4/3] bg-white p-4 shadow-2xl border-t-8 border-[#0a2c4e] rounded-b-xl overflow-hidden">
+                  <Image 
+                    src="/logo1.png" 
+                    alt="Sindh Police Operations" 
+                    fill 
+                    className="object-contain p-8 grayscale hover:grayscale-0 transition-all duration-700"
+                    priority
+                  />
+               </div>
+            </motion.div>
+
           </div>
-        </motion.div>
-
-        {/* Hero Image */}
-        <motion.img
-          src="/logo1.png"
-          alt="Police Awareness"
-          className="w-[480px] mt-10 md:mt-0 rounded-3xl shadow-lg border border-blue-100"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1 }}
-        />
-      </section>
-
-      {/* ✅ Highlights Section */}
-      <section className="bg-gradient-to-r from-blue-900 to-blue-700 text-white py-20">
-        <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-3 gap-10">
-          {highlights.map((item, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: i * 0.1 }}
-              className="bg-white/10 p-8 rounded-2xl border border-blue-500 text-center hover:bg-white/20 transition-all shadow-md"
-            >
-              <h3 className="text-2xl font-semibold mb-3">{item.title}</h3>
-              <p className="text-blue-100 leading-relaxed">{item.desc}</p>
-            </motion.div>
-          ))}
         </div>
       </section>
 
-      {/* ✅ Steps Section */}
-      <section className="py-24 px-6 max-w-6xl mx-auto text-center">
-        <h2 className="text-3xl md:text-4xl font-bold text-blue-900 mb-12">How It Works / یہ کیسے کام کرتا ہے</h2>
-        <div className="grid md:grid-cols-3 gap-10">
-          {steps.map((step) => (
-            <motion.div
-              key={step.id}
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="bg-white p-8 rounded-2xl border border-gray-200 hover:border-blue-400 hover:shadow-xl transition-all"
-            >
-              <div className="text-blue-700 text-2xl font-bold mb-3">Step {step.id}</div>
-              <h3 className="text-lg font-semibold text-blue-800 mb-2">{step.title}</h3>
-              <p className="text-gray-600 leading-relaxed">{step.desc}</p>
-            </motion.div>
-          ))}
+      {/* 🔹 Public Services Grid */}
+      <section className="py-24 bg-white">
+        <div className="container mx-auto px-6">
+          <div className="text-center mb-16 space-y-2">
+             <h2 className="text-3xl font-black text-[#0a2c4e] tracking-tight uppercase">Public Services</h2>
+             <div className="w-20 h-1 bg-red-600 mx-auto"></div>
+             <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] mt-4">Safe & Accessible Citizen Support</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {publicServices.map((service, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: i * 0.1 }}
+                className="group p-8 border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-2xl hover:border-blue-100 transition-all duration-500 relative"
+              >
+                <div className="mb-6 text-[#0a2c4e] group-hover:text-red-600 transition-colors">
+                  {service.icon}
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-1">{service.title}</h3>
+                <p className="text-blue-600 font-urdu font-bold text-sm mb-4 leading-none">{service.titleUr}</p>
+                <p className="text-slate-500 text-sm leading-relaxed mb-6">{service.desc}</p>
+                <Link href={service.link} className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-[#0a2c4e] group-hover:text-red-600 transition-colors">
+                   Access Service <ExternalLink size={12} className="ml-2" />
+                </Link>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ✅ Mission Section */}
-      <section className="bg-blue-50 py-24">
-        <div className="max-w-4xl mx-auto text-center px-6 space-y-6">
-          <h2 className="text-3xl md:text-4xl font-bold text-blue-900">Our Mission / ہمارا مقصد</h2>
-          <p className="text-gray-700 leading-relaxed text-lg">
-            The Sindh Police is dedicated to maintaining peace, justice, and public safety. Through this digital platform,
-            we ensure transparent, efficient, and citizen-friendly reporting to strengthen trust between police and the public.
-          </p>
+      {/* 🔹 Official Message Bar */}
+      <section className="bg-[#0a2c4e] text-white py-16 overflow-hidden relative">
+        <div className="container mx-auto px-6 text-center max-w-4xl space-y-8">
+           <h2 className="text-3xl md:text-5xl font-black tracking-tight leading-none uppercase">Empowering Citizens Through Digital Justice</h2>
+           <p className="text-blue-100 text-lg opacity-80 leading-relaxed font-medium">
+              The Sindh Police is dedicated to modernizing law enforcement. Our goal is to bridge the gap between police and public through technology, ensuring accountability and swift response.
+           </p>
+           <div className="pt-4 flex flex-wrap justify-center gap-12 text-slate-300">
+              <div className="text-center">
+                 <p className="text-3xl font-black text-white">15</p>
+                 <p className="text-[9px] font-bold uppercase tracking-[0.2em]">Police Helpline</p>
+              </div>
+              <div className="text-center">
+                 <p className="text-3xl font-black text-white">9110</p>
+                 <p className="text-[9px] font-bold uppercase tracking-[0.2em]">IGP Complaint Cell</p>
+              </div>
+              <div className="text-center">
+                 <p className="text-3xl font-black text-white">88.6</p>
+                 <p className="text-[9px] font-bold uppercase tracking-[0.2em]">Sindh Police FM</p>
+              </div>
+           </div>
         </div>
       </section>
 
-      {/* ✅ Footer */}
-      <footer className="bg-blue-900 text-white py-8 text-center border-t border-blue-800">
-        <p className="text-sm tracking-wide">
-          © 2025 Sindh Police | All Rights Reserved <br />
-          <span className="text-blue-200">Emergency Helpline:</span>{" "}
-          <span className="font-bold text-white text-base">15</span>
-        </p>
-      </footer>
+      <Footer />
     </div>
   );
 }

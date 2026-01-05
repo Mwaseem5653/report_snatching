@@ -2,16 +2,8 @@
 
 import React, { useState } from "react";
 import { db } from "@/firebaseconfig";
-import {
-  collection,
-  collectionGroup,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { CheckCircle, XCircle } from "lucide-react";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { CheckCircle, XCircle, Search, Loader2 } from "lucide-react";
 
 /* -------------------- Types -------------------- */
 type User = {
@@ -37,147 +29,119 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
   const [loading, setLoading] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
 
-  // 🔍 Search across all 'applications' subcollections
+  // 🔍 Search via API (Server-Side)
   const searchIMEI = async (imeiInput: string): Promise<IMEIRecord | null> => {
-    const cleanIMEI = imeiInput.trim();
-
     try {
-      // Search for imei1
-      const q1 = query(collectionGroup(db, "applications"), where("imei1", "==", cleanIMEI));
-      const snapshot1 = await getDocs(q1);
-
-      if (!snapshot1.empty) {
-        const doc = snapshot1.docs[0].data();
-        return {
-          ps: doc.ps,
-          crimeHead: doc.crimeHead,
-          status: "founded",
-        };
-      }
-
-      // Search for imei2
-      const q2 = query(collectionGroup(db, "applications"), where("imei2", "==", cleanIMEI));
-      const snapshot2 = await getDocs(q2);
-
-      if (!snapshot2.empty) {
-        const doc = snapshot2.docs[0].data();
-        return {
-          ps: doc.ps,
-          crimeHead: doc.crimeHead,
-          status: "founded",
-        };
-      }
-
-      return null;
-    } catch (error) {
-      console.error("IMEI Search Error:", error);
-      return null;
-    }
-  };
-
-  // 💾 Save to Firestore if user is PS or Market user
-  const saveIMEIRecord = async (data: IMEIRecord) => {
-    if (!currentUser) return;
-    try {
-      await addDoc(collection(db, "imei_searches"), {
-        imei,
-        ps: data.ps,
-        crimeHead: data.crimeHead,
-        status: data.status,
-        foundBy: {
-          name: currentUser.name,
-          role: currentUser.role,
-          profile: currentUser.profile || null,
-        },
-        createdAt: serverTimestamp(),
+      const res = await fetch("/api/search-imei", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imei: imeiInput }),
       });
-      console.log("✅ Record saved to Firestore");
+
+      const data = await res.json();
+      if (data.success && data.data) {
+        return data.data;
+      }
+      return null;
     } catch (error) {
-      console.error("❌ Firestore Save Error:", error);
+      console.error("IMEI Search API Error:", error);
+      return null;
     }
   };
 
   // 🚀 Handle Search
-  const handleSearch = async () => {
+  const handleSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    
     const cleanIMEI = imei.trim();
     if (!cleanIMEI) return;
 
     setLoading(true);
     setShowPopup(false);
+    setResult(null);
 
     const res = await searchIMEI(cleanIMEI);
     setResult(res);
     setShowPopup(true);
-
-    // Save record if PS or Market user
-    if (res && currentUser && ["ps_user", "market_user"].includes(currentUser.role)) {
-      await saveIMEIRecord(res);
-    }
 
     setLoading(false);
   };
 
   /* -------------------- UI -------------------- */
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-md bg-white shadow-lg rounded-2xl p-6">
-        <h2 className="text-2xl font-bold text-center text-blue-700 mb-6">
-          IMEI Search Portal
+    <div className="flex flex-col items-center justify-center p-6 w-full max-w-2xl mx-auto">
+      <div className="w-full bg-white shadow-xl shadow-slate-200 rounded-3xl p-8 border border-slate-100">
+        <h2 className="text-2xl font-bold text-center text-slate-800 mb-2">
+          IMEI Verification Portal
         </h2>
+        <p className="text-center text-slate-500 mb-8 text-sm">
+          Enter the 15-digit IMEI number to verify device status against the police database.
+        </p>
 
         {/* Search Bar */}
-        <div className="flex gap-2 mb-6">
-          <input
-            type="text"
-            placeholder="Enter IMEI number"
-            value={imei}
-            onChange={(e) => setImei(e.target.value)}
-            className="flex-1 border border-gray-300 rounded-lg p-2 focus:ring focus:ring-blue-200 outline-none"
-          />
+        <form onSubmit={handleSearch} className="flex gap-2 mb-8 relative">
+          <div className="relative flex-1">
+             <Search className="absolute left-4 top-3.5 text-slate-400 h-5 w-5" />
+             <input
+                type="text"
+                placeholder="Enter 15-digit IMEI number"
+                value={imei}
+                onChange={(e) => setImei(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-slate-700"
+              />
+          </div>
           <button
-            onClick={handleSearch}
-            disabled={loading}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            type="submit"
+            disabled={loading || !imei.trim()}
+            className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 font-semibold shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
           >
-            {loading ? "Searching..." : "Search"}
+            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : "Verify"}
           </button>
-        </div>
+        </form>
 
-        {/* Result Popup */}
+        {/* Result Popup (Inline) */}
         {showPopup && (
-          <div className="mt-4 border rounded-lg shadow-md p-4 bg-gray-50 text-left">
+          <div className={`rounded-2xl p-6 border ${result ? "bg-red-50 border-red-100" : "bg-green-50 border-green-100"} animate-in fade-in slide-in-from-top-4`}>
             {result ? (
-              <div>
-                <p>
-                  <strong>Police Station:</strong> {result.ps}
-                </p>
-                <p>
-                  <strong>Crime Type:</strong> {result.crimeHead}
-                </p>
-                <p className="flex items-center gap-2 mt-2">
-                  <strong>Status:</strong>
-                  {result.status === "founded" ? (
-                    <span className="flex items-center text-green-600 font-medium">
-                      <CheckCircle className="w-5 h-5 mr-1" /> Founded
-                    </span>
-                  ) : (
-                    <span className="flex items-center text-red-600 font-medium">
-                      <XCircle className="w-5 h-5 mr-1" /> Not Found
-                    </span>
-                  )}
-                </p>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <XCircle className="w-8 h-8 text-red-600" />
+                </div>
+                <h3 className="text-xl font-bold text-red-800 mb-1">NOT CLEAR</h3>
+                <p className="text-red-600 text-sm mb-4 font-semibold">This device is reported in the database.</p>
+                
+                <div className="bg-white rounded-xl p-4 text-left grid grid-cols-2 gap-4 border border-red-200/50 shadow-sm">
+                   <div>
+                      <p className="text-xs text-slate-500 uppercase font-bold">Status</p>
+                      <p className="text-slate-800 font-medium capitalize">Reported</p>
+                   </div>
+                   <div>
+                      <p className="text-xs text-slate-500 uppercase font-bold">Crime Type</p>
+                      <p className="text-slate-800 font-medium capitalize">{result.crimeHead}</p>
+                   </div>
+                   <div className="col-span-2">
+                      <p className="text-xs text-slate-500 uppercase font-bold">Reporting Station</p>
+                      <p className="text-slate-800 font-medium">{result.ps}</p>
+                   </div>
+                </div>
               </div>
             ) : (
-              <p className="text-red-600 font-semibold">
-                ❌ No record found for IMEI: {imei}
-              </p>
+              <div className="text-center py-4">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                   <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-xl font-bold text-green-800 mb-1">CLEAR</h3>
+                <p className="text-green-600 text-sm">
+                   Device with IMEI <span className="font-mono font-bold">{imei}</span> is not reported as stolen.
+                </p>
+              </div>
             )}
 
             <button
-              onClick={() => setShowPopup(false)}
-              className="mt-4 bg-gray-300 hover:bg-gray-400 px-3 py-1 rounded"
+              onClick={() => { setShowPopup(false); setImei(""); }}
+              className="mt-6 w-full py-3 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
             >
-              Close
+              Check Another Device
             </button>
           </div>
         )}

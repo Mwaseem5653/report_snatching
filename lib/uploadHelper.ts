@@ -1,7 +1,12 @@
-// app/api/uploadhelper/helper.ts
+// lib/uploadHelper.ts
 export async function uploadFileToStorage(file: File, folder: string = "applications"): Promise<string> {
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
   const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+
+  if (!cloudName || !uploadPreset) {
+    console.error("Missing Cloudinary configuration");
+    throw new Error("Missing Cloudinary configuration");
+  }
 
   const formData = new FormData();
   formData.append("file", file);

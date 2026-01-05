@@ -1,28 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, storage } from "@/firebaseconfig";
-import {
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  where,
-  Timestamp,
-  doc,
-  updateDoc,
-} from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { adminDb } from "@/firebaseAdmin";
+import * as admin from "firebase-admin";
 
-// ---------------- ADD APPLICATION ----------------
 // ---------------- ADD APPLICATION ----------------
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
     // 🛑 Duplicate IMEI check
-    const appsRef = collection(db, "applications");
-    const q = query(appsRef, where("imei1", "==", body.imei1));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
+    const appsRef = adminDb.collection("applications");
+    const snapshot = await appsRef.where("imei1", "==", body.imei1).get();
+    
+    if (!snapshot.empty) {
       return NextResponse.json(
         { success: false, message: "IMEI already exists" },
         { status: 400 }
@@ -52,10 +41,10 @@ export async function POST(req: NextRequest) {
       note: body.note ?? "",
       otherLostProperty: body.otherLostProperty ?? "",
       status: "pending",
-      createdAt: Timestamp.now(),
+      createdAt: admin.firestore.Timestamp.now(),
     };
 
-    const docRef = await addDoc(appsRef, newApp);
+    const docRef = await appsRef.add(newApp);
 
     return NextResponse.json({ success: true, id: docRef.id });
   } catch (err: any) {
@@ -73,20 +62,64 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const city = searchParams.get("city");
+    const district = searchParams.get("district");
+    const ps = searchParams.get("ps");
+    const period = searchParams.get("period"); // 15days, 1month, etc.
+    const search = searchParams.get("search")?.toLowerCase();
 
-    let appsRef = collection(db, "applications");
-    let conditions: any[] = [];
+    let queryRef: any = adminDb.collection("applications");
 
-    if (status) conditions.push(where("status", "==", status));
-    if (city) conditions.push(where("city", "==", city));
+    // Apply basic filters directly in Firestore
+    if (status && status !== "none") queryRef = queryRef.where("status", "==", status);
+    if (city) queryRef = queryRef.where("city", "==", city);
+    if (district) queryRef = queryRef.where("district", "==", district);
+    if (ps) queryRef = queryRef.where("ps", "==", ps);
 
-    const q = conditions.length > 0 ? query(appsRef, ...conditions) : appsRef;
-    const snap = await getDocs(q);
+    // Fetch documents
+    const snap = await queryRef.get();
+    let applications = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
 
-    const applications = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // Apply search filter in-memory (for name, email, or IMEI)
+    if (search) {
+      applications = applications.filter((app: any) => {
+        return (
+          app.applicantName?.toLowerCase().includes(search) ||
+          app.applicantMobile?.includes(search) ||
+          app.imei1?.includes(search) ||
+          app.imei2?.includes(search) ||
+          app.cnic?.includes(search)
+        );
+      });
+    }
+
+    // Apply Date Filtering in-memory (easier than complex Firestore indexing for mixed queries)
+    if (period && period !== "all") {
+      const now = new Date();
+      let limitDate = new Date();
+
+      if (period === "15days") limitDate.setDate(now.getDate() - 15);
+      else if (period === "1month") limitDate.setMonth(now.getMonth() - 1);
+      else if (period === "3months") limitDate.setMonth(now.getMonth() - 3);
+      else if (period === "6months") limitDate.setMonth(now.getMonth() - 6);
+      else if (period === "1year") limitDate.setFullYear(now.getFullYear() - 1);
+
+      const limitTime = limitDate.getTime();
+      applications = applications.filter((app: any) => {
+        const createdTime = app.createdAt?.toMillis ? app.createdAt.toMillis() : 0;
+        return createdTime >= limitTime;
+      });
+    }
+
+    // Sort by createdAt desc
+    applications.sort((a: any, b: any) => {
+        const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+        const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        return tB - tA;
+    });
 
     return NextResponse.json({ success: true, applications });
   } catch (err: any) {
+    console.error("GET /api/applications error:", err);
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
 }
@@ -103,12 +136,12 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const appRef = doc(db, "applications", body.id);
     const { id, ...updateData } = body;
-    await updateDoc(appRef, updateData);
+    await adminDb.collection("applications").doc(id).update(updateData);
 
     return NextResponse.json({ success: true, message: "Application updated" });
   } catch (err: any) {
+    console.error("PUT /api/applications error:", err);
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
 }

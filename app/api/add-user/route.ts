@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
-import { adminDb } from "@/firebaseAdmin";
+import { adminDb, adminAuth } from "@/firebaseAdmin";
 
+/**
+ * 🚀 Refactored Add User API
+ * Now uses Firebase native Authentication + Custom Claims + Firestore
+ */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -19,7 +23,7 @@ export async function POST(req: Request) {
       enrolledBy,
     } = body;
 
-    // ✅ Validate required fields
+    // 1. Basic Validation
     if (!email || !password || !name || !role) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
@@ -27,48 +31,56 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Check if user already exists
-    const snapshot = await adminDb.collection("users").where("email", "==", email).get();
-    if (!snapshot.empty) {
-      return NextResponse.json(
-        { success: false, error: "User already exists" },
-        { status: 400 }
-      );
+    // 2. Create User in Firebase Native Authentication
+    let userRecord;
+    try {
+        userRecord = await adminAuth.createUser({
+            email,
+            password,
+            displayName: name,
+            phoneNumber: phone ? (phone.startsWith('+') ? phone : `+92${phone.replace(/^0/, '')}`) : undefined,
+        });
+    } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-exists') {
+            return NextResponse.json({ success: false, error: "Email already registered in Authentication system." }, { status: 400 });
+        }
+        throw authErr;
     }
 
-    // ✅ Build user data dynamically (only include filled fields)
+    const uid = userRecord.uid;
+
+    // 3. Set Custom Claims (Baked into the Auth Token for security)
+    // This makes the role un-tamperable on the client side
+    const customClaims = {
+        role: role,
+        district: district || null,
+        ps: ps || null,
+    };
+    await adminAuth.setCustomUserClaims(uid, customClaims);
+
+    // 4. Store Extended Profile in Firestore
     const userData: Record<string, any> = {
+      uid,
       name,
       email,
-      password, // ⚠️ For now (testing only)
       role,
       createdAt: new Date(),
+      phone: phone || null,
+      city: city || null,
+      district: district || null,
+      ps: ps || null,
+      market: market || null,
+      rank: rank || null,
+      buckle: buckle || null,
+      enrolledBy: enrolledBy || null,
     };
 
-    const optionalFields = {
-      phone,
-      city,
-      district,
-      ps,
-      market,
-      rank,
-      buckle,
-      enrolledBy,
-    };
-
-    // ✅ Add only non-empty optional fields
-    for (const [key, value] of Object.entries(optionalFields)) {
-      if (value !== undefined && value !== null && value !== "") {
-        userData[key] = value;
-      }
-    }
-
-    // ✅ Create new Firestore document
-    const userRef = await adminDb.collection("users").add(userData);
+    // Use Auth UID as the document ID for perfect mapping
+    await adminDb.collection("users").doc(uid).set(userData);
 
     return NextResponse.json({
       success: true,
-      user: { uid: userRef.id, ...userData },
+      user: userData,
     });
   } catch (err: any) {
     console.error("add-user error:", err);

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +13,8 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { locationData } from "@/components/location/location";
-import { toast } from "sonner"; // shadcn/sonner for notifications
+import { toast } from "sonner";
+import { User, Mail, Lock, Phone, BadgeHelp, MapPin, Building2, Store, Loader2, ShieldCheck } from "lucide-react";
 
 export default function AddUserForm({
   onSave,
@@ -38,30 +38,24 @@ export default function AddUserForm({
         const data = await res.json();
         if (data.authenticated && data.role) {
           setSessionRole(data.role);
-        } else {
-          toast.error("Session missing — please login again.");
         }
       } catch (err) {
         console.error("Session fetch error:", err);
-        toast.error("Error fetching session.");
       }
     };
-
     fetchSession();
   }, []);
 
-  // ✅ toggle districts (for Admin role)
   const toggleDistrict = (d: string) => {
     setSelectedDistricts((prev) =>
       prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
     );
   };
 
-  // ✅ Role Access Control
   const getAvailableRoles = () => {
     switch (sessionRole) {
       case "super_admin":
-        return ["admin", "officer", "ps_user", "market_user","super_admin"];
+        return ["super_admin", "admin", "officer", "ps_user", "market_user"];
       case "admin":
         return ["officer", "ps_user", "market_user"];
       case "officer":
@@ -71,7 +65,6 @@ export default function AddUserForm({
     }
   };
 
-  // ✅ Handle Form Submit
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const form = e.target as HTMLFormElement;
@@ -91,274 +84,195 @@ export default function AddUserForm({
       role,
       city,
       district: role === "admin" ? selectedDistricts : district,
-      ps, // Police Station OR Market name
+      ps, 
     };
 
     onSave(payload);
   };
 
-  // 🟥 Show if session not loaded yet
   if (!sessionRole) {
     return (
-      <Card className="border border-red-300 bg-red-50">
-        <CardContent className="p-4 text-center text-red-600 font-semibold">
-          ⚠️ Session not found. Please login again.
-        </CardContent>
-      </Card>
+      <div className="p-12 text-center text-slate-500 animate-pulse">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin mb-4 text-blue-600" />
+        Authenticating session...
+      </div>
     );
   }
 
   return (
-    <Card className="shadow-none border-none max-h-[80vh] overflow-y-auto overflow-x-hidden rounded-2xl">
-      <CardContent className="p-0">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* ---------------- Role Selection ---------------- */}
-          <div>
-            <Label>Role</Label>
+    <div className="p-8 md:p-10 bg-white">
+      <form onSubmit={handleSubmit} className="space-y-8">
+        
+        {/* 1. Account Role */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 text-slate-800 border-b border-slate-100 pb-2">
+             <ShieldCheck size={20} className="text-blue-600" />
+             <h3 className="font-bold uppercase tracking-wider text-xs">Assign System Role</h3>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-slate-600">User Access Level</Label>
             <Select onValueChange={setRole}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select Role" />
+              <SelectTrigger className="w-full h-11 rounded-xl bg-slate-50 border-slate-200">
+                <SelectValue placeholder="Identify user role" />
               </SelectTrigger>
               <SelectContent>
-                {getAvailableRoles().length > 0 ? (
-                  getAvailableRoles().map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r.replace("_", " ").toUpperCase()}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="none" disabled>
-                    No roles available
+                {getAvailableRoles().map((r) => (
+                  <SelectItem key={r} value={r} className="capitalize">
+                    {r.replace("_", " ")}
                   </SelectItem>
-                )}
+                ))}
               </SelectContent>
             </Select>
           </div>
+        </section>
 
-          {/* ---------------- Common Fields ---------------- */}
-          {role && (
-            <>
-              <Input name="name" placeholder="Name" required />
-              <Input name="phone" placeholder="Phone" required />
-              <Input name="email" type="email" placeholder="Email" required />
-              <Input name="password" type="password" placeholder="Password" required />
-              <Input name="buckle" placeholder="Buckle No." />
-            </>
-          )}
-
-          {/* ---------------- Super Admin → City select ---------------- */}
-          {role === "super_admin" && (
-            <div>
-              <Label>City</Label>
-              <Select onValueChange={setCity}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select City" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.keys(locationData).map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* ---------------- Admin → City + District ---------------- */}
-          {role === "admin" && (
-            <>
-              <Label>City</Label>
-              <Select onValueChange={setCity}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select City" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.keys(locationData).map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {city && (
-                <div>
-                  <Label>Districts</Label>
-                  <div className="space-y-2">
-                    {Object.keys(locationData[city]?.districts || {}).map((d) => (
-                      <div key={d} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={d}
-                          checked={selectedDistricts.includes(d)}
-                          onCheckedChange={() => toggleDistrict(d)}
-                        />
-                        <label htmlFor={d} className="text-sm">
-                          {d}
-                        </label>
-                      </div>
-                    ))}
+        {role && (
+          <>
+            {/* 2. Personal Information */}
+            <section className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-2 text-slate-800 border-b border-slate-100 pb-2">
+                <User size={20} className="text-blue-600" />
+                <h3 className="font-bold uppercase tracking-wider text-xs">Personal Details</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Full Name</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input name="name" placeholder="Official Name" required className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200" />
                   </div>
                 </div>
-              )}
-            </>
-          )}
+                <div className="space-y-2">
+                  <Label>Phone Number</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input name="phone" placeholder="03XXXXXXXXX" required className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Email Address</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input name="email" type="email" placeholder="official@sindhpolice.gov.pk" required className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input name="password" type="password" placeholder="••••••••" required className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200" />
+                  </div>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Buckle / ID Number (Optional)</Label>
+                  <div className="relative">
+                    <BadgeHelp className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input name="buckle" placeholder="Enter service number" className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200" />
+                  </div>
+                </div>
+              </div>
+            </section>
 
-          {/* ---------------- Officer → City + District ---------------- */}
-          {role === "officer" && (
-            <>
-              <Label>City</Label>
-              <Select onValueChange={setCity}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select City" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.keys(locationData).map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {city && (
-                <div>
-                  <Label>District</Label>
-                  <Select onValueChange={setDistrict}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select District" />
+            {/* 3. Jurisdiction / Assignment */}
+            <section className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-500">
+              <div className="flex items-center gap-2 text-slate-800 border-b border-slate-100 pb-2">
+                <MapPin size={20} className="text-blue-600" />
+                <h3 className="font-bold uppercase tracking-wider text-xs">Jurisdiction Assignment</h3>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>City</Label>
+                  <Select onValueChange={setCity}>
+                    <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
+                      <SelectValue placeholder="Select City" />
                     </SelectTrigger>
                     <SelectContent>
+                      {Object.keys(locationData).map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {role === "admin" && city && (
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                    <Label className="text-xs font-bold text-slate-500">SELECT ASSIGNED DISTRICTS</Label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {Object.keys(locationData[city]?.districts || {}).map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d}
-                        </SelectItem>
+                        <div key={d} className="flex items-center space-x-3 p-2 bg-white rounded-lg border border-slate-100 shadow-sm">
+                          <Checkbox
+                            id={d}
+                            checked={selectedDistricts.includes(d)}
+                            onCheckedChange={() => toggleDistrict(d)}
+                          />
+                          <label htmlFor={d} className="text-xs font-medium capitalize cursor-pointer">
+                            {d}
+                          </label>
+                        </div>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </>
-          )}
+                    </div>
+                  </div>
+                )}
 
-          {/* ---------------- PS User ---------------- */}
-          {role === "ps_user" && (
-            <>
-              <Label>City</Label>
-              <Select onValueChange={setCity}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select City" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.keys(locationData).map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {(role === "officer" || role === "ps_user" || role === "market_user") && city && (
+                  <div className="space-y-2">
+                    <Label>District</Label>
+                    <Select onValueChange={setDistrict}>
+                      <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
+                        <SelectValue placeholder="Select District" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.keys(locationData[city]?.districts || {}).map((d) => (
+                          <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
-              {city && (
-                <div>
-                  <Label>District</Label>
-                  <Select onValueChange={setDistrict}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select District" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.keys(locationData[city]?.districts || {}).map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+                {role === "ps_user" && city && district && (
+                  <div className="space-y-2 animate-in slide-in-from-left-2 duration-200">
+                    <Label className="flex items-center gap-2"><Building2 size={14}/> Police Station</Label>
+                    <Select onValueChange={setPs}>
+                      <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
+                        <SelectValue placeholder="Select PS" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locationData[city]?.districts[district].ps?.map((ps: string) => (
+                          <SelectItem key={ps} value={ps}>{ps}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
-              {city && district && (
-                <div>
-                  <Label>Police Station</Label>
-                  <Select onValueChange={setPs}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select PS" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locationData[city]?.districts[district].ps?.map((ps: string) => (
-                        <SelectItem key={ps} value={ps}>
-                          {ps}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </>
-          )}
+                {role === "market_user" && city && district && (
+                  <div className="space-y-2 animate-in slide-in-from-left-2 duration-200">
+                    <Label className="flex items-center gap-2"><Store size={14}/> Market Assignment</Label>
+                    <Select onValueChange={setPs}>
+                      <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
+                        <SelectValue placeholder="Select Market" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locationData[city]?.districts[district].markets?.map((Market: string) => (
+                          <SelectItem key={Market} value={Market}>{Market}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            </section>
 
-          {/* ---------------- Market User ---------------- */}
-          {role === "market_user" && (
-            <>
-              <Label>City</Label>
-              <Select onValueChange={setCity}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select City" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.keys(locationData).map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {city && (
-                <div>
-                  <Label>District</Label>
-                  <Select onValueChange={setDistrict}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select District" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.keys(locationData[city]?.districts || {}).map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {city && district && (
-                <div>
-                  <Label>Market</Label>
-                  <Select onValueChange={setPs}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Market" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locationData[city]?.districts[district].markets?.map((Market: string) => (
-                        <SelectItem key={Market} value={Market}>
-                          {Market}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ---------------- Save Button ---------------- */}
-          {role && (
-            <Button type="submit" className="w-full mt-4" disabled={loading}>
-              {loading ? "Saving..." : "Save User"}
-            </Button>
-          )}
-        </form>
-      </CardContent>
-    </Card>
+            <div className="pt-6 border-t border-slate-100">
+              <Button type="submit" className="w-full h-12 bg-blue-900 hover:bg-blue-800 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.01]" disabled={loading}>
+                {loading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Finalizing Registration...</> : "Create System Account"}
+              </Button>
+            </div>
+          </>
+        )}
+      </form>
+    </div>
   );
 }

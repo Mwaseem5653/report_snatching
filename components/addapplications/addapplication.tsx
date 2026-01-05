@@ -17,14 +17,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getApplications, updateApplication } from "@/app/api/update-application/route";
+import { getApplications, updateApplication } from "@/lib/applicationApi";
+import { Search, Plus, Filter, RotateCcw, FileText, ChevronRight, User } from "lucide-react";
 
 // ✅ Simple text row component
 function DetailRow({ label, value }: { label: string; value: any }) {
   return (
-    <p className="text-sm text-gray-700 border-b py-1 flex flex-wrap items-center justify-between">
-      <span className="font-semibold">{label}:</span>
-      <span className="text-gray-600 ml-2">{value ? value : "—"}</span>
+    <p className="text-sm text-gray-700 border-b py-2.5 flex flex-wrap items-center justify-between">
+      <span className="font-semibold text-slate-500">{label}:</span>
+      <span className="text-slate-800 ml-2 font-medium">{value ? value : "—"}</span>
     </p>
   );
 }
@@ -32,8 +33,8 @@ function DetailRow({ label, value }: { label: string; value: any }) {
 export default function ApplicationManagement() {
   const [applications, setApplications] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string | null>("none");
-  const [filterPeriod, setFilterPeriod] = useState<string>("15days");
+  const [filterStatus, setFilterStatus] = useState<string | null>("pending");
+  const [filterPeriod, setFilterPeriod] = useState<string>("all");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedApp, setSelectedApp] = useState<any>(null);
@@ -66,13 +67,23 @@ export default function ApplicationManagement() {
 
   // ---------------- FETCH APPLICATIONS ----------------
   async function fetchApplications(params?: Record<string, string>) {
+    setLoading(true);
     try {
       const data = await getApplications(params || {});
       setApplications(data.applications || []);
     } catch (err) {
       console.error("Application fetch error:", err);
+    } finally {
+      setLoading(false);
     }
   }
+
+  // ---------------- INITIAL FETCH (REMOVED AUTO-SEARCH) ----------------
+  useEffect(() => {
+    if (currentUser) {
+        // handleSearch(); // Automatic search disabled
+    }
+  }, [currentUser]);
 
   // ---------------- HANDLE SEARCH ----------------
   async function handleSearch() {
@@ -81,26 +92,30 @@ export default function ApplicationManagement() {
     try {
       const params: Record<string, string> = {};
 
-      if (currentUser.role === "ps_user") {
-        if (!searchQuery.trim()) {
-          alert("⚠️ Please enter something to search.");
-          setLoading(false);
-          return;
-        }
-        params.query = searchQuery;
-        params.district = currentUser.district;
-        params.ps = currentUser.ps;
-      } else {
-        if (filterStatus && filterStatus !== "none") params.status = filterStatus;
-        if (filterPeriod && filterPeriod !== "all") params.period = filterPeriod;
-        if (currentUser.role !== "super_admin" && currentUser.district)
-          params.district = currentUser.district;
+      // Common search query (for Name, Email, IMEI)
+      if (searchQuery.trim()) {
+          params.search = searchQuery.trim();
+      }
+
+      // Status Filter
+      if (filterStatus && filterStatus !== "none") {
+          params.status = filterStatus;
+      }
+
+      // Period Filter
+      if (filterPeriod && filterPeriod !== "all") {
+          params.period = filterPeriod;
+      }
+
+      // Role-based restrictions
+      if (currentUser.role !== "super_admin") {
+          if (currentUser.district) params.district = currentUser.district;
+          if (currentUser.ps) params.ps = currentUser.ps;
       }
 
       await fetchApplications(params);
     } catch (err) {
       console.error("Search error:", err);
-      alert("❌ Something went wrong during search.");
     } finally {
       setLoading(false);
     }
@@ -110,6 +125,9 @@ export default function ApplicationManagement() {
   function handleClear() {
     setSearchQuery("");
     setFilterStatus("none");
+    setFilterPeriod("all");
+    
+    // Explicitly empty the list instead of auto-fetching everything
     setApplications([]);
   }
 
@@ -133,7 +151,7 @@ export default function ApplicationManagement() {
       if (res.success) {
         alert("✅ Status updated!");
         setSelectedApp(null);
-        fetchApplications();
+        handleSearch();
       }
     } catch {
       alert("Update failed!");
@@ -142,261 +160,289 @@ export default function ApplicationManagement() {
 
   // ---------------- MAIN JSX ----------------
   return (
-    <div className="min-h-screen w-full p-6 bg-[radial-gradient(circle,rgba(210,227,252,0.7)_1px,transparent_1px)] [background-size:20px_20px]">
-      {/* 🔹 Header */}
-      <div className="flex flex-col items-center text-center mb-6">
-        <img src="/logo.png" alt="Sindh Police" className="w-16 h-16 mb-2" />
-        <h1 className="text-2xl font-bold text-blue-900">
-          Application Management
-        </h1>
-        <p className="text-gray-600 text-sm font-[Jameel-Noori-Nastaleeq]">
-          درخواستوں کا انتظام
-        </p>
-      </div>
-
-      {/* 🔹 FILTER BAR */}
-      <div className="w-full bg-white/90 shadow-lg flex flex-wrap items-center justify-between gap-3 px-6 py-4 rounded-2xl border border-blue-100">
-        <h2 className="text-lg font-bold text-blue-800">Applications</h2>
-
-        <div className="flex flex-1 flex-wrap items-center gap-3 justify-end">
-          {currentUser?.role === "ps_user" ? (
-            <div className="flex flex-1 items-center gap-2 min-w-[300px]">
-              <Input
-                placeholder="Search by name, email, IMEI..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1 border-blue-200 focus:ring-blue-400 rounded-xl"
-              />
-              <Button
-                onClick={handleSearch}
-                className="bg-blue-600 text-white rounded-xl hover:bg-blue-700"
-                disabled={loading}
-              >
-                {loading ? "Searching..." : "Search"}
-              </Button>
-              <Button
-                onClick={handleClear}
-                variant="outline"
-                className="border-blue-300 text-blue-700 hover:bg-blue-50 rounded-xl"
-              >
-                Clear
-              </Button>
+    <div className="w-full space-y-6">
+      
+      {/* 🔹 STICKY FILTER BAR */}
+      <div className="sticky top-0 z-30 -mt-2 pb-4 bg-slate-50/80 backdrop-blur-sm">
+        <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+            
+            {/* Left: Branding */}
+            <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                    <FileText size={20} />
+                </div>
+                <div className="hidden sm:block">
+                    <h2 className="text-lg font-bold text-slate-800 leading-tight">Applications</h2>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Management Portal</p>
+                </div>
             </div>
-          ) : (
-            <>
-              <Select
-                value={filterStatus ?? "none"}
-                onValueChange={(value) => setFilterStatus(value)}
-              >
-                <SelectTrigger className="w-[200px] border-blue-200 rounded-xl">
-                  <SelectValue placeholder="Filter by Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="processed">Processed</SelectItem>
-                  <SelectItem value="complete">Complete</SelectItem>
-                </SelectContent>
-              </Select>
 
-              <Select
-                value={filterPeriod}
-                onValueChange={(value) => setFilterPeriod(value)}
-              >
-                <SelectTrigger className="w-[200px] border-blue-200 rounded-xl">
-                  <SelectValue placeholder="Time Period" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="15days">Last 15 Days</SelectItem>
-                  <SelectItem value="1month">Last 1 Month</SelectItem>
-                  <SelectItem value="6months">Last 6 Months</SelectItem>
-                  <SelectItem value="1year">Last 1 Year</SelectItem>
-                  <SelectItem value="all">All</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Right: Controls */}
+            <div className="flex flex-1 flex-wrap items-center gap-3 justify-end">
+                
+                {/* Search Input (Always visible) */}
+                <div className="relative flex-1 min-w-[200px] max-w-md">
+                    <Search className="absolute left-3 top-2.5 text-slate-400 h-4 w-4" />
+                    <Input
+                        placeholder="Search by Name, IMEI, CNIC..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                        className="pl-9 border-slate-200 focus:ring-blue-500 rounded-xl bg-slate-50/50 h-10"
+                    />
+                </div>
 
-              <Button
-                onClick={handleSearch}
-                className="bg-blue-600 text-white rounded-xl hover:bg-blue-700"
-                disabled={loading}
-              >
-                {loading ? "Searching..." : "Search"}
-              </Button>
-              <Button
-                onClick={handleClear}
-                variant="outline"
-                className="border-blue-300 text-blue-700 hover:bg-blue-50 rounded-xl"
-              >
-                Clear
-              </Button>
-              <Button
-                onClick={() => setShowAddForm(true)}
-                className="bg-green-600 text-white rounded-xl hover:bg-green-700"
-              >
-                + Add
-              </Button>
-            </>
-          )}
+                <div className="flex items-center gap-2">
+                    {/* Status Select */}
+                    <Select
+                        value={filterStatus ?? "none"}
+                        onValueChange={(value) => setFilterStatus(value)}
+                    >
+                        <SelectTrigger className="w-[130px] border-slate-200 rounded-xl bg-slate-50/50 h-10">
+                        <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        <SelectItem value="none">All Status</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="processed">Processed</SelectItem>
+                        <SelectItem value="complete">Complete</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    {/* Period Select */}
+                    <Select
+                        value={filterPeriod}
+                        onValueChange={(value) => setFilterPeriod(value)}
+                    >
+                        <SelectTrigger className="w-[130px] border-slate-200 rounded-xl bg-slate-50/50 h-10">
+                        <SelectValue placeholder="Period" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        <SelectItem value="all">All Time</SelectItem>
+                        <SelectItem value="15days">Last 15 Days</SelectItem>
+                        <SelectItem value="1month">Last 1 Month</SelectItem>
+                        <SelectItem value="6months">Last 6 Months</SelectItem>
+                        <SelectItem value="1year">Last 1 Year</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
+                    <Button
+                        onClick={handleSearch}
+                        className="bg-blue-600 text-white rounded-xl hover:bg-blue-700 h-10 shadow-lg shadow-blue-600/20 px-6 font-semibold"
+                        disabled={loading}
+                    >
+                        {loading ? "..." : "Search"}
+                    </Button>
+                    <Button
+                        onClick={handleClear}
+                        variant="ghost"
+                        className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0"
+                        title="Reset Filters"
+                    >
+                        <RotateCcw size={18} />
+                    </Button>
+                    <div className="w-px h-6 bg-slate-200 mx-1"></div>
+                    <Button
+                        onClick={() => setShowAddForm(true)}
+                        className="bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 h-10 shadow-lg shadow-emerald-600/20 px-4 font-semibold"
+                    >
+                        <Plus size={18} className="mr-1" /> New
+                    </Button>
+                </div>
+            </div>
         </div>
       </div>
 
       {/* APPLICATION LIST */}
-      <div className="mt-4 space-y-3 w-full">
-        {applications.length > 0 ? (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {loading && applications.length === 0 ? (
+            Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-32 bg-white rounded-2xl animate-pulse border border-slate-100"></div>
+            ))
+        ) : applications.length > 0 ? (
           applications.map((app) => (
             <div
               key={app.id}
               onClick={() => setSelectedApp(app)}
-              className="flex justify-between items-center bg-white border border-blue-100 p-4 rounded-xl cursor-pointer hover:shadow-md transition-all"
+              className="group bg-white border border-slate-200 p-5 rounded-2xl cursor-pointer hover:shadow-xl hover:border-blue-300 transition-all duration-300 relative overflow-hidden"
             >
-              <div>
-                <p className="font-semibold text-blue-900">
+              <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              
+              <div className="flex justify-between items-start mb-4">
+                <div className="h-10 w-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
+                    <FileText size={20} />
+                </div>
+                <span className={cn(
+                    "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider",
+                    app.status === "pending" ? "bg-amber-100 text-amber-700" :
+                    app.status === "processed" ? "bg-blue-100 text-blue-700" :
+                    "bg-emerald-100 text-emerald-700"
+                )}>
+                    {app.status}
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <p className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors truncate">
                   {app.applicantName}
                 </p>
-                <p className="text-sm text-gray-500 capitalize">
-                  {app.status}
-                </p>
+                <div className="flex items-center gap-2">
+                    <p className="text-xs text-slate-500 font-medium truncate">{app.applicantEmail}</p>
+                </div>
+                <p className="text-[10px] text-blue-600 font-mono mt-1">IMEI: {app.imei1}</p>
               </div>
-              <p className="text-sm text-gray-600">{app.applicantEmail}</p>
+
+              <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between text-[11px] text-slate-400 font-bold uppercase">
+                 <span>{app.ps || app.city || "Sindh"}</span>
+                 <ChevronRight size={14} />
+              </div>
             </div>
           ))
         ) : (
-          <p className="text-center text-gray-500 mt-6">
-            No applications found.
-          </p>
+          <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-dashed border-slate-300">
+             <FileText className="mx-auto h-12 w-12 text-slate-200 mb-4" />
+             <p className="text-slate-500 font-medium">No applications found matching your criteria.</p>
+          </div>
         )}
       </div>
 
       {/* 🔹 DETAIL POPUP */}
       {selectedApp && (
         <Dialog open={true} onOpenChange={() => setSelectedApp(null)}>
-          <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white/95">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-blue-900">
-                Application Details
-              </DialogTitle>
-            </DialogHeader>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-0 border-0 shadow-2xl">
+            <div className="bg-gradient-to-r from-blue-900 to-blue-700 p-8 text-white">
+                <DialogHeader>
+                    <DialogTitle className="text-2xl font-bold text-white flex items-center gap-3">
+                        <FileText /> Application Details
+                    </DialogTitle>
+                    <p className="text-blue-100 opacity-80 text-sm mt-1">Reference ID: {selectedApp.id}</p>
+                </DialogHeader>
+            </div>
 
-            <div className="space-y-6 mt-4">
+            <div className="p-8 space-y-8 bg-white">
               {/* Applicant Info */}
-              <div className="border-b pb-3">
-                <h3 className="text-lg font-semibold mb-3 text-blue-700">
-                  Applicant Information
+              <section>
+                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div>
+                    Applicant Information
                 </h3>
-                <DetailRow label="Name" value={selectedApp.applicantName} />
-                <DetailRow label="Email" value={selectedApp.applicantEmail} />
-                <DetailRow label="Phone" value={selectedApp.applicantPhone} />
-                <DetailRow label="City" value={selectedApp.city} />
-                <DetailRow label="District" value={selectedApp.district} />
-                <DetailRow label="Police Station" value={selectedApp.ps} />
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                    <DetailRow label="Name" value={selectedApp.applicantName} />
+                    <DetailRow label="Email" value={selectedApp.applicantEmail} />
+                    <DetailRow label="Phone" value={selectedApp.applicantPhone} />
+                    <DetailRow label="City" value={selectedApp.city} />
+                    <DetailRow label="District" value={selectedApp.district} />
+                    <DetailRow label="Police Station" value={selectedApp.ps} />
+                </div>
+              </section>
 
               {/* Application Data */}
-              <div className="border-b pb-3">
-                <h3 className="text-lg font-semibold mb-3 text-blue-700">
-                  Application Data
+              <section>
+                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div>
+                    Device & Incident Data
                 </h3>
-                {Object.entries(selectedApp)
-                  .filter(
-                    ([key]) =>
-                      ![
-                        "id",
-                        "createdAt",
-                        "updatedAt",
-                        "applicantName",
-                        "applicantEmail",
-                        "applicantPhone",
-                        "city",
-                        "district",
-                        "ps",
-                        "processedBy",
-                        "status",
-                      ].includes(key)
-                  )
-                  .map(([key, value]) => {
-                    if (!value) return null;
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                    {Object.entries(selectedApp)
+                    .filter(
+                        ([key]) =>
+                        ![
+                            "id",
+                            "createdAt",
+                            "updatedAt",
+                            "applicantName",
+                            "applicantEmail",
+                            "applicantPhone",
+                            "city",
+                            "district",
+                            "ps",
+                            "processedBy",
+                            "status",
+                        ].includes(key)
+                    )
+                    .map(([key, value]) => {
+                        if (!value) return null;
 
-                    if (typeof value === "string" && value.startsWith("http")) {
-                      const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(value);
-                      return (
-                        <DetailRow
-                          key={key}
-                          label={key}
-                          value={
-                            <Button
-                              variant="outline"
-                              className="text-blue-600 text-sm border-blue-300 hover:bg-blue-50"
-                              onClick={() => window.open(value, "_blank")}
-                            >
-                              View {isImage ? "Image" : "File"}
-                            </Button>
-                          }
-                        />
-                      );
-                    }
+                        // Custom labels for specific keys
+                        const displayLabel = key === "pictureUrl" ? "Box Image" : 
+                                             key === "attachmentUrl" ? "Attested Application" : 
+                                             key.replace(/([A-Z])/g, ' $1').trim();
 
-                    return <DetailRow key={key} label={key} value={value} />;
-                  })}
-              </div>
+                        if (typeof value === "string" && value.startsWith("http")) {
+                        const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(value);
+                        return (
+                            <div key={key} className="py-3 flex items-center justify-between border-b border-slate-200">
+                                <span className="text-sm font-semibold text-slate-500 capitalize">{displayLabel}:</span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-blue-600 text-xs border-blue-200 hover:bg-blue-50 rounded-lg h-8"
+                                    onClick={() => window.open(value, "_blank")}
+                                >
+                                    View {isImage ? "Image" : "File"}
+                                </Button>
+                            </div>
+                        );
+                        }
 
-              {/* Processed By */}
-              {selectedApp.processedBy && (
-                <div className="border-b pb-3">
-                  <h3 className="text-lg font-semibold mb-3 text-blue-700">
-                    Processed By
-                  </h3>
-                  <DetailRow
-                    label="Name"
-                    value={selectedApp.processedBy.name}
-                  />
-                  <DetailRow
-                    label="Email"
-                    value={selectedApp.processedBy.email}
-                  />
-                  <DetailRow
-                    label="Mobile"
-                    value={selectedApp.processedBy.mobile}
-                  />
+                        return <DetailRow key={key} label={displayLabel} value={value} />;
+                    })}
                 </div>
-              )}
+              </section>
 
               {/* Status + Actions */}
-              <div>
-                <p className="text-base font-semibold">
-                  Current Status:{" "}
-                  <span className="capitalize text-blue-700">
-                    {selectedApp.status}
-                  </span>
-                </p>
-                {currentUser?.role === "officer" && (
-                  <div className="flex gap-3 mt-3">
-                    {selectedApp.status === "pending" && (
-                      <Button
-                        onClick={() =>
-                          handleUpdateStatus(selectedApp, "processed")
-                        }
-                        className="bg-blue-600 text-white rounded-xl"
-                      >
-                        Move to Processed
-                      </Button>
+              <section className="pt-4">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-blue-50 rounded-2xl border border-blue-100">
+                    <div>
+                        <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1">Current Progress</p>
+                        <div className="flex items-center gap-2">
+                            <span className={cn(
+                                "px-3 py-1 rounded-full text-xs font-bold uppercase",
+                                selectedApp.status === "pending" ? "bg-amber-500 text-white" :
+                                selectedApp.status === "processed" ? "bg-blue-500 text-white" :
+                                "bg-emerald-500 text-white"
+                            )}>
+                                {selectedApp.status}
+                            </span>
+                            {selectedApp.processedBy && (
+                                <span className="text-sm text-slate-500 font-medium">Processed by {selectedApp.processedBy.name}</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {currentUser?.role === "officer" && (
+                    <div className="flex gap-3">
+                        {selectedApp.status === "pending" && (
+                        <Button
+                            onClick={() =>
+                            handleUpdateStatus(selectedApp, "processed")
+                            }
+                            className="bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-600/20 px-6 h-11"
+                        >
+                            Mark as Processed
+                        </Button>
+                        )}
+                        {selectedApp.status === "processed" && (
+                        <Button
+                            onClick={() =>
+                            handleUpdateStatus(
+                                selectedApp,
+                                "complete",
+                                "Completed successfully"
+                            )
+                            }
+                            className="bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-600/20 px-6 h-11"
+                        >
+                            Mark Complete
+                        </Button>
+                        )}
+                    </div>
                     )}
-                    {selectedApp.status === "processed" && (
-                      <Button
-                        onClick={() =>
-                          handleUpdateStatus(
-                            selectedApp,
-                            "complete",
-                            "Completed successfully"
-                          )
-                        }
-                        className="bg-green-600 text-white rounded-xl"
-                      >
-                        Mark Complete
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </div>
+                </div>
+              </section>
             </div>
           </DialogContent>
         </Dialog>
@@ -405,13 +451,14 @@ export default function ApplicationManagement() {
       {/* 🔹 Add Application */}
       {showAddForm && (
         <Dialog open={true} onOpenChange={() => setShowAddForm(false)}>
-          <DialogContent className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white/95">
-            <DialogHeader className="sticky top-0 bg-white z-10 border-b">
-              <DialogTitle className="text-xl font-bold text-blue-900">
-                Add Application
-              </DialogTitle>
-            </DialogHeader>
-            <div className="p-6">
+          <DialogContent className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-3xl p-0 border-0 shadow-2xl">
+            <div className="sticky top-0 bg-blue-900 p-6 z-10 flex items-center justify-between text-white">
+              <DialogTitle className="text-xl font-bold">New Application</DialogTitle>
+              <Button variant="ghost" className="text-white hover:bg-white/10 rounded-full h-10 w-10 p-0" onClick={() => setShowAddForm(false)}>
+                 ✕
+              </Button>
+            </div>
+            <div className="p-0">
               <AddApplicationForm currentUser={currentUser} />
             </div>
           </DialogContent>
@@ -419,4 +466,9 @@ export default function ApplicationManagement() {
       )}
     </div>
   );
+}
+
+// Utility function for conditional classes
+function cn(...classes: any[]) {
+  return classes.filter(Boolean).join(" ");
 }
