@@ -45,7 +45,7 @@ function DetailRow({
 
 export default function Psusersapplication() {
   const [applications, setApplications] = useState<any[]>([]);
-  const [filterPeriod, setFilterPeriod] = useState<string>("all");
+  const [filterPeriod, setFilterPeriod] = useState<string>("15days");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedApp, setSelectedApp] = useState<any>(null);
@@ -105,7 +105,7 @@ export default function Psusersapplication() {
 
   // ---------------- CLEAR FUNCTION ----------------
   function clearFilters() {
-    setFilterPeriod("all");
+    setFilterPeriod("15days");
   }
 
   // ---------------- MAIN JSX ----------------

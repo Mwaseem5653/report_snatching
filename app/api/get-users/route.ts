@@ -40,8 +40,8 @@ export async function GET(req: Request) {
       if (requestedDistrict) queryRef = queryRef.where("district", "==", requestedDistrict);
     } 
     else if (requesterRole === "admin") {
-      // Admin: Restricted to their district and specific roles (PS & Market only)
-      const allowedRoles = ["ps_user", "market_user"];
+      // Admin: Restricted to their district and specific roles (Officer, PS & Market)
+      const allowedRoles = ["officer", "ps_user", "market_user"];
       
       // Enforce Role Hierarchy
       if (requestedRole) {
@@ -90,7 +90,10 @@ export async function GET(req: Request) {
 
     // 5. Final In-Memory Filtering (Safeguard)
     if (requesterRole !== "super_admin") {
-      const allowedRoles = ["ps_user", "market_user"];
+      const allowedRoles = requesterRole === "admin" 
+        ? ["officer", "ps_user", "market_user"] 
+        : ["ps_user", "market_user"];
+      
       users = users.filter((u: any) => allowedRoles.includes(u.role));
     }
 

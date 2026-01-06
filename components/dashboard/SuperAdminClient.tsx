@@ -23,40 +23,37 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
-      
-      {/* 🔹 Navbar with Integrated Tabs (Instant Load) */}
-      <SessionHeader initialSession={initialSession}>
+    <SessionHeader initialSession={initialSession}>
         <nav className="flex items-center gap-1 p-1 bg-slate-100/50 rounded-xl border border-slate-200/50">
-          {TABS.map((tab) => {
+        {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
-              <button
+            <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200",
-                  isActive 
+                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200",
+                isActive 
                     ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200" 
                     : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/50"
                 )}
-              >
+            >
                 <Icon size={16} />
                 <span className="hidden lg:inline">{tab.label}</span>
-              </button>
+            </button>
             );
-          })}
+        })}
         </nav>
-      </SessionHeader>
+    </SessionHeader>
 
-      {/* 🔹 Main Content */}
-      <main className="flex-1 container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <main className="flex-1 container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         {activeTab === "add-app" && <ApplicationManagement />}
         {activeTab === "search" && <IMEISearch />}
         {activeTab === "reports" && <ReportsView />}
         {activeTab === "matched" && <MatchedIMEIsView />}
         {activeTab === "users" && <AddUserForm />}
-      </main>
+    </main>
     </div>
   );
 }

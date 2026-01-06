@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   FileCheck, 
   MapPin, 
@@ -18,7 +18,9 @@ import {
   Send,
   CheckCircle,
   Search,
-  RotateCcw
+  RotateCcw,
+  RefreshCcw,
+  History
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -65,7 +67,8 @@ export default function MatchedIMEIsView() {
 
   // Filter States
   const [searchImei, setSearchImei] = useState("");
-  const [filterPeriod, setFilterPeriod] = useState("all");
+  const [filterPeriod, setFilterPeriod] = useState("1month"); 
+  const [filterStatus, setFilterStatus] = useState("new"); // 🚀 New: Default to 'new'
 
   // 1. Fetch Session
   useEffect(() => {
@@ -79,11 +82,19 @@ export default function MatchedIMEIsView() {
 
   // 2. Fetch Matches
   const fetchMatches = async () => {
+    if (!currentUser) return;
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (searchImei.trim()) params.append("imei", searchImei.trim());
-      if (filterPeriod !== "all") params.append("period", filterPeriod);
+      
+      if (searchImei.trim()) {
+          params.append("imei", searchImei.trim());
+          params.append("period", "all"); 
+          params.append("status", "all"); // Search across everything
+      } else {
+          params.append("period", filterPeriod);
+          params.append("status", filterStatus); // 🚀 Respect status filter
+      }
 
       const res = await fetch(`/api/matched-imeis?${params.toString()}`);
       const data = await res.json();
@@ -97,16 +108,17 @@ export default function MatchedIMEIsView() {
     }
   };
 
-  // Initial load
+  // Re-fetch on any filter change
   useEffect(() => {
-    fetchMatches(); 
-  }, []);
+    if (currentUser) {
+        fetchMatches();
+    }
+  }, [currentUser, filterPeriod, filterStatus]);
 
   const handleClearFilters = () => {
       setSearchImei("");
-      setFilterPeriod("all");
-      // Explicitly fetch with cleared params (which will trigger 'new' only view per API logic)
-      setTimeout(() => fetchMatches(), 10);
+      setFilterPeriod("1month");
+      setFilterStatus("new");
   };
 
   // 3. Handle Update Action
@@ -128,9 +140,6 @@ export default function MatchedIMEIsView() {
         });
 
         if (res.ok) {
-            // Note: Per user request, Admin acknowledgment should clear from default load 
-            // but not necessarily change the UI state of the CURRENTLY OPEN dialog.
-            // We just refresh the list in the background.
             if (!targetId) { 
                 setSelectedMatch(null); 
                 setNote("");
@@ -154,6 +163,13 @@ export default function MatchedIMEIsView() {
     }
   };
 
+  const isClearedForUser = (match: any) => {
+      if (!currentUser) return false;
+      if (currentUser.role === "super_admin") return match.superAdminCleared;
+      if (currentUser.role === "admin") return match.adminCleared;
+      return match.status === "cleared";
+  };
+
   return (
     <div className="w-full space-y-6">
       
@@ -165,9 +181,14 @@ export default function MatchedIMEIsView() {
                 <div className="p-2 bg-red-50 text-red-600 rounded-lg">
                     <ShieldAlert size={20} />
                 </div>
-                <div>
-                    <h2 className="text-lg font-bold text-slate-800">Matched IMEIs</h2>
-                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Recovery Verification</p>
+                <div className="hidden sm:block">
+                    <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-bold text-slate-800 leading-tight">Matched Recoveries</h2>
+                        <button onClick={fetchMatches} disabled={loading} className="p-1 hover:bg-slate-100 rounded-full group">
+                            <RefreshCcw size={14} className={cn("text-slate-400 group-hover:text-blue-600", loading && "animate-spin")} />
+                        </button>
+                    </div>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Status: {filterStatus.replace('new', 'unseen alerts')}</p>
                 </div>
             </div>
 
@@ -175,7 +196,7 @@ export default function MatchedIMEIsView() {
                 <div className="relative flex-1 min-w-[200px] max-w-md">
                     <Search className="absolute left-3 top-2.5 text-slate-400 h-4 w-4" />
                     <Input
-                        placeholder="Search by IMEI Number..."
+                        placeholder="Search IMEI for history..."
                         value={searchImei}
                         onChange={(e) => setSearchImei(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && fetchMatches()}
@@ -183,31 +204,40 @@ export default function MatchedIMEIsView() {
                     />
                 </div>
 
-                <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-                    <SelectTrigger className="w-[140px] border-slate-200 rounded-xl bg-slate-50/50 h-10">
-                        <SelectValue placeholder="Period" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Time</SelectItem>
-                        <SelectItem value="15days">Last 15 Days</SelectItem>
-                        <SelectItem value="1month">Last 1 Month</SelectItem>
-                        <SelectItem value="3months">Last 3 Months</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                    {/* 🚀 New: Status Filter */}
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                        <SelectTrigger className="w-[150px] border-slate-200 rounded-xl bg-slate-50/50 h-10">
+                            <SelectValue placeholder="Alert Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="new">Pending Alerts</SelectItem>
+                            <SelectItem value="processed">Officer Processed</SelectItem>
+                            <SelectItem value="cleared">Acknowledged</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    {/* 🚀 Period Selector in sequence */}
+                    <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                        <SelectTrigger className="w-[130px] border-slate-200 rounded-xl bg-slate-50/50 h-10">
+                            <SelectValue placeholder="Period" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="15days">15 Days</SelectItem>
+                            <SelectItem value="1month">1 Month</SelectItem>
+                            <SelectItem value="3months">3 Months</SelectItem>
+                            <SelectItem value="6months">6 Months</SelectItem>
+                            <SelectItem value="all">All History</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
 
                 <div className="flex items-center gap-2">
-                    <Button
-                        onClick={fetchMatches}
-                        className="bg-slate-800 text-white rounded-xl hover:bg-slate-900 h-10 shadow-lg px-6 font-semibold"
-                        disabled={loading}
-                    >
+                    <Button onClick={fetchMatches} className="bg-slate-800 text-white rounded-xl h-10 shadow-lg px-6 font-semibold" disabled={loading}>
                         {loading ? "..." : "Search"}
                     </Button>
-                    <Button
-                        onClick={handleClearFilters}
-                        variant="ghost"
-                        className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0"
-                    >
+                    <Button onClick={handleClearFilters} variant="ghost" className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0" title="Reset Filters">
                         <RotateCcw size={18} />
                     </Button>
                 </div>
@@ -215,11 +245,9 @@ export default function MatchedIMEIsView() {
         </div>
       </div>
 
-      {loading ? (
+      {loading && matches.length === 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-40 bg-white rounded-3xl animate-pulse border border-slate-100"></div>
-            ))}
+            {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-40 bg-white rounded-3xl animate-pulse border border-slate-100"></div>)}
         </div>
       ) : matches.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -240,12 +268,14 @@ export default function MatchedIMEIsView() {
               <div className="flex justify-between items-start mb-4">
                 <div className={cn(
                     "h-12 w-12 rounded-2xl flex items-center justify-center",
-                    match.status === "cleared" ? "bg-emerald-50 text-emerald-500" : "bg-red-50 text-red-500"
+                    match.status === "cleared" ? "bg-emerald-50 text-emerald-500" : 
+                    match.status === "processed" ? "bg-amber-50 text-amber-500" :
+                    "bg-red-50 text-red-500"
                 )}>
                     {match.status === "cleared" ? <CheckCircle size={24} /> : <ShieldAlert size={24} />}
                 </div>
                 <div className="text-right">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Status</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Status</p>
                     <p className={cn(
                         "text-xs font-black uppercase",
                         match.status === "cleared" ? "text-emerald-600" : 
@@ -279,7 +309,7 @@ export default function MatchedIMEIsView() {
                 <div className="pt-1">
                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-tighter mb-2">Identified By</p>
                     <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                        <div className="h-7 w-7 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-bold">
+                        <div className="h-7 w-7 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                             {match.foundBy?.name?.charAt(0) || "U"}
                         </div>
                         <div className="leading-tight flex-1 min-w-0">
@@ -294,8 +324,8 @@ export default function MatchedIMEIsView() {
         </div>
       ) : (
         <div className="py-20 text-center bg-white rounded-3xl border border-dashed border-slate-300">
-           <FileCheck className="mx-auto h-12 w-12 text-slate-200 mb-4" />
-           <p className="text-slate-500 font-medium">No active recovery alerts.</p>
+           <ShieldAlert className="mx-auto h-12 w-12 text-slate-200 mb-4" />
+           <p className="text-slate-500 font-medium">No records found. Try changing your filters.</p>
         </div>
       )}
 
@@ -305,17 +335,20 @@ export default function MatchedIMEIsView() {
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl p-0 border-0 shadow-2xl">
             <div className={cn(
                 "p-8 text-white relative",
-                selectedMatch.status === "cleared" ? "bg-gradient-to-r from-emerald-700 to-emerald-900" : "bg-gradient-to-r from-red-700 to-red-900"
+                isClearedForUser(selectedMatch) ? "bg-gradient-to-r from-emerald-700 to-emerald-900" : 
+                selectedMatch.status === "processed" ? "bg-gradient-to-r from-amber-600 to-amber-800" :
+                "bg-gradient-to-r from-red-700 to-red-900"
             )}>
                 <div className="absolute top-0 right-0 p-8 opacity-10">
-                    {selectedMatch.status === "cleared" ? <CheckCircle size={120} /> : <ShieldAlert size={120} />}
+                    {isClearedForUser(selectedMatch) ? <CheckCircle size={120} /> : <ShieldAlert size={120} />}
                 </div>
                 <DialogHeader className="relative z-10">
                     <DialogTitle className="text-2xl font-bold text-white flex items-center gap-3">
-                        {selectedMatch.status === "cleared" ? <CheckCircle /> : <ShieldAlert />} 
-                        {selectedMatch.status === "cleared" ? "Recovery Acknowledged" : "Recovery Match Found"}
+                        {isClearedForUser(selectedMatch) ? <CheckCircle /> : <ShieldAlert />} 
+                        {isClearedForUser(selectedMatch) ? "Recovery Acknowledged" : 
+                         selectedMatch.status === "processed" ? "Recovery Processed" : "Recovery Match Found"}
                     </DialogTitle>
-                    <p className="text-blue-100 opacity-80 text-sm mt-1 uppercase tracking-widest font-bold">Confidential Incident Report</p>
+                    <p className="text-blue-100 opacity-80 text-sm mt-1 uppercase tracking-widest font-bold font-sans">Official Record Copy</p>
                 </DialogHeader>
             </div>
 
@@ -352,19 +385,19 @@ export default function MatchedIMEIsView() {
                   </h3>
                   <div className="space-y-6">
                       <div className="space-y-3">
-                          <Label className="text-xs font-bold text-slate-500 uppercase">Case Status / Process Note</Label>
+                          <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Case Status / Process Note</Label>
                           {selectedMatch.status === "new" && currentUser?.role === "officer" ? (
                               <div className="space-y-3">
                                   <Textarea 
                                     placeholder="Describe current process or action taken..."
                                     value={note}
                                     onChange={(e) => setNote(e.target.value)}
-                                    className="rounded-xl border-slate-200 bg-white min-h-[100px] focus:ring-blue-500"
+                                    className="rounded-xl border-slate-200 bg-white min-h-[100px] focus:ring-blue-500 font-sans"
                                   />
                                   <Button 
                                     onClick={() => handleAction("officer_view")}
                                     disabled={updating}
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-11 shadow-lg shadow-blue-600/20"
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-11 shadow-lg shadow-blue-600/20 uppercase font-bold tracking-widest text-xs"
                                   >
                                     {updating ? <Loader2 className="animate-spin" /> : <><Send size={16} className="mr-2"/> Submit Process Note</>}
                                   </Button>
@@ -383,13 +416,13 @@ export default function MatchedIMEIsView() {
                           )}
                       </div>
 
-                      {(currentUser?.role === "admin" || currentUser?.role === "super_admin") && selectedMatch.status !== "cleared" && (
+                      {(currentUser?.role === "admin" || currentUser?.role === "super_admin") && !isClearedForUser(selectedMatch) && (
                           <div className="pt-4 border-t border-slate-200">
                               <p className="text-[11px] text-slate-500 mb-3 text-center">Admin action required to clear the system alert.</p>
                               <Button 
                                 onClick={() => handleAction("admin_acknowledge")}
                                 disabled={updating}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-11 shadow-lg shadow-emerald-600/20 font-bold"
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-11 shadow-lg shadow-emerald-600/20 font-black uppercase tracking-[0.2em] text-xs"
                               >
                                 {updating ? <Loader2 className="animate-spin" /> : <><CheckCircle size={18} className="mr-2"/> Acknowledge & Clear Alert</>}
                               </Button>
@@ -401,7 +434,7 @@ export default function MatchedIMEIsView() {
                               <CheckCircle className="text-emerald-600 shrink-0" />
                               <div className="leading-tight">
                                   <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Alert Cleared</p>
-                                  <p className="text-[11px] text-emerald-600">This case has been officially acknowledged by {selectedMatch.acknowledgedBy.name}.</p>
+                                  <p className="text-[11px] text-emerald-600 font-medium">This case has been officially acknowledged by {selectedMatch.acknowledgedBy.name}.</p>
                               </div>
                           </div>
                       )}

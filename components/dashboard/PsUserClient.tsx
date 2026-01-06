@@ -17,9 +17,9 @@ export default function PsUserClient({ initialSession }: { initialSession: any }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
-      <SessionHeader initialSession={initialSession}>
+    <SessionHeader initialSession={initialSession}>
         <nav className="flex items-center gap-1 p-1 bg-slate-100/50 rounded-xl border border-slate-200/50">
-          {TABS.map((tab) => {
+        {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -37,13 +37,13 @@ export default function PsUserClient({ initialSession }: { initialSession: any }
                 <span className="hidden lg:inline">{tab.label}</span>
               </button>
             );
-          })}
+        })}
         </nav>
-      </SessionHeader>
+    </SessionHeader>
 
-      <main className="flex-1 container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <main className="flex-1 container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         {activeTab === "search" ? <IMEISearch /> : <Psusersapplication />}
-      </main>
+    </main>
     </div>
   );
 }

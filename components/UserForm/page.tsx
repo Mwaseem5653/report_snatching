@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { locationData } from "@/components/location/location";
 import { toast } from "sonner";
-import { User, Mail, Lock, Phone, BadgeHelp, MapPin, Building2, Store, Loader2, ShieldCheck } from "lucide-react";
+import { User, Mail, Lock, Phone, BadgeHelp, MapPin, Building2, Store, Loader2, ShieldCheck, LockIcon } from "lucide-react";
 
 export default function AddUserForm({
   onSave,
@@ -24,6 +24,9 @@ export default function AddUserForm({
   loading: boolean;
 }) {
   const [sessionRole, setSessionRole] = useState<string | null>(null);
+  const [sessionCity, setSessionCity] = useState<string | null>(null);
+  const [sessionDistrict, setSessionDistrict] = useState<any>(null);
+
   const [role, setRole] = useState<string | null>(null);
   const [city, setCity] = useState<string | null>(null);
   const [district, setDistrict] = useState<string | null>(null);
@@ -38,6 +41,18 @@ export default function AddUserForm({
         const data = await res.json();
         if (data.authenticated && data.role) {
           setSessionRole(data.role);
+          setSessionCity(data.city);
+          setSessionDistrict(data.district);
+
+          // ✅ Pre-fix City for Admin and Officer
+          if (data.role === "admin" || data.role === "officer") {
+              setCity(data.city);
+          }
+          
+          // ✅ Pre-fix District only for Officer
+          if (data.role === "officer") {
+              setDistrict(data.district);
+          }
         }
       } catch (err) {
         console.error("Session fetch error:", err);
@@ -55,9 +70,9 @@ export default function AddUserForm({
   const getAvailableRoles = () => {
     switch (sessionRole) {
       case "super_admin":
-        return ["super_admin", "admin", "officer", "ps_user", "market_user"];
+        return ["super_admin", "admin"];
       case "admin":
-        return ["officer", "ps_user", "market_user"];
+        return ["officer"];
       case "officer":
         return ["ps_user", "market_user"];
       default:
@@ -98,6 +113,10 @@ export default function AddUserForm({
       </div>
     );
   }
+
+  // Restrictions logic
+  const isCityRestricted = sessionRole === "admin" || sessionRole === "officer";
+  const isDistrictRestricted = sessionRole === "officer";
 
   return (
     <div className="p-8 md:p-10 bg-white">
@@ -182,20 +201,26 @@ export default function AddUserForm({
               
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>City</Label>
-                  <Select onValueChange={setCity}>
-                    <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
-                      <SelectValue placeholder="Select City" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.keys(locationData).map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="flex items-center gap-2">City {isCityRestricted && <LockIcon size={12} className="text-slate-400" />}</Label>
+                  {isCityRestricted ? (
+                    <div className="h-11 flex items-center px-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 font-medium capitalize">
+                        {city || "Assigned City"}
+                    </div>
+                  ) : (
+                    <Select onValueChange={setCity} value={city || ""}>
+                        <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
+                        <SelectValue placeholder="Select City" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        {Object.keys(locationData).map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
-                {role === "admin" && city && (
+                {role === "admin" && city && !isDistrictRestricted && (
                   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                     <Label className="text-xs font-bold text-slate-500">SELECT ASSIGNED DISTRICTS</Label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -217,17 +242,34 @@ export default function AddUserForm({
 
                 {(role === "officer" || role === "ps_user" || role === "market_user") && city && (
                   <div className="space-y-2">
-                    <Label>District</Label>
-                    <Select onValueChange={setDistrict}>
-                      <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
-                        <SelectValue placeholder="Select District" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.keys(locationData[city]?.districts || {}).map((d) => (
-                          <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="flex items-center gap-2">District {isDistrictRestricted && <LockIcon size={12} className="text-slate-400" />}</Label>
+                    {isDistrictRestricted ? (
+                        <div className="h-11 flex items-center px-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 font-medium capitalize">
+                            {district || "Assigned District"}
+                        </div>
+                    ) : (
+                        <Select onValueChange={setDistrict} value={district || ""}>
+                        <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
+                            <SelectValue placeholder="Select District" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {Object.keys(locationData[city]?.districts || {})
+                                .filter((d) => {
+                                    // 🚀 Admin Filter: Only show districts assigned to the Admin
+                                    if (sessionRole === "admin" && sessionDistrict) {
+                                        if (Array.isArray(sessionDistrict)) {
+                                            return sessionDistrict.includes(d);
+                                        }
+                                        return sessionDistrict === d;
+                                    }
+                                    return true; // Super Admin sees all
+                                })
+                                .map((d) => (
+                                <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
+                            ))}
+                        </SelectContent>
+                        </Select>
+                    )}
                   </div>
                 )}
 

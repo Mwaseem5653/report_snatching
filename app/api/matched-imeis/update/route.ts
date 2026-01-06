@@ -39,16 +39,31 @@ export async function POST(req: NextRequest) {
             role: currentUser.role,
             at: admin.firestore.Timestamp.now()
         };
-        updateData.status = "processed"; // Change from 'new' to 'processed'
+        // Only update status to processed if it's currently new, to avoid overriding cleared/other states if we use them
+        if (matchDoc.data()?.status === "new") {
+             updateData.status = "processed"; 
+        }
     } 
     else if (action === "admin_acknowledge") {
-        updateData.acknowledgedBy = {
+        const timestamp = admin.firestore.Timestamp.now();
+        const acknowledgeData = {
             uid: currentUser.uid,
             name: currentUser.name,
             role: currentUser.role,
-            at: admin.firestore.Timestamp.now()
+            at: timestamp
         };
-        updateData.status = "cleared"; // Alert count will skip this
+
+        if (currentUser.role === "super_admin") {
+            updateData.superAdminCleared = true;
+            updateData.superAdminAcknowledgedBy = acknowledgeData;
+        } else {
+            updateData.adminCleared = true;
+            updateData.adminAcknowledgedBy = acknowledgeData;
+            // Legacy support: We might still want to mark global status as cleared if Admin does it, 
+            // OR we stop using global status for clearing entirely. 
+            // Given the requirement "admin pass all unseen show ho... super admin jub tak seen na kare...",
+            // it's safer to decouple. We WON'T set global status to 'cleared' to avoid hiding it from Super Admin if they rely on it.
+        }
     }
 
     await matchRef.update(updateData);

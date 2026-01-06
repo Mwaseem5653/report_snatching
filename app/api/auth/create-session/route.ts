@@ -46,21 +46,16 @@ export async function POST(req: Request) {
     const decodedToken = await adminAuth.verifyIdToken(idToken);
 
     // 3. Fetch Extended Profile from Firestore
-    // Strategy: First try direct lookup by UID, then fallback to Email search for legacy records
     let userDoc = await adminDb.collection("users").doc(uid).get();
     let userData: any = null;
 
     if (userDoc.exists) {
         userData = userDoc.data();
     } else {
-        // Fallback: Search by email (useful for users created before UID mapping)
         const emailSnapshot = await adminDb.collection("users").where("email", "==", email).limit(1).get();
         if (!emailSnapshot.empty) {
             userDoc = emailSnapshot.docs[0];
             userData = userDoc.data();
-            // Optional: Migrating legacy doc to use UID as ID for future performance
-            // await adminDb.collection("users").doc(uid).set(userData);
-            // await adminDb.collection("users").doc(userDoc.id).delete();
         }
     }
     
@@ -70,7 +65,7 @@ export async function POST(req: Request) {
 
     // 4. Create custom JWT Session
     const payload = {
-      uid: uid, // Use Auth UID
+      uid: uid,
       email: email,
       role: decodedToken.role || userData.role || "User",
       name: userData.name || "Official",
@@ -78,6 +73,7 @@ export async function POST(req: Request) {
       district: userData.district || null,
       ps: userData.ps || null,
       mobile: userData.phone || userData.mobile || null,
+      buckle: userData.buckle || null, // 🚀 Added buckle number to session
     };
 
     const sessionToken = jwt.sign(payload, SECRET, { expiresIn: `${MAX_AGE}s` });

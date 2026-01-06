@@ -11,10 +11,7 @@ export async function POST(req: NextRequest) {
     const { imei } = await req.json();
 
     if (!imei) {
-      return NextResponse.json(
-        { success: false, message: "IMEI is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, message: "IMEI is required" }, { status: 400 });
     }
 
     // 1. Get Session for Logging
@@ -33,18 +30,21 @@ export async function POST(req: NextRequest) {
     const cleanIMEI = imei.trim();
     const appsRef = adminDb.collection("applications");
 
-    // 2. Search for the device in reports
-    let snapshot = await appsRef.where("imei1", "==", cleanIMEI).limit(1).get();
+    // 2. Search for ACTIVE reports only (Ignore 'complete' ones)
+    // We fetch any report matching the IMEI
+    let snapshot = await appsRef.where("imei1", "==", cleanIMEI).get();
     if (snapshot.empty) {
-      snapshot = await appsRef.where("imei2", "==", cleanIMEI).limit(1).get();
+      snapshot = await appsRef.where("imei2", "==", cleanIMEI).get();
     }
 
-    const isMatch = !snapshot.empty;
-    const applicationData = !snapshot.empty ? snapshot.docs[0].data() : null;
-    const applicationId = !snapshot.empty ? snapshot.docs[0].id : null;
+    // 🚀 Logic: A match is only valid if at least one report is NOT 'complete'
+    const allReports = snapshot.docs.map(doc => doc.data());
+    const activeReport = allReports.find(report => report.status !== "complete");
 
-    // 3. LOG EVERY SEARCH (Audit Trail)
-    // Log for everyone except super_admin
+    const isMatch = !!activeReport;
+    const applicationId = snapshot.empty ? null : snapshot.docs[0].id;
+
+    // 3. LOG EVERY SEARCH
     if (currentUser && currentUser.role !== "super_admin") {
         await adminDb.collection("search_history").add({
             imei: cleanIMEI,
@@ -60,51 +60,39 @@ export async function POST(req: NextRequest) {
         });
     }
 
-    // 4. LOG THE RECOVERY MATCH (Unique Entry & Role Filtering)
-    // - Only log if it's a match
-    // - Only log if user is NOT Super Admin, Admin, or Officer (Per user request)
+    // 4. LOG THE RECOVERY MATCH (Only for Active/Stolen devices)
     const restrictedRoles = ["super_admin", "admin", "officer"];
-    
     if (isMatch && currentUser && !restrictedRoles.includes(currentUser.role)) {
-        
-        // 🛑 Check if this IMEI has already been matched to avoid duplicates (150% issue)
-        const matchSnapshot = await adminDb.collection("matched_imeis")
-            .where("imei", "==", cleanIMEI)
-            .limit(1)
-            .get();
-
-        if (matchSnapshot.empty) {
-            await adminDb.collection("matched_imeis").add({
-                imei: cleanIMEI,
-                applicationId,
-                applicantName: applicationData?.applicantName || "N/A",
-                crimeHead: applicationData?.crimeHead || "N/A",
-                originalPs: applicationData?.ps || "N/A",
-                originalDistrict: applicationData?.district || "N/A",
-                foundBy: {
-                    uid: currentUser.uid,
-                    name: currentUser.name || "Unknown",
-                    email: currentUser.email,
-                    role: currentUser.role,
-                    district: currentUser.district || "N/A",
-                    ps: currentUser.ps || "N/A",
-                },
-                matchedAt: admin.firestore.Timestamp.now(),
-                status: "new"
-            });
-        }
+        await adminDb.collection("matched_imeis").add({
+            imei: cleanIMEI,
+            applicationId,
+            applicantName: activeReport?.applicantName || "N/A",
+            crimeHead: activeReport?.crimeHead || "N/A",
+            originalPs: activeReport?.ps || "N/A",
+            originalDistrict: activeReport?.district || "N/A",
+            foundBy: {
+                uid: currentUser.uid,
+                name: currentUser.name || "Unknown",
+                email: currentUser.email,
+                role: currentUser.role,
+                district: currentUser.district || "N/A",
+                ps: currentUser.ps || "N/A",
+            },
+            matchedAt: admin.firestore.Timestamp.now(),
+            status: "new"
+        });
     }
 
+    // 5. Response logic
     if (!isMatch) {
-      return NextResponse.json({ success: false, message: "No record found" }, { status: 404 });
+      return NextResponse.json({ success: false, message: "No active record found" }, { status: 404 });
     }
 
-    // Return result for UI
     return NextResponse.json({
       success: true,
       data: {
-        ps: applicationData?.ps || "Unknown",
-        crimeHead: applicationData?.crimeHead || "Unknown",
+        ps: activeReport?.ps || "Unknown",
+        crimeHead: activeReport?.crimeHead || "Unknown",
         status: "founded",
       },
     });

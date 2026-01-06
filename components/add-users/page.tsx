@@ -75,7 +75,7 @@ export default function UserManagement() {
       case "super_admin":
         return ["super_admin", "admin", "officer", "ps_user", "market_user"];
       case "admin":
-        return ["ps_user", "market_user"]; // Only manage lower roles
+        return ["officer", "ps_user", "market_user"]; // Added officer
       case "officer":
         return ["ps_user", "market_user"];
       default:

@@ -5,6 +5,10 @@ import jwt from "jsonwebtoken";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
+/**
+ * 🔔 Notification Count API
+ * Refactored to fetch and filter in-memory to avoid Firestore Indexing issues
+ */
 export async function GET(req: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -21,50 +25,49 @@ export async function GET(req: NextRequest) {
 
     const { role, district } = decoded;
     
+    // Only certain roles see notifications
     if (!["super_admin", "admin", "officer"].includes(role)) {
         return NextResponse.json({ count: 0 });
     }
 
-    let query: any = adminDb.collection("matched_imeis");
+    let queryRef: any = adminDb.collection("matched_imeis");
 
-    // ROLE BASED STATUS FILTERING
-    if (role === "officer") {
-        // Officers only alerted for absolutely new matches
-        query = query.where("status", "==", "new");
-    } else {
-        // Admins/Super Admins see everything until they personally clear it
-        // We'll count anything that isn't 'cleared'
-        query = query.where("status", "!=", "cleared");
-    }
-
-    // DISTRICT FILTERING
+    // 1. Apply District Filter at Database Level (Efficiency)
     if (role === "admin" || role === "officer") {
         if (Array.isArray(district)) {
             if (district.length > 0) {
-                query = query.where("foundBy.district", "in", district);
+                queryRef = queryRef.where("foundBy.district", "in", district);
             } else {
                 return NextResponse.json({ count: 0 });
             }
         } else if (district) {
-            query = query.where("foundBy.district", "==", district);
+            queryRef = queryRef.where("foundBy.district", "==", district);
         } else {
             return NextResponse.json({ count: 0 });
         }
     }
 
-    const snapshot = await query.get();
-    
-    // Extra safeguard: Since Firestore doesn't support != well with other where filters sometimes,
-    // we do a final pass for roles that see "all but cleared"
-    let count = snapshot.size;
-    if (role !== "officer" && role !== "super_admin") {
-        // If it was a complex query, we might have over-fetched if the index wasn't perfect
-        // but simple count is usually fine.
+    // 2. Fetch records
+    const snapshot = await queryRef.get();
+    let matches = snapshot.docs.map((doc: any) => doc.data());
+
+    // 3. Apply Status Filter in-memory (Security & Reliability)
+    let finalCount = 0;
+
+    if (role === "officer") {
+        // Officers only alerted for 'new' matches
+        finalCount = matches.filter((m: any) => m.status === "new").length;
+    } else if (role === "super_admin") {
+        // Super Admin alerted for anything they haven't cleared personally
+        finalCount = matches.filter((m: any) => !m.superAdminCleared).length;
+    } else if (role === "admin") {
+        // Admin alerted for New or Processed items they haven't cleared
+        finalCount = matches.filter((m: any) => !m.adminCleared && (m.status === "new" || m.status === "processed")).length;
     }
 
-    return NextResponse.json({ success: true, count });
+    return NextResponse.json({ success: true, count: finalCount });
   } catch (error: any) {
-    console.error("Notif count error:", error);
+    console.error("Notification Count Error:", error);
     return NextResponse.json({ count: 0 });
   }
 }
