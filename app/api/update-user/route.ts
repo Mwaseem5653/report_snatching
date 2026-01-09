@@ -40,6 +40,8 @@ export async function POST(req: Request) {
     // 3. Update Firestore Document
     const firestoreUpdates: any = { ...metadata };
     if (role) firestoreUpdates.role = role;
+    if (metadata.tokens !== undefined) firestoreUpdates.tokens = parseInt(metadata.tokens) || 0;
+    if (metadata.hasToolsAccess !== undefined) firestoreUpdates.hasToolsAccess = !!metadata.hasToolsAccess;
     
     // We don't store passwords in Firestore anymore (managed by Firebase Auth)
     delete firestoreUpdates.password; 

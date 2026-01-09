@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import AddUserForm from "../UserForm/page";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -17,8 +19,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Users, Search, Plus, RotateCcw, ChevronRight, UserCog, Mail, Shield } from "lucide-react";
+import { Users, Search, Plus, RotateCcw, ChevronRight, UserCog, Mail, Shield, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ConfirmModal from "@/components/ui/confirm-modal";
 
 export default function UserManagement() {
   const [users, setUsers] = useState<any[]>([]);
@@ -27,6 +30,8 @@ export default function UserManagement() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
   // ---------------- FETCH CURRENT USER ----------------
   useEffect(() => {
@@ -164,8 +169,7 @@ export default function UserManagement() {
 
   // ---------------- DELETE USER ----------------
   async function handleDeleteUser(uid: string) {
-    if (!confirm("Are you sure you want to delete this user?")) return;
-
+    setLoading(true);
     try {
       const res = await fetch("/api/update-user", {
         method: "DELETE",
@@ -177,12 +181,16 @@ export default function UserManagement() {
       if (data.success) {
         alert("✅ User deleted!");
         setSelectedUser(null);
+        setShowDeleteConfirm(false);
+        setUserToDelete(null);
         handleFilterSearch();
       } else {
         alert("❌ Delete failed: " + (data.error || "Unknown error"));
       }
     } catch (err) {
       alert("❌ Delete failed!");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -270,26 +278,39 @@ export default function UserManagement() {
                 <div className="h-10 w-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors font-bold text-xs uppercase">
                     {user.name?.charAt(0) || "U"}
                 </div>
-                <span className={cn(
-                    "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider",
-                    user.role === "super_admin" ? "bg-purple-100 text-purple-700" :
-                    user.role === "admin" ? "bg-blue-100 text-blue-700" :
-                    "bg-slate-100 text-slate-700"
-                )}>
-                    {user.role?.replace("_", " ")}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                    <span className={cn(
+                        "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider",
+                        user.role === "super_admin" ? "bg-purple-100 text-purple-700" :
+                        user.role === "admin" ? "bg-blue-100 text-blue-700" :
+                        "bg-slate-100 text-slate-700"
+                    )}>
+                        {user.role?.replace("_", " ")}
+                    </span>
+                    {user.tokens !== undefined && (
+                        <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                            {user.tokens} Tokens
+                        </span>
+                    )}
+                </div>
               </div>
 
               <div className="space-y-1">
-                <p className="font-bold text-slate-800 group-hover:text-indigo-700 transition-colors truncate">
-                  {user.name}
-                </p>
+                <div className="flex items-center gap-2">
+                    <p className="font-bold text-slate-800 group-hover:text-indigo-700 transition-colors truncate">
+                    {user.name}
+                    </p>
+                    {user.hasToolsAccess && (
+                        <Shield className="h-3 w-3 text-emerald-500" />
+                    )}
+                </div>
                 <div className="flex items-center gap-1.5 text-slate-500">
                     <Mail size={12} />
                     <p className="text-xs font-medium truncate">{user.email}</p>
                 </div>
               </div>
 
+              {/* ... rest of mapping */}
               <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between text-[11px] text-slate-400 font-bold uppercase">
                  <span className="flex items-center gap-1">
                     <Shield size={10} />
@@ -328,8 +349,32 @@ export default function UserManagement() {
                 }}
                 className="grid grid-cols-1 md:grid-cols-2 gap-6"
                 >
+                
+                {/* 🚀 SUPER ADMIN ONLY: TOOLS & TOKENS */}
+                {currentUser?.role === "super_admin" && (
+                    <div className="col-span-full grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200 mb-2">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-500 uppercase">Available Tokens</label>
+                            <Input 
+                                type="number" 
+                                value={selectedUser.tokens || 0} 
+                                onChange={(e) => setSelectedUser({...selectedUser, tokens: parseInt(e.target.value) || 0})}
+                                className="rounded-xl border-slate-300 h-11"
+                            />
+                        </div>
+                        <div className="flex items-center gap-3 mt-6">
+                            <Checkbox 
+                                id="editToolsAccess" 
+                                checked={!!selectedUser.hasToolsAccess} 
+                                onCheckedChange={(val) => setSelectedUser({...selectedUser, hasToolsAccess: !!val})}
+                            />
+                            <Label htmlFor="editToolsAccess" className="text-xs font-bold text-slate-700">Grant Advanced Tools Access</Label>
+                        </div>
+                    </div>
+                )}
+
                 {Object.entries(selectedUser).map(([key, value]) => {
-                    if (key === "uid" || key === "createdAt") return null;
+                    if (["uid", "createdAt", "tokens", "hasToolsAccess"].includes(key)) return null;
 
                     if (key === "role") {
                     return (
@@ -383,7 +428,10 @@ export default function UserManagement() {
                     type="button"
                     variant="ghost"
                     className="text-red-600 hover:bg-red-50 rounded-xl"
-                    onClick={() => handleDeleteUser(selectedUser.uid)}
+                    onClick={() => {
+                        setUserToDelete(selectedUser.uid);
+                        setShowDeleteConfirm(true);
+                    }}
                     >
                     Delete User
                     </Button>
@@ -396,6 +444,21 @@ export default function UserManagement() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      <ConfirmModal 
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+            setShowDeleteConfirm(false);
+            setUserToDelete(null);
+        }}
+        onConfirm={() => userToDelete && handleDeleteUser(userToDelete)}
+        title="Delete User?"
+        description="This action cannot be undone. All data associated with this user will be permanently removed."
+        confirmText="Yes, Delete User"
+        variant="danger"
+        loading={loading}
+      />
 
       {/* ADD USER DIALOG */}
       {showAddForm && (

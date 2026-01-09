@@ -97,7 +97,21 @@ export async function POST(req: NextRequest) {
     const snapshot = await appsRef.where("imei1", "==", body.imei1).get();
     if (!snapshot.empty) return NextResponse.json({ success: false, message: "IMEI already exists" }, { status: 400 });
 
-    const newApp = { ...body, status: "pending", createdAt: admin.firestore.Timestamp.now() };
+    // 🕒 CONVERT DATE STRING TO TIMESTAMP FOR DATABASE CONSISTENCY
+    let finalOffenceDate: any = body.offenceDate || null;
+    if (body.offenceDate && typeof body.offenceDate === "string") {
+        const d = new Date(body.offenceDate);
+        if (!isNaN(d.getTime())) {
+            finalOffenceDate = admin.firestore.Timestamp.fromDate(d);
+        }
+    }
+
+    const newApp = { 
+        ...body, 
+        offenceDate: finalOffenceDate,
+        status: "pending", 
+        createdAt: admin.firestore.Timestamp.now() 
+    };
     const docRef = await appsRef.add(newApp);
     return NextResponse.json({ success: true, id: docRef.id });
   } catch (err: any) {
@@ -157,7 +171,14 @@ export async function PUT(req: NextRequest) {
         await appRef.update({
             status: "complete",
             comments: comments,
-            completedAt: admin.firestore.Timestamp.now()
+            completedAt: admin.firestore.Timestamp.now(),
+            completedBy: {
+                uid: currentUser.uid,
+                name: currentUser.name,
+                mobile: currentUser.mobile,
+                role: currentUser.role,
+                buckle: currentUser.buckle || "N/A"
+            }
         });
         return NextResponse.json({ success: true, message: "Application marked as complete" });
     }

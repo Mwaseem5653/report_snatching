@@ -21,6 +21,8 @@ export async function POST(req: Request) {
       rank,
       buckle,
       enrolledBy,
+      tokens,
+      hasToolsAccess
     } = body;
 
     // 1. Basic Validation
@@ -73,6 +75,8 @@ export async function POST(req: Request) {
       rank: rank || null,
       buckle: buckle || null,
       enrolledBy: enrolledBy || null,
+      tokens: parseInt(tokens) || 0,
+      hasToolsAccess: !!hasToolsAccess
     };
 
     // Use Auth UID as the document ID for perfect mapping

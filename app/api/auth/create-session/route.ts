@@ -73,7 +73,9 @@ export async function POST(req: Request) {
       district: userData.district || null,
       ps: userData.ps || null,
       mobile: userData.phone || userData.mobile || null,
-      buckle: userData.buckle || null, // 🚀 Added buckle number to session
+      buckle: userData.buckle || null, 
+      tokens: userData.tokens || 0,
+      hasToolsAccess: !!userData.hasToolsAccess
     };
 
     const sessionToken = jwt.sign(payload, SECRET, { expiresIn: `${MAX_AGE}s` });
@@ -101,11 +103,26 @@ export async function POST(req: Request) {
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const token = (await cookieStore).get("sessionToken")?.value || null;
+    const token = cookieStore.get("sessionToken")?.value || null;
 
     if (!token) return NextResponse.json({ authenticated: false });
 
     const decoded: any = jwt.verify(token, SECRET);
+    
+    // 🚀 Fetch LIVE data from Firestore to ensure tokens are accurate
+    const userDoc = await adminDb.collection("users").doc(decoded.uid).get();
+    
+    if (userDoc.exists) {
+        const liveData = userDoc.data();
+        return NextResponse.json({ 
+            authenticated: true, 
+            ...decoded,
+            tokens: liveData?.tokens || 0,
+            hasToolsAccess: !!liveData?.hasToolsAccess,
+            role: liveData?.role || decoded.role // Ensure role is also live
+        });
+    }
+
     return NextResponse.json({ authenticated: true, ...decoded });
   } catch (err) {
     return NextResponse.json({ authenticated: false });

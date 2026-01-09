@@ -22,6 +22,8 @@ export async function getServerSession() {
       district: decoded.district,
       ps: decoded.ps,
       mobile: decoded.mobile,
+      hasToolsAccess: !!decoded.hasToolsAccess,
+      tokens: decoded.tokens || 0
     };
   } catch (err) {
     return null;

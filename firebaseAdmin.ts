@@ -2,20 +2,27 @@ import admin from "firebase-admin";
 
 
 if (!admin.apps.length) {
-  const base64 = process.env.FIREBASE_PRIVATE_KEY;
-  if (!base64) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_BASE64");
-  const svc = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-  // Ensure private_key is correctly formatted
-  svc.private_key = svc.private_key.replace(/\\n/g, "\n");
-
-  admin.initializeApp({
-    credential: admin.credential.cert(svc),
-  });
+  if (!projectId || !clientEmail || !privateKey) {
+    console.error("❌ Missing Firebase Admin Credentials in .env.local");
+  } else {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    });
+  }
 }
 
 export const adminAuth = admin.auth();
 export const adminDb = admin.firestore();
+export const adminStorage = admin.storage();
 
 // 🔐 Hash Config for Password Imports (SCRYPT)
 export const hashConfig = {

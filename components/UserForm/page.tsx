@@ -32,6 +32,8 @@ export default function AddUserForm({
   const [district, setDistrict] = useState<string | null>(null);
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [ps, setPs] = useState<string | null>(null);
+  const [hasToolsAccess, setHasToolsAccess] = useState(false);
+  const [tokens, setTokens] = useState(0);
 
   // ✅ Get current session
   useEffect(() => {
@@ -70,7 +72,7 @@ export default function AddUserForm({
   const getAvailableRoles = () => {
     switch (sessionRole) {
       case "super_admin":
-        return ["super_admin", "admin"];
+        return ["super_admin", "admin", "officer"];
       case "admin":
         return ["officer"];
       case "officer":
@@ -100,6 +102,8 @@ export default function AddUserForm({
       city,
       district: role === "admin" ? selectedDistricts : district,
       ps, 
+      hasToolsAccess,
+      tokens
     };
 
     onSave(payload);
@@ -128,20 +132,44 @@ export default function AddUserForm({
              <ShieldCheck size={20} className="text-blue-600" />
              <h3 className="font-bold uppercase tracking-wider text-xs">Assign System Role</h3>
           </div>
-          <div className="space-y-2">
-            <Label className="text-slate-600">User Access Level</Label>
-            <Select onValueChange={setRole}>
-              <SelectTrigger className="w-full h-11 rounded-xl bg-slate-50 border-slate-200">
-                <SelectValue placeholder="Identify user role" />
-              </SelectTrigger>
-              <SelectContent>
-                {getAvailableRoles().map((r) => (
-                  <SelectItem key={r} value={r} className="capitalize">
-                    {r.replace("_", " ")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+                <Label className="text-slate-600">User Access Level</Label>
+                <Select onValueChange={setRole}>
+                <SelectTrigger className="w-full h-11 rounded-xl bg-slate-50 border-slate-200">
+                    <SelectValue placeholder="Identify user role" />
+                </SelectTrigger>
+                <SelectContent>
+                    {getAvailableRoles().map((r) => (
+                    <SelectItem key={r} value={r} className="capitalize">
+                        {r.replace("_", " ")}
+                    </SelectItem>
+                    ))}
+                </SelectContent>
+                </Select>
+            </div>
+
+            {/* 🚀 Super Admin Only: Tools Access & Tokens */}
+            {sessionRole === "super_admin" && (
+                <div className="flex items-end gap-4">
+                    <div className="flex-1 space-y-2">
+                        <Input 
+                            type="number" 
+                            value={tokens} 
+                            onChange={(e) => setTokens(parseInt(e.target.value) || 0)}
+                            className="h-11 rounded-xl bg-slate-50 border-slate-200"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2 mb-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <Checkbox 
+                            id="toolsAccess" 
+                            checked={hasToolsAccess} 
+                            onCheckedChange={(val) => setHasToolsAccess(!!val)} 
+                        />
+                        <Label htmlFor="toolsAccess" className="text-xs font-bold cursor-pointer">Advanced Tools</Label>
+                    </div>
+                </div>
+            )}
           </div>
         </section>
 

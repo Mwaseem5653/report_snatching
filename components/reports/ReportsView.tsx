@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   ChevronDown,
   RefreshCcw,
-  History
+  History,
+  User
 } from "lucide-react";
 import { locationData } from "@/components/location/location";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -53,21 +54,51 @@ const RadialProgress = ({ value, total, label, color, icon: Icon }: any) => {
 };
 
 /* -------------------- Main Component -------------------- */
-export default function ReportsView() {
+export default function ReportsView({ officerUid: initialOfficerUid }: { officerUid?: string }) {
   const [district, setDistrict] = useState("all");
   const [period, setPeriod] = useState("1month");
+  const [selectedOfficer, setSelectedOfficer] = useState(initialOfficerUid || "all");
   const [stats, setStats] = useState({ total: 0, pending: 0, processed: 0, complete: 0, matched: 0 });
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [officers, setOfficers] = useState<any[]>([]);
 
   useEffect(() => {
     async function fetchSession() {
       const res = await fetch("/api/auth/create-session");
       const data = await res.json();
-      if (data.authenticated) setCurrentUser(data);
+      if (data.authenticated) {
+          setCurrentUser(data);
+          if (initialOfficerUid) setSelectedOfficer(initialOfficerUid);
+      }
     }
     fetchSession();
-  }, []);
+  }, [initialOfficerUid]);
+
+  // Fetch Officers List for Admin/SuperAdmin
+  useEffect(() => {
+    async function fetchOfficers() {
+        if (!currentUser || !["admin", "super_admin"].includes(currentUser.role)) return;
+        try {
+            const params = new URLSearchParams();
+            params.append("role", "officer");
+            
+            // SECURITY: If Admin, restrict fetching to their own district
+            if (currentUser.role === "admin" && currentUser.district) {
+                params.append("district", currentUser.district);
+            } else if (district !== "all") {
+                params.append("district", district);
+            }
+
+            const res = await fetch(`/api/get-users?${params.toString()}`);
+            const data = await res.json();
+            setOfficers(data.users || []);
+        } catch (err) {
+            console.error("Failed to fetch officers:", err);
+        }
+    }
+    fetchOfficers();
+  }, [currentUser, district]);
 
   const fetchStats = async () => {
     if (!currentUser) return;
@@ -86,10 +117,14 @@ export default function ReportsView() {
       const dataMatched = await resMatched.json();
       
       if (dataApps.success && dataMatched.success) {
-        const apps = dataApps.applications || [];
-        const matches = dataMatched.matches || [];
+        let apps = dataApps.applications || [];
+        let matches = dataMatched.matches || [];
         
-        // Ensure unique IMEIs for matched count
+        if (selectedOfficer !== "all") {
+            apps = apps.filter((a: any) => a.processedBy?.uid === selectedOfficer);
+            matches = matches.filter((m: any) => m.processedBy?.uid === selectedOfficer);
+        }
+
         const uniqueMatchedCount = new Set(matches.map((m: any) => m.imei)).size;
 
         setStats({
@@ -109,17 +144,18 @@ export default function ReportsView() {
 
   useEffect(() => {
     fetchStats();
-  }, [district, period, currentUser]);
+  }, [district, period, currentUser, selectedOfficer]);
 
   const availableDistricts = useMemo(() => {
     if (!currentUser) return [];
     if (currentUser.role === "super_admin") {
         return Object.keys(locationData).flatMap(city => Object.keys(locationData[city].districts));
     }
-    // Admin/Officer: Return only their assigned district(s)
     const d = currentUser.district;
     return Array.isArray(d) ? d : (d ? [d] : []);
   }, [currentUser]);
+
+  const showOfficerFilter = currentUser && ["admin", "super_admin"].includes(currentUser.role) && !initialOfficerUid;
 
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-700">
@@ -135,6 +171,25 @@ export default function ReportsView() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+            {showOfficerFilter && (
+                <div className="flex items-center gap-2 bg-white p-1 rounded-2xl shadow-sm border border-slate-200">
+                    <User size={14} className="text-slate-400 ml-3" />
+                    <Select value={selectedOfficer} onValueChange={setSelectedOfficer}>
+                        <SelectTrigger className="w-[180px] border-0 focus:ring-0 shadow-none bg-slate-50 rounded-xl h-9 text-xs font-bold">
+                            <SelectValue placeholder="All Officers" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Officers</SelectItem>
+                            {officers.map(o => (
+                                <SelectItem key={o.uid} value={o.uid} className="text-xs">
+                                    {o.name} ({o.buckle || "N/A"})
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
+
             <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl border border-slate-200">
                 <History size={14} className="text-slate-400 ml-3" />
                 <Select value={period} onValueChange={setPeriod}>
@@ -158,7 +213,7 @@ export default function ReportsView() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">{currentUser?.role === "super_admin" ? "Entire Sindh" : "My Jurisdiction"}</SelectItem>
-                        {availableDistricts.map(d => (
+                        {(availableDistricts || []).map(d => (
                         <SelectItem key={d} value={d} className="capitalize text-xs">{d}</SelectItem>
                         ))}
                     </SelectContent>

@@ -12,6 +12,8 @@ type Session = {
   email?: string | null;
   name?: string | null;
   role?: string | null;
+  tokens?: number;
+  hasToolsAccess?: boolean;
 };
 
 interface HeaderProps {
@@ -54,10 +56,15 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
 
   useEffect(() => {
     if (!initialSession) fetchSession();
-    else fetchNotifications();
+    else {
+        fetchSession(); 
+    }
 
     const handleFocus = () => fetchNotifications();
+    const handleRefresh = () => fetchSession(); // 🚀 New refresh handler
+
     window.addEventListener("focus", handleFocus);
+    window.addEventListener("refresh-session", handleRefresh); // 🚀 Listen for updates
 
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setOpen(false);
@@ -66,6 +73,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
 
     return () => {
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("refresh-session", handleRefresh); // 🚀 Cleanup
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [initialSession]);
@@ -135,6 +143,14 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
               <div className="p-4 bg-slate-50 border-b border-slate-100">
                 <p className="text-sm font-bold text-slate-800 truncate">{session?.name ?? "Guest"}</p>
                 <p className="text-xs text-slate-500 truncate">{session?.email ?? "No email"}</p>
+                
+                {/* 🚀 Move Credits here */}
+                {(session?.hasToolsAccess || session?.role === "super_admin") && (
+                    <div className="mt-3 inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg font-black text-[9px] uppercase tracking-wider">
+                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                        {session?.tokens || 0} Credits Available
+                    </div>
+                )}
               </div>
 
               <div className="p-2">

@@ -16,6 +16,7 @@ import {
 import { uploadFileToStorage } from "@/lib/uploadHelper";
 import { addApplication } from "@/lib/applicationApi";
 import { locationData } from "@/components/location/location";
+import { CheckCircle2, PhoneForwarded } from "lucide-react";
 
 type AddApplicationFormProps = {
   currentUser?: any;
@@ -37,6 +38,7 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
     mobileModel: "",
     imei1: "",
     imei2: "",
+    lastNumUsed: "", // Added
     crimeHead: "",
     otherLostProperty: "",
     dateOfOffence: "",
@@ -62,7 +64,6 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
     setSubmitting(true);
 
     try {
-      // Upload files
       let boxPicUrl = "";
       let attestedUrl = "";
 
@@ -73,7 +74,6 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
         attestedUrl = await uploadFileToStorage(formData.attestedApplication, "applications");
       }
 
-      // Prepare payload
       const payload = {
         applicantName: formData.applicantName,
         applicantMobile: formData.mobileNumber,
@@ -84,8 +84,9 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
         mobileModel: formData.mobileModel,
         imei1: formData.imei1,
         imei2: formData.imei2,
+        lastNumUsed: formData.lastNumUsed,
         crimeHead: formData.crimeHead,
-        offenceDate: formData.dateOfOffence,
+        offenceDate: formData.dateOfOffence, // Backend POST will handle conversion
         offenceTime: formData.timeOfOffence,
         offenceAddress: formData.addressOfOffence,
         note: formData.incidentNote,
@@ -109,277 +110,121 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
     }
   };
 
-  // Success screen (bilingual)
   if (submitted) {
     return (
-      <div className="w-4/5 mx-auto mt-8 bg-white rounded-xl shadow-md p-8 text-center animate-[opacity_300ms_ease_in]">
-        <h2 className="text-2xl font-semibold text-green-600">✅ Thanks for reporting your application</h2>
-        <p className="text-gray-700 mt-2">آپ کی درخواست درج کر لی گئی ہے، شکریہ</p>
-        <div className="mt-6">
-          <Button
-            onClick={() => {
-              if (!currentUser || currentUser?.role === "user") {
-                router.push("/");
-              } else {
-                router.refresh(); // stay on same page for staff
-              }
-            }}
-          >
-            Okay / ٹھیک ہے
-          </Button>
+      <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl text-center animate-in fade-in zoom-in duration-500">
+        <div className="h-20 w-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
+            <CheckCircle2 className="h-10 w-10 text-green-600" />
         </div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Application Submitted</h2>
+        <p className="text-gray-500 mb-8">Case has been successfully added to the database.</p>
+        <Button onClick={() => {
+            if (currentUser) window.location.reload();
+            else router.push("/");
+        }} className="bg-blue-900 hover:bg-blue-800 h-12 px-10 rounded-xl">
+          Close Window
+        </Button>
       </div>
     );
   }
 
   return (
-    <div
-      className="min-h-screen py-10 animate-[opacity_300ms_ease_in] bg-[radial-gradient(circle_at_top_left,_#f8f8f8_1px,_transparent_1px)] [background-size:20px_20px]"
-    >
-      {/* Header */}
-      <div className="w-4/5 mx-auto mb-8 flex items-center gap-4">
-        <img src="/logo.png" alt="Sindh Police" className="w-16 h-16 rounded-full border" />
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-blue-900">
-            Mobile Theft Reporting Form
-          </h1>
-          {/* <p className="text-gray-600">موبائل چوری رپورٹ فارم</p> */}
+    <div className="bg-slate-50 p-6 md:p-10">
+      <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-10">
+        
+        {/* Applicant Section */}
+        <section className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <h3 className="text-sm font-black text-blue-600 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div>
+                Applicant Details
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Full Name *</Label>
+                    <Input name="applicantName" value={formData.applicantName} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Mobile Number *</Label>
+                    <Input name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">CNIC Number (Optional)</Label>
+                    <Input name="cnic" value={formData.cnic} onChange={handleChange} className="rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">City *</Label>
+                    <Input name="city" value={formData.city} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                </div>
+            </div>
+        </section>
+
+        {/* Device Section */}
+        <section className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <h3 className="text-sm font-black text-blue-600 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div>
+                Device & Incident Information
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Mobile Model *</Label>
+                    <Input name="mobileModel" value={formData.mobileModel} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">IMEI 1 *</Label>
+                    <Input name="imei1" value={formData.imei1} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-mono" />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">IMEI 2 (Optional)</Label>
+                    <Input name="imei2" value={formData.imei2} onChange={handleChange} className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-mono" />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Last Number Used *</Label>
+                    <div className="relative">
+                        <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <Input name="lastNumUsed" value={formData.lastNumUsed} onChange={handleChange} required className="pl-10 rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Crime Category *</Label>
+                    <Select onValueChange={(val) => setFormData((prev) => ({ ...prev, crimeHead: val }))} required>
+                        <SelectTrigger className="rounded-xl h-11 bg-slate-50/50"><SelectValue placeholder="Select Category" /></SelectTrigger>
+                        <SelectContent><SelectItem value="snatched">Snatched</SelectItem><SelectItem value="theft">Theft</SelectItem><SelectItem value="lost">Lost</SelectItem></SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Date of Offence *</Label>
+                    <Input type="date" name="dateOfOffence" value={formData.dateOfOffence} onChange={handleChange} required className="rounded-xl h-11 bg-slate-50/50" />
+                </div>
+                <div className="md:col-span-2 space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Incident Details *</Label>
+                    <Textarea name="incidentNote" value={formData.incidentNote} onChange={handleChange} required className="rounded-2xl border-slate-200 min-h-[100px] bg-slate-50/50" />
+                </div>
+            </div>
+        </section>
+
+        {/* Evidence Section */}
+        <section className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <h3 className="text-sm font-black text-blue-600 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div>
+                Attachments
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Box Picture *</Label>
+                    <Input type="file" accept="image/*" onChange={(e) => handleFileChange(e, "boxPicture")} required className="cursor-pointer" />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Attested Application *</Label>
+                    <Input type="file" accept="image/*,application/pdf" onChange={(e) => handleFileChange(e, "attestedApplication")} required className="cursor-pointer" />
+                </div>
+            </div>
+        </section>
+
+        <div className="pt-6">
+            <Button type="submit" className="w-full bg-blue-900 hover:bg-blue-800 h-14 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-900/20" disabled={submitting}>
+                {submitting ? "Processing Application..." : "Submit Application"}
+            </Button>
         </div>
-      </div>
-
-      {/* Form card (80% width centered) */}
-      <form
-        onSubmit={handleSubmit}
-        className="w-4/5 mx-auto bg-white rounded-2xl shadow-lg p-8 md:p-10 transition-transform duration-200 hover:shadow-2xl"
-      >
-        {/* Applicant Info */}
-        <h2 className="text-lg font-semibold text-blue-800 mb-4">Applicant Information / درخواست دہندہ کی معلومات</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <Label>
-              Applicant Name
-              <span className="block text-xs text-gray-500 mt-1">(درخواست دہندہ کا نام)</span>
-            </Label>
-            <Input
-              name="applicantName"
-              value={formData.applicantName}
-              onChange={handleChange}
-              required
-              className="mt-2"
-            />
-          </div>
-
-          <div>
-            <Label>
-              Mobile Number
-              <span className="block text-xs text-gray-500 mt-1">(موبائل نمبر)</span>
-            </Label>
-            <Input
-              name="mobileNumber"
-              value={formData.mobileNumber}
-              onChange={handleChange}
-              required
-              className="mt-2"
-            />
-          </div>
-
-          <div>
-            <Label>
-              CNIC {currentUser ? "(Optional)" : "(Required)"}
-              <span className="block text-xs text-gray-500 mt-1">(شناختی کارڈ نمبر)</span>
-            </Label>
-            <Input
-              name="cnic"
-              value={formData.cnic}
-              onChange={handleChange}
-              required={!currentUser}
-              className="mt-2"
-            />
-          </div>
-
-          <div>
-            <Label>
-              City
-              <span className="block text-xs text-gray-500 mt-1">(شہر)</span>
-            </Label>
-            <Input
-              name="city"
-              value={formData.city}
-              onChange={handleChange}
-              disabled={!!currentUser}
-              required
-              className="mt-2"
-            />
-          </div>
-
-          <div>
-            <Label>
-              District
-              <span className="block text-xs text-gray-500 mt-1">(ضلع)</span>
-            </Label>
-            {currentUser?.district ? (
-              <Input name="district" value={formData.district} disabled required className="mt-2" />
-            ) : (
-              <Select
-                onValueChange={(val) => setFormData((prev) => ({ ...prev, district: val, psName: "" }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select District / ضلع منتخب کریں" />
-                </SelectTrigger>
-                <SelectContent>
-                  {formData.city &&
-                    Object.keys(locationData[formData.city]?.districts || {}).map((dist) => (
-                      <SelectItem key={dist} value={dist}>
-                        {dist}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-
-          <div>
-            <Label>
-              PS Name
-              <span className="block text-xs text-gray-500 mt-1">(تھانہ)</span>
-            </Label>
-            {currentUser?.ps ? (
-              <Input name="psName" value={formData.psName} disabled required className="mt-2" />
-            ) : (
-              <Select onValueChange={(val) => setFormData((prev) => ({ ...prev, psName: val }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Police Station / تھانہ منتخب کریں" />
-                </SelectTrigger>
-                <SelectContent>
-                  {formData.district &&
-                    (locationData[formData.city]?.districts?.[formData.district]?.ps || []).map((ps: string) => (
-                      <SelectItem key={ps} value={ps}>
-                        {ps}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-        </div>
-
-        {/* Incident Info */}
-        <h2 className="text-lg font-semibold text-blue-800 mt-8 mb-3">Incident Details / واقعہ کی تفصیلات</h2>
-
-        <div>
-          <Label>
-            Incident Note
-            <span className="block text-xs text-gray-500 mt-1">(واقعہ کا مختصر بیان)</span>
-          </Label>
-          <Textarea
-            name="incidentNote"
-            value={formData.incidentNote}
-            onChange={handleChange}
-            required
-            className="mt-2"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-          <div>
-            <Label>
-              Mobile Model
-              <span className="block text-xs text-gray-500 mt-1">(موبائل ماڈل)</span>
-            </Label>
-            <Input name="mobileModel" value={formData.mobileModel} onChange={handleChange} required className="mt-2" />
-          </div>
-
-          <div>
-            <Label>
-              IMEI 1
-              <span className="block text-xs text-gray-500 mt-1">(IMEI نمبر 1)</span>
-            </Label>
-            <Input name="imei1" value={formData.imei1} onChange={handleChange} required className="mt-2" />
-          </div>
-
-          <div>
-            <Label>
-              IMEI 2 (Optional)
-              <span className="block text-xs text-gray-500 mt-1">(IMEI نمبر 2)</span>
-            </Label>
-            <Input name="imei2" value={formData.imei2} onChange={handleChange} className="mt-2" />
-          </div>
-
-          <div>
-            <Label>
-              Crime Head
-              <span className="block text-xs text-gray-500 mt-1">(جرم کی نوعیت)</span>
-            </Label>
-            <Select onValueChange={(val) => setFormData((prev) => ({ ...prev, crimeHead: val }))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select Crime Type / نوعیت منتخب کریں" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="snatched">Snatched / چھینا گیا</SelectItem>
-                <SelectItem value="theft">Theft / چوری</SelectItem>
-                <SelectItem value="lost">Lost / گمشدہ</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <Label>
-            Other Lost Property
-            <span className="block text-xs text-gray-500 mt-1">(دیگر کھوئی ہوئی اشیاء)</span>
-          </Label>
-          <Input name="otherLostProperty" value={formData.otherLostProperty} onChange={handleChange} className="mt-2" />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-          <div>
-            <Label>
-              Date of Offence
-              <span className="block text-xs text-gray-500 mt-1">(واقعہ کی تاریخ)</span>
-            </Label>
-            <Input type="date" name="dateOfOffence" value={formData.dateOfOffence} onChange={handleChange} required className="mt-2" />
-          </div>
-
-          <div>
-            <Label>
-              Time of Offence
-              <span className="block text-xs text-gray-500 mt-1">(واقعہ کا وقت)</span>
-            </Label>
-            <Input type="time" name="timeOfOffence" value={formData.timeOfOffence} onChange={handleChange} required className="mt-2" />
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <Label>
-            Address of Offence
-            <span className="block text-xs text-gray-500 mt-1">(واقعہ کا پتہ)</span>
-          </Label>
-          <Input name="addressOfOffence" value={formData.addressOfOffence} onChange={handleChange} required className="mt-2" />
-        </div>
-
-        {/* File Uploads */}
-        <h2 className="text-lg font-semibold text-blue-800 mt-8 mb-3">Attachments / منسلکات</h2>
-
-        <div className="mt-2">
-          <Label>
-            Box Picture (IMEIs must be visible)
-            <span className="block text-xs text-gray-500 mt-1">(ڈبے کی تصویر - IMEI نمبر واضح ہوں)</span>
-          </Label>
-          <Input type="file" accept="image/*" onChange={(e) => handleFileChange(e, "boxPicture")} required className="mt-2" />
-        </div>
-
-        <div className="mt-4 mb-6">
-          <Label>
-            Attested Application (From PS)
-            <span className="block text-xs text-gray-500 mt-1">(تصدیق شدہ درخواست)</span>
-          </Label>
-          <Input type="file" accept="image/*,application/pdf" onChange={(e) => handleFileChange(e, "attestedApplication")} required className="mt-2" />
-        </div>
-
-        <Button type="submit" className="w-full bg-blue-900 hover:bg-blue-800 transition-all duration-200" disabled={submitting}>
-          {submitting ? "Submitting..." : "Submit / جمع کروائیں"}
-        </Button>
       </form>
     </div>
   );
