@@ -19,13 +19,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Users, Search, Plus, RotateCcw, ChevronRight, UserCog, Mail, Shield, AlertTriangle } from "lucide-react";
+import { Users, Search, Plus, RotateCcw, ChevronRight, UserCog, Mail, Shield, AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ConfirmModal from "@/components/ui/confirm-modal";
+import { locationData } from "@/components/location/location";
 
 export default function UserManagement() {
   const [users, setUsers] = useState<any[]>([]);
   const [filterRole, setFilterRole] = useState<string>("none");
+  const [filterDistrict, setFilterDistrict] = useState<string>("all");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -46,6 +48,8 @@ export default function UserManagement() {
             email: data.email,
             role: data.role,
             district: data.district ?? null,
+            city: data.city ?? null,
+            permissions: data.permissions ?? {},
           });
         }
       } catch (err) {
@@ -61,7 +65,7 @@ export default function UserManagement() {
     try {
       const params = new URLSearchParams();
       if (filters.role && filters.role !== "none") params.append("role", filters.role);
-      if (filters.district) params.append("district", filters.district);
+      if (filters.district && filters.district !== "all") params.append("district", filters.district);
 
       const res = await fetch(`/api/get-users?${params.toString()}`);
       const data = await res.json();
@@ -80,7 +84,7 @@ export default function UserManagement() {
       case "super_admin":
         return ["super_admin", "admin", "officer", "ps_user", "market_user"];
       case "admin":
-        return ["officer", "ps_user", "market_user"]; // Added officer
+        return ["officer", "ps_user", "market_user"];
       case "officer":
         return ["ps_user", "market_user"];
       default:
@@ -92,20 +96,22 @@ export default function UserManagement() {
   async function handleFilterSearch() {
     if (!currentUser) return;
 
-    const filters: any = { role: filterRole };
+    const filters: any = { 
+        role: filterRole,
+        district: filterDistrict
+    };
 
-    if (filterRole === "none") {
-      // Logic for "All Accessible"
-      delete filters.role;
-    } else {
-      const roleHierarchy = ["super_admin", "admin", "officer", "ps_user", "market_user"];
-      const currentIndex = roleHierarchy.indexOf(currentUser.role);
-      const targetIndex = roleHierarchy.indexOf(filterRole);
+    if (filterRole === "none") delete filters.role;
+    
+    if (filterRole !== "none") {
+        const roleHierarchy = ["super_admin", "admin", "officer", "ps_user", "market_user"];
+        const currentIndex = roleHierarchy.indexOf(currentUser.role);
+        const targetIndex = roleHierarchy.indexOf(filterRole);
 
-      if (currentUser.role !== "super_admin" && targetIndex <= currentIndex) {
-        alert("❌ You cannot search users with same or higher role.");
-        return;
-      }
+        if (currentUser.role !== "super_admin" && targetIndex <= currentIndex) {
+            alert("❌ You cannot search users with same or higher role.");
+            return;
+        }
     }
 
     if (currentUser.role !== "super_admin" && currentUser.district) {
@@ -118,6 +124,7 @@ export default function UserManagement() {
   // ---------------- CLEAR FILTER ----------------
   function handleClear() {
     setFilterRole("none");
+    setFilterDistrict("all");
     setUsers([]);
   }
 
@@ -148,6 +155,7 @@ export default function UserManagement() {
 
   // ---------------- UPDATE USER ----------------
   async function handleUpdateUser(updated: any) {
+    setLoading(true);
     try {
       const res = await fetch("/api/update-user", {
         method: "POST",
@@ -164,6 +172,8 @@ export default function UserManagement() {
       }
     } catch (err) {
       alert("❌ Update failed!");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -216,12 +226,27 @@ export default function UserManagement() {
             <div className="flex flex-1 flex-wrap items-center gap-3 justify-end">
                 
                 <div className="flex items-center gap-2">
+                    {/* District Filter (Super Admin Only) */}
+                    {currentUser?.role === "super_admin" && (
+                        <Select value={filterDistrict} onValueChange={setFilterDistrict}>
+                            <SelectTrigger className="w-[160px] border-slate-200 rounded-xl bg-slate-50/50 h-10 text-[11px] font-bold">
+                                <SelectValue placeholder="District" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Districts</SelectItem>
+                                {currentUser.city && locationData[currentUser.city] && Object.keys(locationData[currentUser.city].districts).map(d => (
+                                    <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+
                     <Select value={filterRole} onValueChange={setFilterRole}>
-                        <SelectTrigger className="w-[180px] border-slate-200 rounded-xl bg-slate-50/50 h-10">
-                            <SelectValue placeholder="Filter by Role" />
+                        <SelectTrigger className="w-[160px] border-slate-200 rounded-xl bg-slate-50/50 h-10 text-[11px] font-bold">
+                            <SelectValue placeholder="Role" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="none">All Accessible Roles</SelectItem>
+                            <SelectItem value="none">All Roles</SelectItem>
                             {availableFilters().map((r) => (
                                 <SelectItem key={r} value={r} className="capitalize">
                                     {r.replace("_", " ")}
@@ -287,10 +312,19 @@ export default function UserManagement() {
                     )}>
                         {user.role?.replace("_", " ")}
                     </span>
-                    {user.tokens !== undefined && (
-                        <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
-                            {user.tokens} Tokens
-                        </span>
+                    {(user.role === "super_admin" || (user.permissions && Object.values(user.permissions).some(v => v === true))) && (
+                        <>
+                            {user.tokens !== undefined && (
+                                <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                                    {user.tokens} TKN
+                                </span>
+                            )}
+                            {user.eyeconTokens !== undefined && (
+                                <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                                    {user.eyeconTokens} EYE
+                                </span>
+                            )}
+                        </>
                     )}
                 </div>
               </div>
@@ -300,7 +334,7 @@ export default function UserManagement() {
                     <p className="font-bold text-slate-800 group-hover:text-indigo-700 transition-colors truncate">
                     {user.name}
                     </p>
-                    {user.hasToolsAccess && (
+                    {user.permissions && Object.values(user.permissions).some(v => v === true) && (
                         <Shield className="h-3 w-3 text-emerald-500" />
                     )}
                 </div>
@@ -310,7 +344,6 @@ export default function UserManagement() {
                 </div>
               </div>
 
-              {/* ... rest of mapping */}
               <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between text-[11px] text-slate-400 font-bold uppercase">
                  <span className="flex items-center gap-1">
                     <Shield size={10} />
@@ -323,7 +356,7 @@ export default function UserManagement() {
         ) : (
           <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-dashed border-slate-300">
              <Users className="mx-auto h-12 w-12 text-slate-200 mb-4" />
-             <p className="text-slate-500 font-medium">No users found. Select a role to search.</p>
+             <p className="text-slate-500 font-medium">No users found. Select filters to search.</p>
           </div>
         )}
       </div>
@@ -331,7 +364,7 @@ export default function UserManagement() {
       {/* EDIT USER DIALOG */}
       {selectedUser && (
         <Dialog open={true} onOpenChange={() => setSelectedUser(null)}>
-          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto rounded-3xl p-0 border-0 shadow-2xl">
+          <DialogContent className="max-w-3xl rounded-3xl p-0 border-0 shadow-2xl overflow-hidden">
             <div className="bg-gradient-to-r from-indigo-900 to-indigo-700 p-8 text-white">
                 <DialogHeader>
                     <DialogTitle className="text-2xl font-bold text-white flex items-center gap-3">
@@ -341,7 +374,7 @@ export default function UserManagement() {
                 </DialogHeader>
             </div>
 
-            <div className="p-8">
+            <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
                 <form
                 onSubmit={(e) => {
                     e.preventDefault();
@@ -350,31 +383,62 @@ export default function UserManagement() {
                 className="grid grid-cols-1 md:grid-cols-2 gap-6"
                 >
                 
-                {/* 🚀 SUPER ADMIN ONLY: TOOLS & TOKENS */}
-                {currentUser?.role === "super_admin" && (
-                    <div className="col-span-full grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200 mb-2">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-500 uppercase">Available Tokens</label>
-                            <Input 
-                                type="number" 
-                                value={selectedUser.tokens || 0} 
-                                onChange={(e) => setSelectedUser({...selectedUser, tokens: parseInt(e.target.value) || 0})}
-                                className="rounded-xl border-slate-300 h-11"
-                            />
+                {/* 🚀 SUPER ADMIN & DELEGATORS: TOOLS & DETAILED PERMISSIONS */}
+                {(currentUser?.role === "super_admin" || currentUser?.permissions?.can_delegate) && (
+                    <div className="col-span-full space-y-4">
+                        <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase">General Tokens</label>
+                                <Input 
+                                    type="number" 
+                                    value={selectedUser.tokens || 0} 
+                                    onChange={(e) => setSelectedUser({...selectedUser, tokens: parseInt(e.target.value) || 0})}
+                                    className="rounded-xl border-slate-300 h-11 bg-white text-slate-900"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase">Eyecon Tokens</label>
+                                <Input 
+                                    type="number" 
+                                    value={selectedUser.eyeconTokens || 0} 
+                                    onChange={(e) => setSelectedUser({...selectedUser, eyeconTokens: parseInt(e.target.value) || 0})}
+                                    className="rounded-xl border-slate-300 h-11 bg-white text-slate-900"
+                                />
+                            </div>
                         </div>
-                        <div className="flex items-center gap-3 mt-6">
-                            <Checkbox 
-                                id="editToolsAccess" 
-                                checked={!!selectedUser.hasToolsAccess} 
-                                onCheckedChange={(val) => setSelectedUser({...selectedUser, hasToolsAccess: !!val})}
-                            />
-                            <Label htmlFor="editToolsAccess" className="text-xs font-bold text-slate-700">Grant Advanced Tools Access</Label>
+
+                        <div className="p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
+                            <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">
+                                <Shield className="h-3 w-3" /> Detailed Feature Permissions
+                            </label>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {[
+                                    { key: 'excel_analyzer', label: 'Excel Analyzer' },
+                                    { key: 'geo_fencing', label: 'Geo Fencing' },
+                                    { key: 'ai_extractor', label: 'AI Extractor' },
+                                    { key: 'info_tools', label: 'Info Tools' },
+                                    { key: 'cdr_generator', label: 'CDR Generator' },
+                                    { key: 'token_pool', label: 'Token Pool' },
+                                ].map((p) => (
+                                    <div key={p.key} className="flex items-center space-x-2 p-2 bg-white rounded-lg border border-indigo-100 shadow-sm">
+                                        <Checkbox 
+                                            id={`edit_${p.key}`} 
+                                            checked={!!selectedUser.permissions?.[p.key]} 
+                                            onCheckedChange={(val) => {
+                                                const newPerms = { ...(selectedUser.permissions || {}), [p.key]: !!val };
+                                                setSelectedUser({ ...selectedUser, permissions: newPerms });
+                                            }}
+                                        />
+                                        <label htmlFor={`edit_${p.key}`} className="text-[9px] font-bold uppercase cursor-pointer text-slate-600 truncate">{p.label}</label>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}
 
                 {Object.entries(selectedUser).map(([key, value]) => {
-                    if (["uid", "createdAt", "tokens", "hasToolsAccess"].includes(key)) return null;
+                    if (["uid", "createdAt", "tokens", "eyeconTokens", "hasToolsAccess", "permissions"].includes(key)) return null;
 
                     if (key === "role") {
                     return (
@@ -388,7 +452,7 @@ export default function UserManagement() {
                             setSelectedUser({ ...selectedUser, role: val })
                             }
                         >
-                            <SelectTrigger className="w-full rounded-xl border-slate-200 bg-slate-50 h-11">
+                            <SelectTrigger className="w-full rounded-xl border-slate-200 bg-slate-50 h-11 text-slate-900">
                             <SelectValue placeholder="Select Role" />
                             </SelectTrigger>
                             <SelectContent>
@@ -411,7 +475,7 @@ export default function UserManagement() {
                         <Input
                         value={value ? String(value) : ""}
                         placeholder={`Enter ${key}`}
-                        className="rounded-xl border-slate-200 bg-slate-50 h-11"
+                        className="rounded-xl border-slate-200 bg-slate-50 h-11 text-slate-900"
                         onChange={(e) =>
                             setSelectedUser({
                             ...selectedUser,
@@ -435,8 +499,8 @@ export default function UserManagement() {
                     >
                     Delete User
                     </Button>
-                    <Button type="submit" className="bg-indigo-600 text-white rounded-xl px-8 shadow-lg shadow-indigo-600/20">
-                    Save Changes
+                    <Button type="submit" className="bg-indigo-600 text-white rounded-xl px-8 shadow-lg shadow-indigo-600/20" disabled={loading}>
+                        {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : "Save Changes"}
                     </Button>
                 </div>
                 </form>
@@ -463,7 +527,7 @@ export default function UserManagement() {
       {/* ADD USER DIALOG */}
       {showAddForm && (
         <Dialog open={true} onOpenChange={() => setShowAddForm(false)}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-0 border-0 shadow-2xl">
+          <DialogContent className="max-w-4xl rounded-3xl p-0 border-0 shadow-2xl overflow-hidden">
             <div className="sticky top-0 bg-emerald-900 p-6 z-10 flex items-center justify-between text-white">
               <DialogTitle className="text-xl font-bold flex items-center gap-2">
                 <Plus /> Register New User
@@ -472,7 +536,7 @@ export default function UserManagement() {
                  ✕
               </Button>
             </div>
-            <div className="p-0">
+            <div className="p-0 max-h-[80vh] overflow-y-auto custom-scrollbar">
               <AddUserForm onSave={handleAddUser} loading={loading} />
             </div>
           </DialogContent>

@@ -5,6 +5,8 @@ import jwt from "jsonwebtoken";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
+export const dynamic = "force-dynamic";
+
 /**
  * 🔔 Notification Count API
  * Refactored to fetch and filter in-memory to avoid Firestore Indexing issues

@@ -11,6 +11,8 @@ import ApplicationExtractorClient from "@/components/tools/ApplicationExtractorC
 import InfoToolsClient from "@/components/tools/InfoToolsClient";
 import CdrFormatClient from "@/components/tools/CdrFormatClient";
 import ExcelAnalyzerClient from "@/components/tools/ExcelAnalyzerClient";
+import GeoFencingClient from "@/components/tools/GeoFencingClient";
+import TokenManagement from "@/components/dashboard/TokenManagement";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -28,7 +30,9 @@ import {
   LayoutGrid, 
   FileCode,
   Wrench,
-  ChevronDown
+  ChevronDown,
+  Coins,
+  MapPin
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,14 +41,6 @@ const MAIN_TABS = [
   { id: "search", label: "Search IMEI", icon: Search },
   { id: "reports", label: "Reports", icon: BarChart3 },
   { id: "matched", label: "Matched", icon: FileCheck },
-  { id: "users", label: "Users", icon: Users },
-];
-
-const TOOLS_MENU = [
-  { id: "analyzer", label: "Excel Analyzer", icon: FileSpreadsheet },
-  { id: "extractor", label: "AI Extractor", icon: ScanText },
-  { id: "utilities", label: "Info Lookup", icon: LayoutGrid },
-  { id: "cdr", label: "CDR Generator", icon: FileCode },
 ];
 
 export default function AdminClient({ initialSession }: { initialSession: any }) {
@@ -58,10 +54,26 @@ export default function AdminClient({ initialSession }: { initialSession: any })
         if (data.authenticated) setSession(data);
     }
     refreshSession();
+
+    const handleSwitchTab = (e: any) => {
+        if (e.detail) setActiveTab(e.detail);
+    };
+    window.addEventListener("switch-tab", handleSwitchTab);
+    return () => window.removeEventListener("switch-tab", handleSwitchTab);
   }, []);
 
+  const perms = session?.permissions || {};
+  const isSuper = session?.role === "super_admin";
+
+  const TOOLS_MENU = [
+    { id: "analyzer", label: "Excel Analyzer", icon: FileSpreadsheet, key: "excel_analyzer" },
+    { id: "geo", label: "Geo Fencing", icon: MapPin, key: "geo_fencing" },
+    { id: "extractor", label: "AI Extractor", icon: ScanText, key: "ai_extractor" },
+    { id: "utilities", label: "Info Lookup", icon: LayoutGrid, key: "info_tools" },
+    { id: "cdr", label: "CDR Generator", icon: FileCode, key: "cdr_generator" },
+  ].filter(t => isSuper || perms[t.key]);
+
   const isToolActive = TOOLS_MENU.some(t => t.id === activeTab);
-  const canAccessTools = session?.hasToolsAccess || session?.role === "super_admin";
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -87,8 +99,7 @@ export default function AdminClient({ initialSession }: { initialSession: any })
             );
         })}
 
-        {/* Tools Dropdown - Restricted */}
-        {canAccessTools && (
+        {TOOLS_MENU.length > 0 && (
             <DropdownMenu>
                 <DropdownMenuTrigger className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 outline-none",
@@ -117,7 +128,6 @@ export default function AdminClient({ initialSession }: { initialSession: any })
                 </DropdownMenuContent>
             </DropdownMenu>
         )}
-
         </nav>
     </SessionHeader>
 
@@ -127,13 +137,14 @@ export default function AdminClient({ initialSession }: { initialSession: any })
         {activeTab === "reports" && <ReportsView />}
         {activeTab === "matched" && <MatchedIMEIsView />}
         
-        {/* Tools */}
-        {activeTab === "analyzer" && <ExcelAnalyzerClient />}
-        {activeTab === "extractor" && <ApplicationExtractorClient />}
-        {activeTab === "utilities" && <InfoToolsClient />}
-        {activeTab === "cdr" && <CdrFormatClient />}
+        {(activeTab === "analyzer" && (isSuper || perms.excel_analyzer)) && <ExcelAnalyzerClient />}
+        {(activeTab === "geo" && (isSuper || perms.geo_fencing)) && <GeoFencingClient />}
+        {(activeTab === "extractor" && (isSuper || perms.ai_extractor)) && <ApplicationExtractorClient />}
+        {(activeTab === "utilities" && (isSuper || perms.info_tools)) && <InfoToolsClient />}
+        {(activeTab === "cdr" && (isSuper || perms.cdr_generator)) && <CdrFormatClient />}
 
         {activeTab === "users" && <AddUserForm />}
+        {(activeTab === "tokens" && (isSuper || perms.token_pool)) && <TokenManagement />}
     </main>
     </div>
   );

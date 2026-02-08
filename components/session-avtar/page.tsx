@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, User, ChevronDown, Bell } from "lucide-react";
+import { LogOut, User, ChevronDown, Bell, Coins } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +13,9 @@ type Session = {
   name?: string | null;
   role?: string | null;
   tokens?: number;
+  eyeconTokens?: number;
   hasToolsAccess?: boolean;
+  permissions?: any;
 };
 
 interface HeaderProps {
@@ -61,10 +63,10 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
     }
 
     const handleFocus = () => fetchNotifications();
-    const handleRefresh = () => fetchSession(); // 🚀 New refresh handler
+    const handleRefresh = () => fetchSession();
 
     window.addEventListener("focus", handleFocus);
-    window.addEventListener("refresh-session", handleRefresh); // 🚀 Listen for updates
+    window.addEventListener("refresh-session", handleRefresh);
 
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setOpen(false);
@@ -73,7 +75,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
 
     return () => {
       window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("refresh-session", handleRefresh); // 🚀 Cleanup
+      window.removeEventListener("refresh-session", handleRefresh);
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [initialSession]);
@@ -88,6 +90,9 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
     const parts = name.trim().split(" ");
     return parts.length === 1 ? parts[0].charAt(0).toUpperCase() : (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
   };
+
+  const hasTools = session?.role === "super_admin" || 
+                  (session?.permissions && Object.values(session.permissions).some(v => v === true));
 
   return (
     <header className="w-full bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200 sticky top-0 z-50">
@@ -144,11 +149,16 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                 <p className="text-sm font-bold text-slate-800 truncate">{session?.name ?? "Guest"}</p>
                 <p className="text-xs text-slate-500 truncate">{session?.email ?? "No email"}</p>
                 
-                {/* 🚀 Move Credits here */}
-                {(session?.hasToolsAccess || session?.role === "super_admin") && (
-                    <div className="mt-3 inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg font-black text-[9px] uppercase tracking-wider">
-                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                        {session?.tokens || 0} Credits Available
+                {hasTools && (
+                    <div className="mt-3 flex flex-col gap-2">
+                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg font-black text-[9px] uppercase tracking-wider">
+                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                            {session?.tokens || 0} Credits Available
+                        </div>
+                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-indigo-100 text-indigo-700 rounded-lg font-black text-[9px] uppercase tracking-wider">
+                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
+                            {session?.eyeconTokens || 0} Eyecon Tokens
+                        </div>
                     </div>
                 )}
               </div>
@@ -171,6 +181,31 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                 <button className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-600 rounded-xl hover:bg-slate-50 transition-colors">
                    <User size={16} /> Profile Information
                 </button>
+
+                {(session?.role === "super_admin" || session?.role === "admin" || session?.role === "officer") && (
+                    <button 
+                        onClick={() => {
+                            setOpen(false);
+                            window.dispatchEvent(new CustomEvent("switch-tab", { detail: "users" }));
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-blue-600 rounded-xl hover:bg-blue-50 transition-colors font-medium"
+                    >
+                        <User size={16} className="text-blue-500" /> Manage Users
+                    </button>
+                )}
+
+                {(session?.role === "super_admin" || session?.permissions?.token_pool) && (
+                    <button 
+                        onClick={() => {
+                            setOpen(false);
+                            window.dispatchEvent(new CustomEvent("switch-tab", { detail: "tokens" }));
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-indigo-600 rounded-xl hover:bg-indigo-50 transition-colors font-medium"
+                    >
+                        <Coins size={16} /> Manage Token Pool
+                    </button>
+                )}
+
                 <div className="h-px bg-slate-100 my-1"></div>
                 <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 rounded-xl hover:bg-red-50 transition-colors font-bold">
                   <LogOut size={16} /> Sign Out

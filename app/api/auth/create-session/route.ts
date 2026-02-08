@@ -7,10 +7,6 @@ const SECRET = process.env.SESSION_JWT_SECRET!;
 const MAX_AGE = parseInt(process.env.SESSION_MAX_AGE || "3600", 10);
 const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
-/**
- * 🔐 Server-Side Login & Session Creation
- * Handles Firebase Authentication and profile retrieval.
- */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -20,7 +16,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
     }
 
-    // 1. Authenticate with Firebase via REST API
     const signInUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
     
     const firebaseRes = await fetch(signInUrl, {
@@ -36,16 +31,12 @@ export async function POST(req: Request) {
       let userFriendlyMsg = "Invalid email or password.";
       if (errorCode === "EMAIL_NOT_FOUND" || errorCode === "INVALID_PASSWORD") userFriendlyMsg = "Invalid credentials.";
       if (errorCode === "USER_DISABLED") userFriendlyMsg = "This account has been disabled.";
-      
       return NextResponse.json({ error: userFriendlyMsg }, { status: 401 });
     }
 
     const { localId: uid, idToken } = firebaseData;
-
-    // 2. Verify the token and get Custom Claims
     const decodedToken = await adminAuth.verifyIdToken(idToken);
 
-    // 3. Fetch Extended Profile from Firestore
     let userDoc = await adminDb.collection("users").doc(uid).get();
     let userData: any = null;
 
@@ -63,7 +54,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Access denied: Official profile not found." }, { status: 403 });
     }
 
-    // 4. Create custom JWT Session
     const payload = {
       uid: uid,
       email: email,
@@ -75,12 +65,12 @@ export async function POST(req: Request) {
       mobile: userData.phone || userData.mobile || null,
       buckle: userData.buckle || null, 
       tokens: userData.tokens || 0,
-      hasToolsAccess: !!userData.hasToolsAccess
+      eyeconTokens: userData.eyeconTokens || 0,
+      permissions: userData.permissions || {} // 🚀 Include permissions in JWT
     };
 
     const sessionToken = jwt.sign(payload, SECRET, { expiresIn: `${MAX_AGE}s` });
 
-    // 5. Set Secure HTTP-only Cookie
     const cookieStore = await cookies();
     cookieStore.set({
       name: "sessionToken",
@@ -99,7 +89,6 @@ export async function POST(req: Request) {
   }
 }
 
-// ✅ GET: Fetch current session
 export async function GET() {
   try {
     const cookieStore = await cookies();
@@ -109,7 +98,6 @@ export async function GET() {
 
     const decoded: any = jwt.verify(token, SECRET);
     
-    // 🚀 Fetch LIVE data from Firestore to ensure tokens are accurate
     const userDoc = await adminDb.collection("users").doc(decoded.uid).get();
     
     if (userDoc.exists) {
@@ -118,8 +106,9 @@ export async function GET() {
             authenticated: true, 
             ...decoded,
             tokens: liveData?.tokens || 0,
-            hasToolsAccess: !!liveData?.hasToolsAccess,
-            role: liveData?.role || decoded.role // Ensure role is also live
+            eyeconTokens: liveData?.eyeconTokens || 0,
+            role: liveData?.role || decoded.role,
+            permissions: liveData?.permissions || {} // 🚀 Fetch LIVE permissions
         });
     }
 

@@ -1,5 +1,7 @@
 import admin from "firebase-admin";
 
+// 🚀 Fix MaxListenersExceededWarning
+process.setMaxListeners(20);
 
 if (!admin.apps.length) {
   const projectId = process.env.FIREBASE_PROJECT_ID;

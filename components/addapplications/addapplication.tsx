@@ -369,7 +369,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
 
       {showAddForm && (
         <Dialog open={true} onOpenChange={() => setShowAddForm(false)}>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto rounded-[2rem] p-0 border-0 shadow-2xl relative !top-[50%] !translate-y-[-50%] flex flex-col">
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto rounded-[2rem] p-0 border-0 shadow-2xl fixed !top-[5vh] left-1/2 -translate-x-1/2 !translate-y-0 flex flex-col">
             <button onClick={() => setShowAddForm(false)} className="absolute top-6 right-6 z-50 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"><X size={20} /></button>
             <div className="sticky top-0 bg-[#0a2c4e] p-6 z-10 text-white shadow-xl shrink-0">
               <DialogTitle className="text-xl font-bold uppercase tracking-tight flex items-center gap-3"><Plus /> New Application</DialogTitle>

@@ -5,6 +5,8 @@ import jwt from "jsonwebtoken";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     if (!SECRET) throw new Error("Missing SESSION_JWT_SECRET");

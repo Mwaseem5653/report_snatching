@@ -5,6 +5,8 @@ import jwt from "jsonwebtoken";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const cookieStore = await cookies();
