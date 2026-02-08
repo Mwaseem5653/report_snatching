@@ -25,6 +25,24 @@ export default function InfoToolsClient() {
 
   const handleSimSearch = async () => {
     if (!phoneInput) return;
+
+    // 🚀 PROACTIVE CHECK
+    try {
+        const sRes = await fetch("/api/auth/create-session");
+        const sData = await sRes.json();
+        if (sData.authenticated && sData.role !== "super_admin") {
+            if ((sData.tokens || 0) < 1) {
+                setAlert({
+                    isOpen: true,
+                    title: "Insufficient Credits",
+                    description: `You need at least 1 credit for SIM lookup. Balance: ${sData.tokens || 0}`,
+                    type: "warning"
+                });
+                return;
+            }
+        }
+    } catch (e) {}
+
     setLoadingSim(true);
     setSimResults([]);
     try {
@@ -59,6 +77,24 @@ export default function InfoToolsClient() {
 
   const handleVehicleSearch = async () => {
     if (!regNo) return;
+
+    // 🚀 PROACTIVE CHECK
+    try {
+        const sRes = await fetch("/api/auth/create-session");
+        const sData = await sRes.json();
+        if (sData.authenticated && sData.role !== "super_admin") {
+            if ((sData.tokens || 0) < 1) {
+                setAlert({
+                    isOpen: true,
+                    title: "Insufficient Credits",
+                    description: `You need at least 1 credit for Vehicle lookup. Balance: ${sData.tokens || 0}`,
+                    type: "warning"
+                });
+                return;
+            }
+        }
+    } catch (e) {}
+
     setLoadingVehicle(true);
     setVehicleResult(null);
     try {

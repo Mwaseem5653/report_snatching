@@ -80,6 +80,25 @@ export default function CdrFormatClient() {
       return;
     }
 
+    if (useApiLookup) {
+        // 🚀 PROACTIVE CHECK
+        try {
+            const sRes = await fetch("/api/auth/create-session");
+            const sData = await sRes.json();
+            if (sData.authenticated && sData.role !== "super_admin") {
+                if ((sData.tokens || 0) < 5) {
+                    setAlert({
+                        isOpen: true,
+                        title: "Insufficient Credits",
+                        description: `You need at least 5 credits for live identification. Balance: ${sData.tokens || 0}`,
+                        type: "warning"
+                    });
+                    return;
+                }
+            }
+        } catch (e) {}
+    }
+
     setLoadingLookup(true);
     setPreviews([]);
 

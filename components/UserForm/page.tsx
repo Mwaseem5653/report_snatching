@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { locationData } from "@/components/location/location";
 import { toast } from "sonner";
 import { User, Mail, Lock, Phone, BadgeHelp, MapPin, Building2, Store, Loader2, ShieldCheck, LockIcon, Wrench, Coins } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function AddUserForm({
   onSave,
@@ -169,7 +170,7 @@ export default function AddUserForm({
              <ShieldCheck size={20} className="text-blue-600" />
              <h3 className="font-bold uppercase tracking-wider text-xs">Assign System Role & Credits</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+          <div className={cn("grid grid-cols-1 gap-6 items-end", sessionRole === "officer" ? "md:grid-cols-1" : "md:grid-cols-3")}>
             <div className="space-y-2">
                 <Label className="text-slate-600 text-xs font-bold uppercase">User Access Level</Label>
                 <Select onValueChange={setRole}>
@@ -186,24 +187,28 @@ export default function AddUserForm({
                 </Select>
             </div>
 
-            <div className="space-y-2">
-                <Label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Coins size={12}/> General Tokens</Label>
-                <Input 
-                    type="number" 
-                    value={tokens} 
-                    onChange={(e) => setTokens(parseInt(e.target.value) || 0)}
-                    className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900"
-                />
-            </div>
-            <div className="space-y-2">
-                <Label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Coins size={12}/> Eyecon Tokens</Label>
-                <Input 
-                    type="number" 
-                    value={eyeconTokens} 
-                    onChange={(e) => setEyeconTokens(parseInt(e.target.value) || 0)}
-                    className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900"
-                />
-            </div>
+            {sessionRole !== "officer" && (
+                <>
+                    <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Coins size={12}/> General Tokens</Label>
+                        <Input 
+                            type="number" 
+                            value={tokens} 
+                            onChange={(e) => setTokens(parseInt(e.target.value) || 0)}
+                            className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Coins size={12}/> Eyecon Tokens</Label>
+                        <Input 
+                            type="number" 
+                            value={eyeconTokens} 
+                            onChange={(e) => setEyeconTokens(parseInt(e.target.value) || 0)}
+                            className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900"
+                        />
+                    </div>
+                </>
+            )}
           </div>
         </section>
 

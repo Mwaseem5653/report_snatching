@@ -46,6 +46,24 @@ export default function ExcelAnalyzerClient() {
       return;
     }
 
+    // 🚀 PROACTIVE CHECK: Fetch live session to check tokens before upload
+    try {
+        const sRes = await fetch("/api/auth/create-session");
+        const sData = await sRes.json();
+        if (sData.authenticated && sData.role !== "super_admin") {
+            const required = 10; // Estimating 10 tokens for bulk analysis
+            if ((sData.tokens || 0) < required) {
+                setAlert({
+                    isOpen: true,
+                    title: "Insufficient Credits",
+                    description: `You need at least ${required} credits to start bulk analysis. Current balance: ${sData.tokens || 0}`,
+                    type: "warning"
+                });
+                return;
+            }
+        }
+    } catch (e) {}
+
     setLoading(true);
     setResultUrl(null);
     const formData = new FormData();

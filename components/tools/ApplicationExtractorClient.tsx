@@ -106,6 +106,23 @@ export default function ApplicationExtractorClient() {
       return;
     }
 
+    // 🚀 PROACTIVE CHECK
+    try {
+        const sRes = await fetch("/api/auth/create-session");
+        const sData = await sRes.json();
+        if (sData.authenticated && sData.role !== "super_admin") {
+            if ((sData.tokens || 0) < 5) {
+                setAlert({
+                    isOpen: true,
+                    title: "Insufficient Credits",
+                    description: `You need at least 5 credits to start AI extraction. Current balance: ${sData.tokens || 0}`,
+                    type: "warning"
+                });
+                return;
+            }
+        }
+    } catch (e) {}
+
     setLoading(true);
     stopRequested.current = false;
     setAllResults([]);
