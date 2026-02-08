@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Car, Smartphone, Search, Loader2, Download, AlertCircle } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import AlertModal from "@/components/ui/alert-modal";
 
 export default function InfoToolsClient() {
   const [phoneInput, setPhoneInput] = useState("");
@@ -19,6 +20,8 @@ export default function InfoToolsClient() {
   const [category, setCategory] = useState("4W");
   const [vehicleResult, setVehicleResult] = useState<any>(null);
   const [loadingVehicle, setLoadingVehicle] = useState(false);
+
+  const [alert, setAlert] = useState({ isOpen: false, title: "", description: "", type: "info" as any });
 
   const handleSimSearch = async () => {
     if (!phoneInput) return;
@@ -31,7 +34,21 @@ export default function InfoToolsClient() {
         body: JSON.stringify({ phone_number: phoneInput }),
       });
       const data = await res.json();
-      if (Array.isArray(data)) setSimResults(data);
+
+      if (res.status === 403) {
+        setAlert({
+            isOpen: true,
+            title: "Insufficient Credits",
+            description: data.error || "You do not have enough credits.",
+            type: "warning"
+        });
+        return;
+      }
+
+      if (Array.isArray(data)) {
+          setSimResults(data);
+          window.dispatchEvent(new Event("refresh-session"));
+      }
       else if (data.error) toast.error(data.error);
     } catch (e) {
       toast.error("Search failed");
@@ -51,8 +68,22 @@ export default function InfoToolsClient() {
         body: JSON.stringify({ reg_no: regNo, category }),
       });
       const data = await res.json();
+
+      if (res.status === 403) {
+        setAlert({
+            isOpen: true,
+            title: "Insufficient Credits",
+            description: data.error || "You do not have enough credits.",
+            type: "warning"
+        });
+        return;
+      }
+
       if (data.error) toast.error(data.error);
-      else setVehicleResult(data);
+      else {
+          setVehicleResult(data);
+          window.dispatchEvent(new Event("refresh-session"));
+      }
     } catch (e) {
       toast.error("Search failed");
     } finally {
@@ -62,6 +93,13 @@ export default function InfoToolsClient() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
+      <AlertModal 
+        isOpen={alert.isOpen}
+        onClose={() => setAlert({ ...alert, isOpen: false })}
+        title={alert.title}
+        description={alert.description}
+        type={alert.type}
+      />
       <div className="flex items-center gap-3">
         <div className="p-3 bg-purple-100 text-purple-700 rounded-xl">
            <Search size={32} />

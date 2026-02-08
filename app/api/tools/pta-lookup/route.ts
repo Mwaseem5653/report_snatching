@@ -6,6 +6,8 @@ import { checkAndDeductTokens } from "@/lib/tokenHelper";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const { numbers } = await req.json();
@@ -28,40 +30,26 @@ export async function POST(req: NextRequest) {
     const results = await Promise.all(
       numbers.map(async (num: string) => {
         let cleanNum = num.trim().replace(/\D/g, "");
-        if (cleanNum.startsWith("03")) cleanNum = "92" + cleanNum.substring(1);
+        
+        // Standardize to 923XXXXXXXXX format
+        if (cleanNum.length >= 10) {
+            cleanNum = "92" + cleanNum.slice(-10);
+        }
         
         try {
-          const res = await fetch(`https://easyload.com.pk/dingconnect.php?action=GetProviders&accountNumber=${cleanNum}`);
+          const res = await fetch(`https://easyload.com.pk/dingconnect.php?action=GetProviders&accountNumber=${cleanNum}`, { cache: "no-store" });
           const data = await res.json();
           const operator = data?.Items?.[0]?.Name || "Not Found";
           return { number: num, operator };
         } catch (e) {
-          return { number: num, operator: "Error" };
+          return { number: num, operator: "API Error" };
         }
       })
     );
 
-    // Generate Excel
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Operator Results");
-    sheet.columns = [
-      { header: "Phone Number", key: "number", width: 20 },
-      { header: "Operator", key: "operator", width: 25 },
-    ];
-    sheet.addRows(results);
-    sheet.getRow(1).font = { bold: true };
-
-    const buffer = await workbook.xlsx.writeBuffer();
-
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="operator_results.xlsx"`,
-        "X-Results": JSON.stringify(results), // Passing metadata in headers for UI display
-      },
-    });
+    return NextResponse.json({ success: true, results });
   } catch (error: any) {
+    console.error("PTA Lookup Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

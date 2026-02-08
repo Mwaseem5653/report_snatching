@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
+
 import {
   Select,
   SelectContent,
@@ -20,6 +20,7 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { toast } from "sonner";
+import AlertModal from "@/components/ui/alert-modal";
 import { cn } from "@/lib/utils";
 
 const TEMPLATES = [
@@ -54,6 +55,7 @@ export default function CdrFormatClient() {
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [previews, setPreviews] = useState<{ name: string, html: string }[]>([]);
   const [viewMode, setViewMode] = useState<"single" | "all">("single");
+  const [alert, setAlert] = useState({ isOpen: false, title: "", description: "", type: "info" as any });
 
   const handleAutoFormat = () => {
       const lines = rawInput.split("\n").map(l => l.trim()).filter(l => l);
@@ -95,18 +97,33 @@ export default function CdrFormatClient() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ numbers }),
         });
-        if (!res.ok) throw new Error("Lookup failed");
-        const meta = res.headers.get("X-Results");
-        if (meta) {
-            const results = JSON.parse(meta).map((r: any) => ({
+        const data = await res.json();
+        
+        if (res.status === 403) {
+            setAlert({
+                isOpen: true,
+                title: "Insufficient Credits",
+                description: data.error || "You do not have enough credits.",
+                type: "warning"
+            });
+            return;
+        }
+
+        if (!res.ok) throw new Error(data.error || "Lookup failed");
+        
+        if (data.success && data.results) {
+            const results = data.results.map((r: any) => ({
                 ...r,
                 number: formatTo92(r.number)
             }));
             setAnalyzedNumbers(results);
             toast.success("Operators identified (Live API)");
+            window.dispatchEvent(new Event("refresh-session"));
+        } else {
+            toast.error("Failed to identify operators.");
         }
-    } catch (error) {
-        toast.error("Failed to identify operators.");
+    } catch (error: any) {
+        toast.error(error.message || "Failed to identify operators.");
     } finally {
         setLoadingLookup(false);
     }
@@ -126,8 +143,13 @@ export default function CdrFormatClient() {
         if (operatorKey === "All") {
             numbersToInject = analyzedNumbers.length > 0 ? analyzedNumbers.map(a => a.number) : allFormattedInput;
         } else {
+            // Robust matching: Check if operator name contains the key or vice versa
             numbersToInject = analyzedNumbers
-                .filter(a => a.operator.toLowerCase().includes(operatorKey.toLowerCase()))
+                .filter(a => {
+                    const op = a.operator.toLowerCase();
+                    const key = operatorKey.toLowerCase();
+                    return op.includes(key) || key.includes(op);
+                })
                 .map(a => a.number);
             
             if (analyzedNumbers.length === 0) {
@@ -170,7 +192,11 @@ export default function CdrFormatClient() {
     setViewMode("all");
     const activeTemplates = TEMPLATES.filter(t => 
         t.operatorKey !== "All" && 
-        analyzedNumbers.some(a => a.operator.toLowerCase().includes(t.operatorKey.toLowerCase()))
+        analyzedNumbers.some(a => {
+            const op = a.operator.toLowerCase();
+            const key = t.operatorKey.toLowerCase();
+            return op.includes(key) || key.includes(op);
+        })
     );
 
     if (activeTemplates.length === 0) {
@@ -189,180 +215,233 @@ export default function CdrFormatClient() {
 
   const hasDataForOperator = (opKey: string) => {
       if (opKey === "All") return rawInput.trim().length > 0;
-      return analyzedNumbers.some(a => a.operator.toLowerCase().includes(opKey.toLowerCase()));
+      return analyzedNumbers.some(a => {
+          const op = a.operator.toLowerCase();
+          const key = opKey.toLowerCase();
+          return op.includes(key) || key.includes(op);
+      });
   };
 
   return (
-    <div className="h-[calc(100vh-130px)] flex flex-col space-y-2 overflow-hidden text-slate-900 ">
+    <div className="flex flex-col space-y-4 text-slate-900 pb-20">
+      <AlertModal 
+        isOpen={alert.isOpen}
+        onClose={() => setAlert({ ...alert, isOpen: false })}
+        title={alert.title}
+        description={alert.description}
+        type={alert.type}
+      />
       
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 overflow-hidden">
+      {/* 🔹 TOP SECTION: INPUT, RESULTS & FORMATS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         
-        {/* 🔹 LEFT: INPUT & QUICK BUTTONS */}
-        <div className="lg:col-span-4 flex flex-col gap-4 overflow-hidden h-full">
-            {/* Input Card with Integrated Controls */}
-            <Card className="rounded-3xl border-slate-200 shadow-sm overflow-hidden shrink-0">
-                <CardHeader className="bg-slate-50/50 border-b py-2 px-5 flex flex-row items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Smartphone size={14} className="text-slate-500" />
-                        <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-tight">Mobile Numbers</CardTitle>
+        {/* Column 1: Input Area */}
+        <Card className="rounded-3xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
+            <CardHeader className="bg-slate-50/50 border-b py-2 px-5 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Smartphone size={14} className="text-slate-500" />
+                    <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-tight">Mobile Numbers</CardTitle>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 bg-white/50 border border-slate-200 px-2 py-1 rounded-xl">
+                        <span className="text-[8px] font-black uppercase text-slate-400">Live API</span>
+                        <Switch 
+                            checked={useApiLookup} 
+                            onCheckedChange={setUseApiLookup} 
+                            className="h-4 w-8 data-[state=checked]:bg-indigo-600 scale-75 origin-right" 
+                        />
                     </div>
-                    
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 bg-white/50 border border-slate-200 px-2 py-1 rounded-xl">
-                            <span className="text-[8px] font-black uppercase text-slate-400">Live API</span>
-                            <Switch 
-                                checked={useApiLookup} 
-                                onCheckedChange={setUseApiLookup} 
-                                className="h-4 w-8 data-[state=checked]:bg-indigo-600 scale-75 origin-right" 
-                            />
-                        </div>
-                        <button 
-                            onClick={() => { setRawInput(""); setAnalyzedNumbers([]); setPreviews([]); setSelectedTemplate(""); }}
-                            className="text-slate-300 hover:text-red-500 transition-colors"
-                        >
-                            <Trash2 size={14} />
-                        </button>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-3 space-y-2">
-                    <Textarea 
-                        value={rawInput} 
-                        onChange={(e) => setRawInput(e.target.value)} 
-                        onBlur={handleAutoFormat}
-                        placeholder="Paste numbers here..."
-                        className="min-h-[150px] max-h-[150px] rounded-2xl border-slate-200 font-mono text-[10px] leading-tight focus:ring-orange-500 bg-slate-50/20"
-                    />
-                    <Button 
-                        onClick={handleLookup} 
-                        disabled={loadingLookup}
-                        className={cn(
-                            "w-full h-10 rounded-2xl font-black uppercase tracking-tight text-[10px]",
-                            useApiLookup ? "bg-indigo-600 hover:bg-indigo-700" : "bg-orange-600 hover:bg-orange-700"
-                        )}
+                    <button 
+                        onClick={() => { setRawInput(""); setAnalyzedNumbers([]); setPreviews([]); setSelectedTemplate(""); }}
+                        className="text-slate-300 hover:text-red-500 transition-colors"
                     >
-                        {loadingLookup ? <Loader2 className="animate-spin mr-2 h-3 w-3"/> : <ShieldCheck size={14} className="mr-2" />}
-                        Identify Operators
-                    </Button>
-                </CardContent>
-            </Card>
-
-            {/* Operator Groups */}
-            <Card className="flex-1 border-slate-200 rounded-3xl overflow-hidden shadow-sm flex flex-col bg-white min-h-0">
-                <CardHeader className="bg-slate-50/50 border-b py-3 px-5 flex flex-row items-center justify-between shrink-0">
-                    <CardTitle className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-2 tracking-widest">
-                        <LayoutGrid size={12} /> Available Formats
-                    </CardTitle>
-                    {analyzedNumbers.length > 0 && (
-                        <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={handleGenerateAll}
-                            className="h-6 text-[9px] font-black uppercase text-indigo-600 hover:bg-indigo-50 px-2 rounded-full border border-indigo-100"
-                        >
-                            <Zap size={10} className="mr-1 fill-indigo-600" /> Auto Build All
-                        </Button>
+                        <Trash2 size={14} />
+                    </button>
+                </div>
+            </CardHeader>
+            <CardContent className="p-3 space-y-3 flex flex-col flex-1">
+                <Textarea 
+                    value={rawInput} 
+                    onChange={(e) => setRawInput(e.target.value)} 
+                    onBlur={handleAutoFormat}
+                    placeholder="Paste numbers here..."
+                    className="flex-1 rounded-2xl border-slate-200 font-mono text-[10px] leading-tight focus:ring-orange-500 bg-slate-50/20"
+                />
+                <Button 
+                    onClick={handleLookup} 
+                    disabled={loadingLookup}
+                    className={cn(
+                        "w-full h-12 rounded-2xl font-black uppercase tracking-tight text-[11px] shadow-lg transition-all",
+                        useApiLookup ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20" : "bg-orange-600 hover:bg-orange-700 shadow-orange-600/20"
                     )}
-                </CardHeader>
-                <div className="flex-1 p-3 overflow-hidden">
-                    <div className="grid grid-cols-3 grid-rows-2 h-full gap-2">
-                        {TEMPLATES.filter(t => t.operatorKey !== "All").map((t) => {
-                            const active = hasDataForOperator(t.operatorKey);
-                            const isSelected = selectedTemplate === t.file && viewMode === "single";
-                            return (
-                                <button
-                                    key={t.file}
-                                    onClick={() => handleGenerate(t.file)}
-                                    className={cn(
-                                        "relative px-2 py-2 rounded-2xl border text-center transition-all duration-200 flex flex-col items-center justify-center gap-1 group overflow-hidden h-full",
-                                        isSelected 
-                                            ? "bg-emerald-600 border-emerald-600 shadow-md ring-2 ring-emerald-600 ring-offset-1" 
-                                            : active 
-                                                ? "bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
-                                                : "bg-slate-50 border-slate-100 hover:bg-white hover:border-orange-200"
-                                    )}
-                                >
-                                    <FileCode size={14} className={cn(isSelected ? "text-white" : active ? "text-emerald-600" : "text-slate-400")} />
-                                    <span className={cn("text-[9px] font-black uppercase tracking-tighter leading-tight text-center", isSelected ? "text-white" : active ? "text-emerald-700" : "text-slate-600")}>
-                                        {t.name}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            </Card>
-        </div>
+                >
+                    {loadingLookup ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <ShieldCheck size={16} className="mr-2" />}
+                    {useApiLookup ? "Live API Identification" : "Identify Operators"}
+                </Button>
+            </CardContent>
+        </Card>
 
-        {/* 🔹 RIGHT: LIVE PREVIEW AREA */}
-        <div className="lg:col-span-8 overflow-hidden h-full">
-            <Card className="border-slate-200 rounded-3xl overflow-hidden shadow-2xl h-full flex flex-col bg-white">
-                <div className="bg-white border-b border-slate-100 p-3 shrink-0 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                            <Eye size={18} />
-                        </div>
-                        <div className="hidden sm:block">
-                            <CardTitle className="text-sm font-black text-slate-800 uppercase tracking-tight leading-none">Live Template View</CardTitle>
-                            <p className="text-[10px] font-bold text-slate-400 mt-1 italic">Official Document Preview</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        {/* MANUAL TEMPLATE PICKER */}
-                        <div className="w-48">
-                            <Select value={selectedTemplate} onValueChange={handleGenerate}>
-                                <SelectTrigger className="h-9 text-[10px] font-black uppercase rounded-xl border-slate-200 bg-slate-50/50">
-                                    <SelectValue placeholder="Manual Template Select" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {TEMPLATES.map(t => (
-                                        <SelectItem key={t.file} value={t.file} className="text-[10px] uppercase font-bold">{t.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        {selectedTemplate && (
-                            <Button 
-                                size="sm" 
-                                onClick={() => handleGenerate(selectedTemplate)} 
-                                className="h-9 rounded-xl bg-orange-600 hover:bg-orange-700 font-black uppercase text-[10px] px-4"
-                            >
-                                <Play size={12} className="mr-1 fill-white" /> Refresh
-                            </Button>
-                        )}
-                    </div>
+        {/* Column 2: Identification Results */}
+        <Card className="rounded-3xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
+            <CardHeader className="bg-slate-50/50 border-b py-2 px-5 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Database size={14} className="text-slate-500" />
+                    <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-tight">Operator Results</CardTitle>
                 </div>
-                
-                <div className="flex-1 bg-slate-200/50 overflow-auto custom-scrollbar p-6">
-                    {previews.length > 0 ? (
-                        <div className="flex flex-col items-center gap-8 min-w-max mx-auto">
-                            {previews.map((prev, idx) => (
-                                <div key={idx} className="relative w-[900px] h-[1500px] bg-white shadow-2xl rounded-sm border border-slate-300 overflow-hidden group shrink-0">
-                                    <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-600 z-20"></div>
-                                    <div className="absolute top-4 right-4 bg-indigo-600 text-white text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-widest z-20 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
-                                        {prev.name}
-                                    </div>
-                                    <iframe 
-                                        srcDoc={prev.html}
-                                        className="w-full h-full border-0 absolute inset-0"
-                                        sandbox="allow-scripts allow-same-origin allow-forms"
-                                    />
+                {analyzedNumbers.length > 0 && (
+                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 uppercase">
+                        {analyzedNumbers.length} Found
+                    </span>
+                )}
+            </CardHeader>
+            <CardContent className="p-3 flex-1 overflow-hidden">
+                {analyzedNumbers.length > 0 ? (
+                    <div className="h-full overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                        {analyzedNumbers.map((a, i) => (
+                            <div key={i} className="flex items-center justify-between p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 group hover:border-indigo-300 hover:bg-white transition-all">
+                                <div className="flex items-center gap-2.5">
+                                    <div className={cn(
+                                        "w-2 h-2 rounded-full",
+                                        a.operator === "Unknown" || a.operator === "Not Found" ? "bg-slate-300" : "bg-emerald-500"
+                                    )}></div>
+                                    <span className="text-[11px] font-mono font-bold text-slate-700">{a.number}</span>
                                 </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="h-full flex flex-col items-center justify-center p-10 text-center opacity-30 gap-4">
-                            <Zap size={64} className="text-slate-300 animate-pulse" />
-                            <div className="space-y-1">
-                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Awaiting Command</h3>
-                                <p className="text-[10px] font-bold">Identify operators or select a template to generate view</p>
+                                <span className={cn(
+                                    "text-[10px] font-black uppercase px-2 py-0.5 rounded-lg border",
+                                    a.operator === "Unknown" || a.operator === "Not Found" 
+                                        ? "bg-slate-100 text-slate-400 border-slate-200" 
+                                        : "bg-indigo-50 text-indigo-700 border-indigo-100"
+                                )}>
+                                    {a.operator}
+                                </span>
                             </div>
-                        </div>
-                    )}
+                        ))}
+                    </div>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center opacity-20 gap-2">
+                        <Search size={40} />
+                        <p className="text-[10px] font-black uppercase">No Data Identified</p>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+
+        {/* Column 3: Available Formats */}
+        <Card className="rounded-3xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
+            <CardHeader className="bg-slate-50/50 border-b py-2 px-5 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <LayoutGrid size={14} className="text-slate-500" />
+                    <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-tight">Available Formats</CardTitle>
                 </div>
-            </Card>
-        </div>
+                {analyzedNumbers.length > 0 && (
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={handleGenerateAll}
+                        className="h-6 text-[9px] font-black uppercase text-indigo-600 hover:bg-indigo-50 px-2 rounded-full border border-indigo-100"
+                    >
+                        <Zap size={10} className="mr-1 fill-indigo-600" /> Auto Build All
+                    </Button>
+                )}
+            </CardHeader>
+            <CardContent className="p-3 flex-1 overflow-hidden">
+                <div className="grid grid-cols-2 gap-2 h-full content-start overflow-y-auto pr-1 custom-scrollbar">
+                    {TEMPLATES.map((t) => {
+                        const active = hasDataForOperator(t.operatorKey);
+                        const isSelected = selectedTemplate === t.file && viewMode === "single";
+                        return (
+                            <button
+                                key={t.file}
+                                onClick={() => handleGenerate(t.file)}
+                                className={cn(
+                                    "relative px-3 py-4 rounded-2xl border text-center transition-all duration-200 flex flex-col items-center justify-center gap-2 group overflow-hidden",
+                                    isSelected 
+                                        ? "bg-indigo-600 border-indigo-600 shadow-md ring-2 ring-indigo-600 ring-offset-1" 
+                                        : active 
+                                            ? "bg-indigo-50 border-indigo-200 hover:bg-indigo-100"
+                                            : "bg-slate-50 border-slate-100 hover:bg-white hover:border-orange-200"
+                                )}
+                            >
+                                <FileCode size={18} className={cn(isSelected ? "text-white" : active ? "text-indigo-600" : "text-slate-400")} />
+                                <span className={cn("text-[10px] font-black uppercase tracking-tight leading-tight", isSelected ? "text-white" : active ? "text-indigo-700" : "text-slate-600")}>
+                                    {t.name}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </CardContent>
+        </Card>
       </div>
+
+      {/* 🔹 BOTTOM SECTION: LIVE PREVIEW */}
+      <Card className="border-slate-200 rounded-[1.5rem] overflow-hidden shadow-2xl flex flex-col bg-white min-h-[800px]">
+          <div className="bg-white border-b border-slate-100 p-4 shrink-0 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                      <Eye size={18} />
+                  </div>
+                  <div>
+                      <CardTitle className="text-sm font-black text-slate-800 uppercase tracking-tight leading-none">Live Template View</CardTitle>
+                      <p className="text-[10px] font-bold text-slate-400 mt-1 italic">Official Document Preview</p>
+                  </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                  <div className="w-64">
+                      <Select value={selectedTemplate} onValueChange={handleGenerate}>
+                          <SelectTrigger className="h-10 text-[10px] font-black uppercase rounded-xl border-slate-200 bg-slate-50/50">
+                              <SelectValue placeholder="Manual Template Select" />
+                          </SelectTrigger>
+                          <SelectContent>
+                              {TEMPLATES.map(t => (
+                                  <SelectItem key={t.file} value={t.file} className="text-[10px] uppercase font-bold">{t.name}</SelectItem>
+                              ))}
+                          </SelectContent>
+                      </Select>
+                  </div>
+                  {selectedTemplate && (
+                      <Button 
+                          size="sm" 
+                          onClick={() => handleGenerate(selectedTemplate)} 
+                          className="h-10 rounded-xl bg-orange-600 hover:bg-orange-700 font-black uppercase text-[10px] px-6 shadow-lg shadow-orange-600/20"
+                      >
+                          <Play size={12} className="mr-1 fill-white" /> Refresh View
+                      </Button>
+                  )}
+              </div>
+          </div>
+          
+          <div className="flex-1 bg-slate-100/50 overflow-auto custom-scrollbar p-2">
+              {previews.length > 0 ? (
+                  <div className="flex flex-col items-center gap-12 min-w-max mx-auto">
+                      {previews.map((prev, idx) => (
+                          <div key={idx} className="relative w-[900px] h-[1500px] bg-white shadow-[0_0_50px_rgba(0,0,0,0.1)] rounded-sm border border-slate-200 overflow-hidden group shrink-0">
+                              <div className="absolute top-0 left-0 right-0 h-1.5 bg-indigo-600 z-20"></div>
+                              <div className="absolute top-6 right-6 bg-indigo-600 text-white text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest z-20 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+                                  {prev.name}
+                              </div>
+                              <iframe 
+                                  srcDoc={prev.html}
+                                  className="w-full h-full border-0 absolute inset-0"
+                                  sandbox="allow-scripts allow-same-origin allow-forms"
+                              />
+                          </div>
+                      ))}
+                  </div>
+              ) : (
+                  <div className="h-full flex flex-col items-center justify-center p-20 text-center opacity-30 gap-6">
+                      <div className="p-8 bg-slate-200 rounded-full animate-pulse">
+                        <Zap size={80} className="text-slate-400" />
+                      </div>
+                      <div className="space-y-2">
+                          <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Awaiting Command</h3>
+                          <p className="text-xs font-bold uppercase tracking-tight">Identify operators or select a template above to generate view</p>
+                      </div>
+                  </div>
+              )}
+          </div>
+      </Card>
     </div>
   );
 }

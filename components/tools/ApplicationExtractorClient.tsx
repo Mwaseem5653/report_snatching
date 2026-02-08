@@ -24,6 +24,7 @@ export default function ApplicationExtractorClient() {
   const [currentRawFeed, setCurrentRawFeed] = useState<string>("");
   const [filesPerMinute, setFilesPerMinute] = useState(20);
   const [cooldown, setCooldown] = useState(0);
+  const [alert, setAlert] = useState({ isOpen: false, title: "", description: "", type: "info" as any });
   const stopRequested = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -80,6 +81,16 @@ export default function ApplicationExtractorClient() {
     });
 
     if (res.status === 429) return { status: 429 };
+    if (res.status === 403) {
+        const data = await res.json();
+        setAlert({
+            isOpen: true,
+            title: "Insufficient Credits",
+            description: data.error || "You do not have enough credits to perform this action.",
+            type: "warning"
+        });
+        throw new Error("INSUFFICIENT_CREDITS");
+    }
     if (!res.ok) {
       const data = await res.json();
       throw new Error(data.error || "AI EXTRACTION FAILED");
@@ -152,6 +163,10 @@ export default function ApplicationExtractorClient() {
                   success = true;
                 }
               } catch (error: any) {
+                if (error.message === "INSUFFICIENT_CREDITS") {
+                    stopRequested.current = true;
+                    break;
+                }
                 addLog(`ERROR ON ${file.name}: ${error.message}`);
                 break;
               }
@@ -252,6 +267,13 @@ export default function ApplicationExtractorClient() {
 
   return (
     <div className="h-[calc(100vh-180px)] flex flex-col space-y-4 overflow-hidden">
+      <AlertModal 
+        isOpen={alert.isOpen}
+        onClose={() => setAlert({ ...alert, isOpen: false })}
+        title={alert.title}
+        description={alert.description}
+        type={alert.type}
+      />
       
       {/* HEADER SECTION (Compact) */}
       <div className="flex flex-col lg:flex-row items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-slate-200 shadow-sm shrink-0">

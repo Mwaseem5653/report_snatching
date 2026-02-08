@@ -10,8 +10,17 @@ export async function checkAndDeductTokens(uid: string, role: string, amount: nu
 
     const userData = userDoc.data();
     
-    if (!userData?.hasToolsAccess && role !== "super_admin") {
+    const permissions = userData?.permissions || {};
+    const hasAnyPermission = Object.values(permissions).some(v => v === true);
+    const hasAccess = userData?.hasToolsAccess || hasAnyPermission || role === "super_admin";
+
+    if (!hasAccess) {
         return { success: false, error: "Access Denied: Advanced Tools Permission Required. Contact Super Admin." };
+    }
+
+    // 🚀 Super Admin bypasses token deduction
+    if (role === "super_admin") {
+        return { success: true, newBalance: Number(userData?.tokens || 0) };
     }
 
     const currentTokens = Number(userData?.tokens || 0);
