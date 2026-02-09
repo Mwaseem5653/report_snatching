@@ -201,44 +201,49 @@ export async function POST(req: NextRequest) {
 
         const fullMatchedOriginals = windowRows.map(r => r.original);
 
-        const uniqueInWindow = new Map<string, string | null>();
-        windowRows.forEach(r => {
-            const key = includeB ? `${r.aNorm}-${r.bNorm}` : r.aNorm!;
-            if (!uniqueInWindow.has(key)) uniqueInWindow.set(key, r.bNorm);
-        });
+        const uniqueA = Array.from(new Set(windowRows.map(r => r.aNorm!)));
+        const uniqueB = includeB ? Array.from(new Set(windowRows.map(r => r.bNorm).filter(b => b !== null))) : [];
 
         const results: any[] = [];
-        for (const [key, bNorm] of uniqueInWindow.entries()) {
-            const aNorm = includeB ? key.split('-')[0] : key;
-            const aHistory = processedRows.filter(r => r.aNorm === aNorm || (bIdx !== -1 && r.bNorm === aNorm));
-            
-            if (aHistory.length > 0) {
-                const first = aHistory[0];
-                const last = aHistory[aHistory.length - 1];
-                const rowData: any = {
-                    'A Number': aNorm,
-                    'A Date': first.dt!.toLocaleDateString('en-GB'),
-                    'A First Call': standardizeDateTime(first.dt),
-                    'A Last Call': standardizeDateTime(last.dt),
-                    'A Count': aHistory.length
-                };
+        const maxSummaryRows = Math.max(uniqueA.length, uniqueB.length);
 
-                if (includeB && bNorm) {
-                    const bHistory = processedRows.filter(r => r.aNorm === bNorm || (bIdx !== -1 && r.bNorm === bNorm));
-                    if (bHistory.length > 0) {
-                        const bFirst = bHistory[0];
-                        const bLast = bHistory[bHistory.length - 1];
-                        Object.assign(rowData, {
-                            'B Number': bNorm,
-                            'B Date': bFirst.dt!.toLocaleDateString('en-GB'),
-                            'B First Call': standardizeDateTime(bFirst.dt),
-                            'B Last Call': standardizeDateTime(last.dt),
-                            'B Count': bHistory.length
-                        });
-                    }
+        for (let i = 0; i < maxSummaryRows; i++) {
+            const rowData: any = {};
+            
+            // Process A-Party Column (Unique)
+            if (i < uniqueA.length) {
+                const aNorm = uniqueA[i];
+                const aHistory = processedRows.filter(r => r.aNorm === aNorm || (bIdx !== -1 && r.bNorm === aNorm));
+                if (aHistory.length > 0) {
+                    const first = aHistory[0];
+                    const last = aHistory[aHistory.length - 1];
+                    Object.assign(rowData, {
+                        'A Number': aNorm,
+                        'A Date': first.dt!.toLocaleDateString('en-GB'),
+                        'A First Call': standardizeDateTime(first.dt),
+                        'A Last Call': standardizeDateTime(last.dt),
+                        'A Count': aHistory.length
+                    });
                 }
-                results.push(rowData);
             }
+
+            // Process B-Party Column (Unique)
+            if (includeB && i < uniqueB.length) {
+                const bNorm = uniqueB[i] as string;
+                const bHistory = processedRows.filter(r => r.aNorm === bNorm || (bIdx !== -1 && r.bNorm === bNorm));
+                if (bHistory.length > 0) {
+                    const bFirst = bHistory[0];
+                    const bLast = bHistory[bHistory.length - 1];
+                    Object.assign(rowData, {
+                        'B Number': bNorm,
+                        'B Date': bFirst.dt!.toLocaleDateString('en-GB'),
+                        'B First Call': standardizeDateTime(bFirst.dt),
+                        'B Last Call': standardizeDateTime(bLast.dt),
+                        'B Count': bHistory.length
+                    });
+                }
+            }
+            results.push(rowData);
         }
 
         const outWb = new ExcelJS.Workbook();
