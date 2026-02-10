@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,28 @@ export default function ExcelAnalyzerClient() {
   const [enableLookup, setEnableLookup] = useState(false);
   const [enableEyecon, setEnableEyecon] = useState(false);
   const [includeImages, setIncludeImages] = useState(false);
+  const [session, setSession] = useState<any>(null);
+
+  // 🚀 Fetch session on mount
+  useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        const res = await fetch("/api/auth/create-session");
+        const data = await res.json();
+        if (data.authenticated) {
+          setSession(data);
+          // Set default limits for officers
+          if (data.role === "officer") {
+              setEyeconTopN(5);
+              setTopN(8);
+          }
+        }
+      } catch (err) {
+        console.error("Session fetch error:", err);
+      }
+    };
+    fetchSession();
+  }, []);
 
   // 🚀 Custom Alert State
   const [alert, setAlert] = useState({
@@ -156,7 +178,7 @@ export default function ExcelAnalyzerClient() {
                         <p className="text-[10px] text-muted-foreground">Fetch Name/CNIC/Address</p>
                     </div>
                 </div>
-                {enableLookup && (
+                {enableLookup && session?.role !== "officer" && (
                     <div className="pl-6 space-y-1 animate-in slide-in-from-top-1">
                         <Label className="text-[10px] text-slate-500 font-bold uppercase">Top Records Limit</Label>
                         <Input 
@@ -171,36 +193,40 @@ export default function ExcelAnalyzerClient() {
                 )}
               </div>
 
-              <div className="flex flex-col space-y-3 border p-3 rounded-lg bg-slate-50">
-                <div className="flex items-center space-x-2">
-                    <Checkbox id="eyecon" checked={enableEyecon} onCheckedChange={(c) => setEnableEyecon(!!c)} />
-                    <div className="grid gap-1.5 leading-none">
-                        <label htmlFor="eyecon" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                            Check Eyecon
-                        </label>
-                        <p className="text-[10px] text-muted-foreground">Fetch Caller ID Name</p>
+              {(session?.role === "super_admin" || session?.role === "admin" || session?.permissions?.eyecon_access) && (
+                <div className="flex flex-col space-y-3 border p-3 rounded-lg bg-slate-50">
+                    <div className="flex items-center space-x-2">
+                        <Checkbox id="eyecon" checked={enableEyecon} onCheckedChange={(c) => setEnableEyecon(!!c)} />
+                        <div className="grid gap-1.5 leading-none">
+                            <label htmlFor="eyecon" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Check Eyecon
+                            </label>
+                            <p className="text-[10px] text-muted-foreground">Fetch Caller ID Name</p>
+                        </div>
                     </div>
+                    {enableEyecon && (
+                        <div className="pl-6 space-y-3 animate-in slide-in-from-top-1">
+                            {session?.role !== "officer" && (
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] text-slate-500 font-bold uppercase">Eyecon Limit</Label>
+                                    <Input 
+                                    type="number" 
+                                    value={eyeconTopN} 
+                                    onChange={(e) => setEyeconTopN(parseInt(e.target.value) || 5)}
+                                    min={1} 
+                                    max={50}
+                                    className="h-8 text-xs"
+                                    />
+                                </div>
+                            )}
+                            <div className="flex items-center space-x-2">
+                                <Checkbox id="includeImages" checked={includeImages} onCheckedChange={(c) => setIncludeImages(!!c)} />
+                                <Label htmlFor="includeImages" className="text-[10px] font-bold text-slate-600 uppercase cursor-pointer">Include Photos/Links</Label>
+                            </div>
+                        </div>
+                    )}
                 </div>
-                {enableEyecon && (
-                    <div className="pl-6 space-y-3 animate-in slide-in-from-top-1">
-                        <div className="space-y-1">
-                            <Label className="text-[10px] text-slate-500 font-bold uppercase">Eyecon Limit</Label>
-                            <Input 
-                            type="number" 
-                            value={eyeconTopN} 
-                            onChange={(e) => setEyeconTopN(parseInt(e.target.value) || 5)}
-                            min={1} 
-                            max={50}
-                            className="h-8 text-xs"
-                            />
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <Checkbox id="includeImages" checked={includeImages} onCheckedChange={(c) => setIncludeImages(!!c)} />
-                            <Label htmlFor="includeImages" className="text-[10px] font-bold text-slate-600 uppercase cursor-pointer">Include Photos/Links</Label>
-                        </div>
-                    </div>
-                )}
-              </div>
+              )}
            </CardContent>
         </Card>
 

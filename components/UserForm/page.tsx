@@ -44,6 +44,7 @@ export default function AddUserForm({
       info_tools: false,
       cdr_generator: false,
       token_pool: false,
+      eyecon_access: false, 
       can_delegate: false, 
       delegation_limit: 10, // 🚀 Default limit
   });
@@ -145,6 +146,7 @@ export default function AddUserForm({
 
   // 🚀 Logic: Can this user assign tools to others?
   const canAssignTools = sessionRole === "super_admin" || sessionPermissions?.can_delegate;
+  const canAssignTokens = sessionRole === "super_admin" || (sessionPermissions?.can_delegate && sessionPermissions?.token_pool);
 
   const ALL_TOOLS = [
     { key: 'excel_analyzer', label: 'Excel Analyzer' },
@@ -152,6 +154,7 @@ export default function AddUserForm({
     { key: 'ai_extractor', label: 'AI Application Extractor' },
     { key: 'info_tools', label: 'Info & Lookup Tools' },
     { key: 'cdr_generator', label: 'CDR Generator' },
+    { key: 'eyecon_access', label: 'Eyecon Access' },
   ];
 
   // 🚀 Filter tools: Delegators only see what they own. 
@@ -170,7 +173,7 @@ export default function AddUserForm({
              <ShieldCheck size={20} className="text-blue-600" />
              <h3 className="font-bold uppercase tracking-wider text-xs">Assign System Role & Credits</h3>
           </div>
-          <div className={cn("grid grid-cols-1 gap-6 items-end", sessionRole === "officer" ? "md:grid-cols-1" : "md:grid-cols-3")}>
+          <div className={cn("grid grid-cols-1 gap-6 items-end", !canAssignTokens ? "md:grid-cols-1" : "md:grid-cols-3")}>
             <div className="space-y-2">
                 <Label className="text-slate-600 text-xs font-bold uppercase">User Access Level</Label>
                 <Select onValueChange={setRole}>
@@ -187,7 +190,7 @@ export default function AddUserForm({
                 </Select>
             </div>
 
-            {sessionRole !== "officer" && (
+            {canAssignTokens && (
                 <>
                     <div className="space-y-2">
                         <Label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Coins size={12}/> General Tokens</Label>

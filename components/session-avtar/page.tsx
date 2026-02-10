@@ -148,19 +148,6 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
               <div className="p-4 bg-slate-50 border-b border-slate-100">
                 <p className="text-sm font-bold text-slate-800 truncate">{session?.name ?? "Guest"}</p>
                 <p className="text-xs text-slate-500 truncate">{session?.email ?? "No email"}</p>
-                
-                {hasTools && (
-                    <div className="mt-3 flex flex-col gap-2">
-                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg font-black text-[9px] uppercase tracking-wider">
-                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                            {session?.tokens || 0} Credits Available
-                        </div>
-                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-indigo-100 text-indigo-700 rounded-lg font-black text-[9px] uppercase tracking-wider">
-                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
-                            {session?.eyeconTokens || 0} Eyecon Tokens
-                        </div>
-                    </div>
-                )}
               </div>
 
               <div className="p-2">
@@ -191,18 +178,6 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                         className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-blue-600 rounded-xl hover:bg-blue-50 transition-colors font-medium"
                     >
                         <User size={16} className="text-blue-500" /> Manage Users
-                    </button>
-                )}
-
-                {(session?.role === "super_admin" || session?.permissions?.token_pool) && (
-                    <button 
-                        onClick={() => {
-                            setOpen(false);
-                            window.dispatchEvent(new CustomEvent("switch-tab", { detail: "tokens" }));
-                        }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-indigo-600 rounded-xl hover:bg-indigo-50 transition-colors font-medium"
-                    >
-                        <Coins size={16} /> Manage Token Pool
                     </button>
                 )}
 

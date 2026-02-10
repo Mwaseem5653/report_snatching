@@ -312,7 +312,7 @@ export default function UserManagement() {
                     )}>
                         {user.role?.replace("_", " ")}
                     </span>
-                    {(user.role === "super_admin" || (user.permissions && Object.values(user.permissions).some(v => v === true))) && (
+                    {currentUser?.role === "super_admin" && (
                         <>
                             {user.tokens !== undefined && (
                                 <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
@@ -386,26 +386,28 @@ export default function UserManagement() {
                 {/* 🚀 SUPER ADMIN & DELEGATORS: TOOLS & DETAILED PERMISSIONS */}
                 {(currentUser?.role === "super_admin" || currentUser?.permissions?.can_delegate) && (
                     <div className="col-span-full space-y-4">
-                        <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-500 uppercase">General Tokens</label>
-                                <Input 
-                                    type="number" 
-                                    value={selectedUser.tokens || 0} 
-                                    onChange={(e) => setSelectedUser({...selectedUser, tokens: parseInt(e.target.value) || 0})}
-                                    className="rounded-xl border-slate-300 h-11 bg-white text-slate-900"
-                                />
+                        {(currentUser?.role === "super_admin" || currentUser?.permissions?.token_pool) && (
+                            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase">General Tokens</label>
+                                    <Input 
+                                        type="number" 
+                                        value={selectedUser.tokens || 0} 
+                                        onChange={(e) => setSelectedUser({...selectedUser, tokens: parseInt(e.target.value) || 0})}
+                                        className="rounded-xl border-slate-300 h-11 bg-white text-slate-900"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase">Eyecon Tokens</label>
+                                    <Input 
+                                        type="number" 
+                                        value={selectedUser.eyeconTokens || 0} 
+                                        onChange={(e) => setSelectedUser({...selectedUser, eyeconTokens: parseInt(e.target.value) || 0})}
+                                        className="rounded-xl border-slate-300 h-11 bg-white text-slate-900"
+                                    />
+                                </div>
                             </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-500 uppercase">Eyecon Tokens</label>
-                                <Input 
-                                    type="number" 
-                                    value={selectedUser.eyeconTokens || 0} 
-                                    onChange={(e) => setSelectedUser({...selectedUser, eyeconTokens: parseInt(e.target.value) || 0})}
-                                    className="rounded-xl border-slate-300 h-11 bg-white text-slate-900"
-                                />
-                            </div>
-                        </div>
+                        )}
 
                         <div className="p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
                             <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">
@@ -419,6 +421,7 @@ export default function UserManagement() {
                                     { key: 'info_tools', label: 'Info Tools' },
                                     { key: 'cdr_generator', label: 'CDR Generator' },
                                     { key: 'token_pool', label: 'Token Pool' },
+                                    { key: 'eyecon_access', label: 'Eyecon Access' },
                                 ].map((p) => (
                                     <div key={p.key} className="flex items-center space-x-2 p-2 bg-white rounded-lg border border-indigo-100 shadow-sm">
                                         <Checkbox 
