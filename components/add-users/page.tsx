@@ -312,7 +312,7 @@ export default function UserManagement() {
                     )}>
                         {user.role?.replace("_", " ")}
                     </span>
-                    {currentUser?.role === "super_admin" && (
+                    {(currentUser?.role === "super_admin" || currentUser?.permissions?.token_pool) && (
                         <>
                             {user.tokens !== undefined && (
                                 <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
