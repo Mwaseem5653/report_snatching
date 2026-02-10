@@ -420,7 +420,6 @@ export default function UserManagement() {
                                     { key: 'ai_extractor', label: 'AI Extractor' },
                                     { key: 'info_tools', label: 'Info Tools' },
                                     { key: 'cdr_generator', label: 'CDR Generator' },
-                                    { key: 'token_pool', label: 'Token Pool' },
                                     { key: 'eyecon_access', label: 'Eyecon Access' },
                                 ].map((p) => (
                                     <div key={p.key} className="flex items-center space-x-2 p-2 bg-white rounded-lg border border-indigo-100 shadow-sm">
@@ -436,6 +435,41 @@ export default function UserManagement() {
                                     </div>
                                 ))}
                             </div>
+
+                            {/* 🚀 Super Admin Special: Delegation & Pool */}
+                            {currentUser?.role === "super_admin" && (
+                                <div className="pt-3 mt-3 border-t border-indigo-100 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="flex items-center space-x-3 p-3 bg-white rounded-xl border border-indigo-200 shadow-sm hover:border-indigo-400 transition-colors">
+                                        <Checkbox 
+                                            id="edit_p_delegate" 
+                                            checked={!!selectedUser.permissions?.can_delegate} 
+                                            onCheckedChange={(val) => {
+                                                const newPerms = { ...(selectedUser.permissions || {}), can_delegate: !!val };
+                                                setSelectedUser({ ...selectedUser, permissions: newPerms });
+                                            }}
+                                        />
+                                        <div className="flex flex-col">
+                                            <label htmlFor="edit_p_delegate" className="text-[10px] font-black uppercase cursor-pointer text-indigo-700 leading-none">Declaration Power</label>
+                                            <span className="text-[7px] text-indigo-400 font-bold uppercase mt-1">Can delegate tools</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center space-x-3 p-3 bg-white rounded-xl border border-amber-200 shadow-sm hover:border-amber-400 transition-colors">
+                                        <Checkbox 
+                                            id="edit_p_pool" 
+                                            checked={!!selectedUser.permissions?.token_pool} 
+                                            onCheckedChange={(val) => {
+                                                const newPerms = { ...(selectedUser.permissions || {}), token_pool: !!val };
+                                                setSelectedUser({ ...selectedUser, permissions: newPerms });
+                                            }}
+                                        />
+                                        <div className="flex flex-col">
+                                            <label htmlFor="edit_p_pool" className="text-[10px] font-black uppercase cursor-pointer text-amber-700 leading-none">Pool Access</label>
+                                            <span className="text-[7px] text-amber-400 font-bold uppercase mt-1">Manage system credits</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
