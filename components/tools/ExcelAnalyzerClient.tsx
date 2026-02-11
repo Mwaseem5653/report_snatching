@@ -204,7 +204,7 @@ export default function ExcelAnalyzerClient() {
                 )}
               </div>
 
-              {(session?.role === "super_admin" || session?.role === "admin" || session?.permissions?.eyecon_access) && (
+              {(session?.role === "super_admin" || (session?.permissions?.eyecon_access && (session?.role === "admin" || session?.role === "officer"))) && (
                 <div className="flex flex-col space-y-3 border p-3 rounded-lg bg-slate-50">
                     <div className="flex items-center space-x-2">
                         <Checkbox id="eyecon" checked={enableEyecon} onCheckedChange={(c) => setEnableEyecon(!!c)} />

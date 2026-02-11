@@ -158,10 +158,12 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
                             {session?.tokens || 0} Credits Available
                         </div>
-                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-indigo-100 text-indigo-700 rounded-lg font-black text-[9px] uppercase tracking-wider">
-                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
-                            {session?.eyeconTokens || 0} Eyecon Tokens
-                        </div>
+                        {(session?.role === "super_admin" || (session?.permissions?.eyecon_access && (session?.role === "admin" || session?.role === "officer"))) && (
+                            <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-indigo-100 text-indigo-700 rounded-lg font-black text-[9px] uppercase tracking-wider">
+                                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
+                                {session?.eyeconTokens || 0} Eyecon Tokens
+                            </div>
+                        )}
                     </div>
                 )}
               </div>
