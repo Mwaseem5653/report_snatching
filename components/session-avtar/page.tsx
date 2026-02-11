@@ -149,7 +149,10 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                 <p className="text-sm font-bold text-slate-800 truncate">{session?.name ?? "Guest"}</p>
                 <p className="text-xs text-slate-500 truncate">{session?.email ?? "No email"}</p>
                 
-                {(session?.role === "super_admin" || session?.permissions?.token_pool) && (
+                {(session?.role === "super_admin" || 
+                  (["admin", "officer"].includes(session?.role || "") && hasTools) ||
+                  session?.permissions?.token_pool
+                ) && (
                     <div className="mt-3 flex flex-col gap-2">
                         <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg font-black text-[9px] uppercase tracking-wider">
                             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>

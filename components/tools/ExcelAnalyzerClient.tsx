@@ -68,17 +68,28 @@ export default function ExcelAnalyzerClient() {
       return;
     }
 
+    const totalGeneralRequired = files.length * 15;
+    const totalEyeconRequired = enableEyecon ? (eyeconTopN * files.length) : 0;
+
     // 🚀 PROACTIVE CHECK: Fetch live session to check tokens before upload
     try {
         const sRes = await fetch("/api/auth/create-session");
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
-            const required = 10; // Estimating 10 tokens for bulk analysis
-            if ((sData.tokens || 0) < required) {
+            if ((sData.tokens || 0) < totalGeneralRequired) {
                 setAlert({
                     isOpen: true,
-                    title: "Insufficient Credits",
-                    description: `You need at least ${required} credits to start bulk analysis. Current balance: ${sData.tokens || 0}`,
+                    title: "Insufficient General Credits",
+                    description: `You need ${totalGeneralRequired} general credits (15 per file). Current balance: ${sData.tokens || 0}`,
+                    type: "warning"
+                });
+                return;
+            }
+            if (enableEyecon && (sData.eyeconTokens || 0) < totalEyeconRequired) {
+                setAlert({
+                    isOpen: true,
+                    title: "Insufficient Eyecon Credits",
+                    description: `You need ${totalEyeconRequired} eyecon credits (${eyeconTopN} per file). Current balance: ${sData.eyeconTokens || 0}`,
                     type: "warning"
                 });
                 return;
@@ -106,7 +117,6 @@ export default function ExcelAnalyzerClient() {
 
       if (!res.ok || contentType?.includes("application/json")) {
         const errData = await res.json();
-        // 🚀 Use Custom Alert for important errors
         setAlert({
             isOpen: true,
             title: res.status === 403 ? "Insufficient Credits" : "Process Error",
@@ -124,7 +134,7 @@ export default function ExcelAnalyzerClient() {
       // Refresh Header Credits
       window.dispatchEvent(new Event("refresh-session"));
       
-      toast.success("Analysis Complete! Result is ready for download.");
+      toast.success(`Analysis Complete! Deducted ${totalGeneralRequired} General ${enableEyecon ? `& ${totalEyeconRequired} Eyecon` : ""} tokens.`);
     } catch (error: any) {
       console.error(error);
       setAlert({
@@ -157,6 +167,7 @@ export default function ExcelAnalyzerClient() {
            <p className="text-slate-500">Upload CDRs or Excel sheets to analyze call patterns and fetch details.</p>
         </div>
       </div>
+
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Settings Card */}
