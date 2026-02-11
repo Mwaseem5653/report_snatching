@@ -146,7 +146,7 @@ export default function AddUserForm({
 
   // 🚀 Logic: Can this user assign tools to others?
   const canAssignTools = sessionRole === "super_admin" || sessionPermissions?.can_delegate;
-  const canAssignTokens = sessionRole === "super_admin" || (sessionPermissions?.can_delegate && sessionPermissions?.token_pool);
+  const canAssignTokens = sessionRole === "super_admin" || sessionPermissions?.can_delegate;
 
   const ALL_TOOLS = [
     { key: 'excel_analyzer', label: 'Excel Analyzer' },
