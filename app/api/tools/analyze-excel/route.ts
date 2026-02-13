@@ -302,22 +302,27 @@ async function processSingleFile(file: File, options: any) {
                     cache.set(rec["Mobile Number"], { ...cache.get(rec["Mobile Number"]), name: "No Record Found", cnic: "No Record Found", address: "No Record Found" });
                 }
             }));
-            await new Promise(resolve => setTimeout(resolve, 300));
         }
     }
     if (enableEyecon) {
         const topEye = mobileSummary.slice(0, eyeconTopN);
-        for (const rec of topEye) {
-            const eyeData = await fetchEyeconInfo(rec["Mobile Number"]);
-            if (eyeData) {
-                rec["Eyecon Name"] = eyeData.name;
-                cache.set(rec["Mobile Number"], { 
-                    ...cache.get(rec["Mobile Number"]), eye: eyeData.name, eyeImage: eyeData.image, eyeFb: eyeData.facebook
-                });
-            } else {
-                rec["Eyecon Name"] = "No Record Found";
-            }
-            await new Promise(resolve => setTimeout(resolve, 500));
+        const eyeconBatchSize = 5; // To avoid overwhelming the API
+        for (let i = 0; i < topEye.length; i += eyeconBatchSize) {
+            const batch = topEye.slice(i, i + eyeconBatchSize);
+            await Promise.all(batch.map(async (rec) => {
+                const eyeData = await fetchEyeconInfo(rec["Mobile Number"]);
+                if (eyeData) {
+                    rec["Eyecon Name"] = eyeData.name;
+                    cache.set(rec["Mobile Number"], { 
+                        ...cache.get(rec["Mobile Number"]), eye: eyeData.name, eyeImage: eyeData.image, eyeFb: eyeData.facebook
+                    });
+                } else {
+                    rec["Eyecon Name"] = "No Record Found";
+                }
+            }));
+            // A small delay between batches if necessary for rate limiting, but start with none.
+            // If issues persist, add a small timeout here (e.g., 200ms).
+            // await new Promise(resolve => setTimeout(resolve, 200));
         }
     }
 

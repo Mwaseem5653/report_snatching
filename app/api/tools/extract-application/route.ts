@@ -6,7 +6,6 @@ import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
-const genAI = new GoogleGenerativeAI(process.env.GENAI_API_KEY || "");
 
 // --- Helper: Extract Fields from Plain Text ---
 function extractFieldsFromText(text: string) {
@@ -61,8 +60,13 @@ export async function POST(req: NextRequest) {
     if (action === "count") {
         if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
             const buffer = await file.arrayBuffer();
-            const pdfDoc = await PDFDocument.load(buffer);
-            return NextResponse.json({ success: true, pageCount: pdfDoc.getPageCount() });
+            try {
+                const pdfDoc = await PDFDocument.load(buffer);
+                return NextResponse.json({ success: true, pageCount: pdfDoc.getPageCount() });
+            } catch (pdfError: any) {
+                console.error("❌ PDF Parsing Error (Count Action):", pdfError);
+                return NextResponse.json({ error: "Failed to read PDF. It might be too large or corrupted for page counting." }, { status: 400 });
+            }
         }
         return NextResponse.json({ success: true, pageCount: 1 });
     }
@@ -76,8 +80,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (!process.env.GENAI_API_KEY) {
-        return NextResponse.json({ error: "AI Service key missing" }, { status: 500 });
+        console.error("❌ GENAI_API_KEY environment variable is missing.");
+        return NextResponse.json({ error: "AI Service key missing. Please configure GENAI_API_KEY." }, { status: 500 });
     }
+
+    const genAI = new GoogleGenerativeAI(process.env.GENAI_API_KEY); // Initialize here
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     let mimeType = file.type;
     let finalBuffer: any;
@@ -85,19 +93,22 @@ export async function POST(req: NextRequest) {
     // 🚀 Handle PDF Page Extraction
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
         const fullBuffer = await file.arrayBuffer();
-        const pdfDoc = await PDFDocument.load(fullBuffer);
-        const newPdf = await PDFDocument.create();
-        const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNum - 1]);
-        newPdf.addPage(copiedPage);
-        const pdfBytes = await newPdf.save();
-        finalBuffer = pdfBytes.buffer;
-        mimeType = "application/pdf";
+        try {
+            const pdfDoc = await PDFDocument.load(fullBuffer);
+            const newPdf = await PDFDocument.create();
+            const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNum - 1]);
+            newPdf.addPage(copiedPage);
+            const pdfBytes = await newPdf.save();
+            finalBuffer = pdfBytes.buffer;
+            mimeType = "application/pdf";
+        } catch (pdfError: any) {
+            console.error("❌ PDF Parsing Error (Process Action):", pdfError);
+            return NextResponse.json({ error: "Failed to extract page from PDF. It might be too large or corrupted." }, { status: 400 });
+        }
     } else {
         finalBuffer = await file.arrayBuffer();
         if (!mimeType || mimeType === "undefined") mimeType = "image/jpeg";
     }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     // 🚀 RESTORED EXACT PYTHON PROMPT WITH ENGLISH NAME REQUIREMENT
     const prompt = `Extract ONLY the following fields from this handwritten Urdu police application image. this application is reporting of snatching /theft/lost of mobile phone and other properties. for police
