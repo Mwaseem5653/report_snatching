@@ -368,7 +368,7 @@ async function processSingleFile(file: File, options: any) {
         };
     }).sort((a, b) => b.total - a.total);
 
-    const s2Cols: ExcelJS.Column[] = [];
+    const s2Cols = [];
 
     s2Cols.push({ header: "B-Party", key: "num", width: 15 });
 
