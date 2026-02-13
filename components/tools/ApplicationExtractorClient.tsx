@@ -65,6 +65,17 @@ export default function ApplicationExtractorClient() {
     formData.append("file", file);
     formData.append("action", "count");
     const res = await fetch("/api/tools/extract-application", { method: "POST", body: formData });
+    if (!res.ok) {
+        let errorBody;
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+            errorBody = await res.json();
+        } else {
+            errorBody = await res.text();
+        }
+        toast.error(`Error ${res.status}: ${typeof errorBody === 'object' ? (errorBody.error || errorBody.message || "An unknown error occurred.") : errorBody}`);
+        throw new Error("Failed to get page count.");
+    }
     const data = await res.json();
     return data.pageCount || 1;
   };
@@ -80,20 +91,27 @@ export default function ApplicationExtractorClient() {
       body: formData,
     });
 
-    if (res.status === 429) return { status: 429 };
-    if (res.status === 403) {
-        const data = await res.json();
-        setAlert({
-            isOpen: true,
-            title: "Insufficient Credits",
-            description: data.error || "You do not have enough credits to perform this action.",
-            type: "warning"
-        });
-        throw new Error("INSUFFICIENT_CREDITS");
-    }
     if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || "AI EXTRACTION FAILED");
+      let errorBody;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+          errorBody = await res.json(); // Try to parse as JSON if content-type says so
+      } else {
+          errorBody = await res.text(); // Otherwise, read as plain text
+      }
+
+      if (res.status === 429) return { status: 429 }; // This needs to be handled before throwing
+      if (res.status === 403) {
+          setAlert({
+              isOpen: true,
+              title: "Insufficient Credits",
+              description: typeof errorBody === 'object' ? (errorBody.error || "You do not have enough credits to perform this action.") : errorBody,
+              type: "warning"
+          });
+          throw new Error("INSUFFICIENT_CREDITS");
+      }
+      // General error for anything not 2xx, 429, or 403
+      throw new Error(typeof errorBody === 'object' ? (errorBody.error || "AI EXTRACTION FAILED") : errorBody);
     }
     return await res.json();
   };
