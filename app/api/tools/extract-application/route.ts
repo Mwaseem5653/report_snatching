@@ -7,13 +7,6 @@ import { checkAndDeductTokens } from "@/lib/tokenHelper";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb', // Set a reasonable limit for file uploads
-    },
-  },
-};
 
 // --- Helper: Extract Fields from Plain Text ---
 function extractFieldsFromText(text: string) {
