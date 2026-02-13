@@ -368,12 +368,32 @@ async function processSingleFile(file: File, options: any) {
         };
     }).sort((a, b) => b.total - a.total);
 
-    const s2Cols = [{ header: "B-Party", key: "num", width: 15 }, { header: "Start Date", key: "start", width: 15 }, { header: "End Date", key: "end", width: 15 }];
+    const s2Cols: ExcelJS.Column[] = [];
+
+    s2Cols.push({ header: "B-Party", key: "num", width: 15 });
+
     if (enableEyecon) {
-        s2Cols.push({ header: "Eyecon", key: "eye", width: 40 }, { header: "Eyecon Image", key: "eyeImage", width: 15 }, { header: "Facebook Link", key: "eyeFb", width: 15 });
+        s2Cols.push({ header: "Eyecon", key: "eye", width: 40 });
+        s2Cols.push({ header: "Eyecon Image", key: "eyeImage", width: 15 });
+        s2Cols.push({ header: "Facebook Link", key: "eyeFb", width: 15 });
     }
-    if (enableLookup) s2Cols.push({ header: "Name", key: "name", width: 25 }, { header: "CNIC", key: "cnic", width: 18 }, { header: "Address", key: "addr", width: 45 });
-    s2Cols.push({ header: "In-SMS", key: "inS", width: 10 }, { header: "Out-SMS", key: "outS", width: 10 }, { header: "In-Call", key: "inC", width: 10 }, { header: "Out-Call", key: "outC", width: 10 }, { header: "Total", key: "total", width: 10 });
+
+    if (enableLookup) {
+        s2Cols.push({ header: "Name", key: "name", width: 25 });
+        s2Cols.push({ header: "CNIC", key: "cnic", width: 18 });
+        s2Cols.push({ header: "Address", key: "addr", width: 45 });
+    }
+
+    s2Cols.push({ header: "Start Date", key: "start", width: 15 });
+    s2Cols.push({ header: "End Date", key: "end", width: 15 });
+
+    s2Cols.push(
+        { header: "In-SMS", key: "inS", width: 10 },
+        { header: "Out-SMS", key: "outS", width: 10 },
+        { header: "In-Call", key: "inC", width: 10 },
+        { header: "Out-Call", key: "outC", width: 10 },
+        { header: "Total", key: "total", width: 10 }
+    );
     s2.columns = s2Cols;
     s2.addRows(logs);
 
