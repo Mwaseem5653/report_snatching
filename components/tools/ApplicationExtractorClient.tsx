@@ -12,11 +12,19 @@ import {
 import { toast } from "sonner";
 import ExcelJS from "exceljs";
 import AlertModal from "@/components/ui/alert-modal";
+import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/uploadHelper";
 import { cn } from "@/lib/utils";
+
+type ExtendedFile = File & {
+  cloudinaryUrl?: string;
+  cloudinaryPublicId?: string;
+  pageCount?: number; // Store page count once fetched
+};
 
 export default function ApplicationExtractorClient() {
   const [loading, setLoading] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<ExtendedFile[]>([]);
+  const uploadedPublicIds = useRef<string[]>([]);
   const [totalSteps, setTotalSteps] = useState(0);
   const [currentStep, setCurrentStep] = useState(0);
   const [allResults, setAllResults] = useState<any[]>([]);
@@ -56,14 +64,18 @@ export default function ApplicationExtractorClient() {
       setCurrentStep(0);
       setTotalSteps(0);
       setCooldown(0);
+      uploadedPublicIds.current = []; // Clear public IDs when new files are selected
       addLog(`SELECTED ${selected.length} FILES. READY TO ANALYZE.`);
     }
   };
 
-  const getPageCount = async (file: File) => {
+  const getPageCount = async (cloudinaryRef: { url: string, publicId: string }) => {
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("cloudinaryUrl", cloudinaryRef.url);
     formData.append("action", "count");
+    // Also send publicId for potential deletion on the server-side if counting fails
+    formData.append("cloudinaryPublicId", cloudinaryRef.publicId);
+
     const res = await fetch("/api/tools/extract-application", { method: "POST", body: formData });
     if (!res.ok) {
         let errorBody;
@@ -73,16 +85,20 @@ export default function ApplicationExtractorClient() {
         } else {
             errorBody = await res.text();
         }
+        // Client-side toast for user feedback
         toast.error(`Error ${res.status}: ${typeof errorBody === 'object' ? (errorBody.error || errorBody.message || "An unknown error occurred.") : errorBody}`);
+        // Consider server-side deletion of the temporary Cloudinary file here if count fails
+        // For now, rely on `clearAll` or `handleStop` to delete client-side managed publicIds
         throw new Error("Failed to get page count.");
     }
     const data = await res.json();
     return data.pageCount || 1;
   };
 
-  const processPage = async (file: File, page: number): Promise<any> => {
+  const processPage = async (cloudinaryRef: { url: string, publicId: string }, page: number): Promise<any> => {
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("cloudinaryUrl", cloudinaryRef.url);
+    formData.append("cloudinaryPublicId", cloudinaryRef.publicId); // Send publicId for backend deletion
     formData.append("action", "process");
     formData.append("page", page.toString());
 
@@ -148,22 +164,54 @@ export default function ApplicationExtractorClient() {
     
     addLog("INITIALIZING PDF & IMAGE ENGINE...");
     
+    addLog("ENGINE READY. UPLOADING FILES TO SUPABASE...");
     let total = 0;
-    for (const f of files) {
-        const count = await getPageCount(f);
-        total += count;
+    const uploadedFiles: ExtendedFile[] = [];
+
+    for (const file of files) {
+        if (stopRequested.current) break; // Allow stopping during initial upload
+        addLog(`UPLOADING: ${file.name}`);
+        try {
+            const supabaseResponse = await uploadFileToStorage(file, "application-extractor");
+            const extendedFile: ExtendedFile = {
+                ...file,
+                cloudinaryUrl: supabaseResponse.secure_url,
+                cloudinaryPublicId: supabaseResponse.public_id,
+            };
+            uploadedFiles.push(extendedFile);
+            uploadedPublicIds.current.push(supabaseResponse.public_id); // Track for deletion
+            
+            const count = await getPageCount({ url: extendedFile.cloudinaryUrl!, publicId: extendedFile.cloudinaryPublicId! });
+            extendedFile.pageCount = count; // Store page count with the file
+            total += count;
+            addLog(`UPLOADED & COUNTED: ${file.name} (${count} pages)`);
+        } catch (error: any) {
+            addLog(`ERROR UPLOADING ${file.name}: ${error.message}`);
+            toast.error(`Failed to upload ${file.name}: ${error.message}`);
+            stopRequested.current = true; // Stop processing further files on upload error
+            break;
+        }
     }
+
+    setFiles(uploadedFiles); // Update state with Supabase info
+    if (stopRequested.current) {
+        setLoading(false);
+        addLog("INITIAL UPLOAD HALTED DUE TO ERROR.");
+        return;
+    }
+
     setTotalSteps(total);
-    addLog(`ENGINE READY. TOTAL PAYLOAD: ${total} PAGES/IMAGES.`);
+    addLog(`ALL FILES UPLOADED. TOTAL PAYLOAD: ${total} PAGES/IMAGES.`);
 
     const delay = Math.floor(60000 / filesPerMinute);
     let stepCount = 0;
 
-    for (let fIdx = 0; fIdx < files.length; fIdx++) {
+    // --- Main Processing Loop ---
+    for (let fIdx = 0; fIdx < uploadedFiles.length; fIdx++) {
       if (stopRequested.current) break;
       
-      const file = files[fIdx];
-      const pages = await getPageCount(file);
+      const file = uploadedFiles[fIdx]; // Use the uploadedFiles with cloudinary info
+      const pages = file.pageCount || 1; // Use stored page count
       
       for (let p = 1; p <= pages; p++) {
           if (stopRequested.current) break;
@@ -177,7 +225,7 @@ export default function ApplicationExtractorClient() {
 
           while (!success && !stopRequested.current && attempts < 2) {
               try {
-                const data = await processPage(file, p);
+                const data = await processPage({ url: file.cloudinaryUrl!, publicId: file.cloudinaryPublicId! }, p);
                 
                 if (data.status === 429) {
                     addLog("!! RATE LIMIT HIT !! COOLING DOWN...");
@@ -211,6 +259,11 @@ export default function ApplicationExtractorClient() {
               await sleep(delay);
           }
       }
+      // Delete from Supabase after ALL pages of THIS file are processed
+      if (file.cloudinaryPublicId) {
+          deleteFileFromStorage(file.cloudinaryPublicId);
+          uploadedPublicIds.current = uploadedPublicIds.current.filter(id => id !== file.cloudinaryPublicId);
+      }
     }
 
     setLoading(false);
@@ -218,9 +271,13 @@ export default function ApplicationExtractorClient() {
     toast.success(stopRequested.current ? "Stopped. Partial data saved." : "All applications processed!");
   };
 
-  const handleStop = () => {
+  const handleStop = async () => { // Make async to await deletion
     stopRequested.current = true;
-    addLog("STOP SIGNAL RECEIVED. WRAPPING UP...");
+    addLog("STOP SIGNAL RECEIVED. DELETING TEMPORARY SUPABASE FILES...");
+    // Delete all currently tracked uploaded files
+    await Promise.all(uploadedPublicIds.current.map(publicId => deleteFileFromStorage(publicId)));
+    uploadedPublicIds.current = []; // Clear the tracking array
+    addLog("TEMPORARY SUPABASE FILES DELETED.");
   };
 
   const downloadExcel = async () => {
@@ -292,7 +349,12 @@ export default function ApplicationExtractorClient() {
     window.URL.revokeObjectURL(url);
   };
 
-  const clearAll = () => {
+  const clearAll = async () => { // Make async to await deletion
+    addLog("CLEARING ALL. DELETING TEMPORARY SUPABASE FILES...");
+    await Promise.all(uploadedPublicIds.current.map(publicId => deleteFileFromStorage(publicId)));
+    uploadedPublicIds.current = []; // Clear the tracking array
+    addLog("TEMPORARY SUPABASE FILES DELETED.");
+
     setFiles([]);
     setAllResults([]);
     setCurrentStep(0);

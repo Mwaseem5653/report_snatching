@@ -68,10 +68,12 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
       let attestedUrl = "";
 
       if (formData.boxPicture) {
-        boxPicUrl = await uploadFileToStorage(formData.boxPicture, "applications");
+        const res = await uploadFileToStorage(formData.boxPicture, "applications");
+        boxPicUrl = res.secure_url;
       }
       if (formData.attestedApplication) {
-        attestedUrl = await uploadFileToStorage(formData.attestedApplication, "applications");
+        const res = await uploadFileToStorage(formData.attestedApplication, "applications");
+        attestedUrl = res.secure_url;
       }
 
       const payload = {

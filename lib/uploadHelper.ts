@@ -1,38 +1,51 @@
 // lib/uploadHelper.ts
 
+import { supabase } from "./supabaseClient";
+
 /**
- * 📁 Uploads a file directly to Cloudinary.
- * Make sure to add NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and 
- * NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET to your .env.local
+ * 📁 Uploads a file directly to Supabase Storage.
+ * This supports large files (up to 1GB free tier) and bypasses Vercel limits.
  */
-export async function uploadFileToStorage(file: File, folder: string = "applications"): Promise<string> {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-
-  if (!cloudName || !uploadPreset) {
-    throw new Error("Cloudinary configuration missing. Please add NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET to .env.local");
+export async function uploadFileToStorage(file: File, folder: string = "applications"): Promise<{ secure_url: string; public_id: string }> {
+  if (!supabase) {
+    throw new Error("Supabase Storage is not configured. Please add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your environment variables.");
   }
-
   try {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", uploadPreset);
-    formData.append("folder", folder);
+    const fileName = `${Date.now()}_${file.name}`;
+    const filePath = `${folder}/${fileName}`;
 
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/upload`, {
-      method: "POST",
-      body: formData,
-    });
+    const { data, error } = await supabase.storage
+      .from('khansahab') // Correct bucket name
+      .upload(filePath, file);
 
-    const data = await response.json();
+    if (error) throw error;
 
-    if (!response.ok) {
-      throw new Error(data.error?.message || "Upload failed");
-    }
+    const { data: { publicUrl } } = supabase.storage
+      .from('khansahab')
+      .getPublicUrl(filePath);
 
-    return data.secure_url;
+    return { secure_url: publicUrl, public_id: filePath };
   } catch (error: any) {
-    console.error("Cloudinary Upload Error:", error);
-    throw new Error(error.message || "Failed to upload file to Cloudinary.");
+    console.error("Supabase Upload Error:", error);
+    throw new Error(error.message || "Failed to upload file to Supabase.");
   }
+}
+
+/**
+ * 🗑️ Client-side helper to delete a file from Cloudinary via our API.
+ */
+export async function deleteFileFromStorage(publicId: string): Promise<void> {
+    try {
+        const res = await fetch("/api/upload/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ publicId }),
+        });
+        if (!res.ok) {
+            const data = await res.json();
+            console.error("Failed to delete file:", data.error);
+        }
+    } catch (err) {
+        console.error("Error calling delete API:", err);
+    }
 }

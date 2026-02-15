@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import JSZip from "jszip";
 import { checkAndDeductTokens, checkAndDeductEyeconTokens } from "@/lib/tokenHelper";
+import { deleteFileFromStorageServer } from "@/lib/storageAdmin";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -195,9 +196,8 @@ function parseExcelDate(val: any): Date {
     return isNaN(d.getTime()) ? new Date(0) : d;
 }
 
-async function processSingleFile(file: File, options: any) {
+async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const { topN, eyeconTopN, enableLookup, enableEyecon } = options;
-    const buffer = await file.arrayBuffer();
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
     const sheetName = wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
@@ -449,6 +449,7 @@ async function processSingleFile(file: File, options: any) {
 }
 
 export async function POST(req: NextRequest) {
+    let publicIdsToClean: string[] = [];
     try {
         const cookieStore = await cookies();
         const token = cookieStore.get("sessionToken")?.value;
@@ -456,30 +457,52 @@ export async function POST(req: NextRequest) {
         const decoded: any = jwt.verify(token, SECRET);
 
         const formData = await req.formData();
-        const files = formData.getAll("file") as File[];
+        
+        // Extract Cloudinary data
+        const cloudinaryUrls: string[] = [];
+        const cloudinaryPublicIds: string[] = [];
+        const fileNames: string[] = [];
+        
+        let idx = 0;
+        while (formData.has(`cloudinaryUrls[${idx}]`)) {
+            cloudinaryUrls.push(formData.get(`cloudinaryUrls[${idx}]`) as string);
+            cloudinaryPublicIds.push(formData.get(`cloudinaryPublicIds[${idx}]`) as string);
+            fileNames.push(formData.get(`fileNames[${idx}]`) as string);
+            idx++;
+        }
+        
+        publicIdsToClean = [...cloudinaryPublicIds];
+
         const topN = parseInt(formData.get("top_n") as string || "15");
         const eyeconTopN = parseInt(formData.get("eyecon_top_n") as string || "15");
         const enableLookup = formData.get("enable_lookup") === "true";
         const enableEyecon = formData.get("enable_eyecon") === "true";
 
-        if (!files || files.length === 0) return NextResponse.json({ error: "No files uploaded" }, { status: 400 });
-        if (files.length > 10) return NextResponse.json({ error: "Maximum 10 files allowed" }, { status: 400 });
+        if (cloudinaryUrls.length === 0) return NextResponse.json({ error: "No files provided" }, { status: 400 });
 
-        const totalTokensNeeded = files.length * 15;
+        const totalTokensNeeded = cloudinaryUrls.length * 15;
         const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, totalTokensNeeded);
         if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
 
         if (enableEyecon) {
-            const eyeconCheck = await checkAndDeductEyeconTokens(decoded.uid, decoded.role, eyeconTopN * files.length);
+            const eyeconCheck = await checkAndDeductEyeconTokens(decoded.uid, decoded.role, eyeconTopN * cloudinaryUrls.length);
             if (!eyeconCheck.success) return NextResponse.json({ error: eyeconCheck.error }, { status: 403 });
         }
 
         const zip = new JSZip();
-        for (const file of files) {
-            const reportBuffer = await processSingleFile(file, { topN, eyeconTopN, enableLookup, enableEyecon });
+        for (let i = 0; i < cloudinaryUrls.length; i++) {
+            const url = cloudinaryUrls[i];
+            const fileName = fileNames[i];
+            
+            // Download from Cloudinary
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Failed to download ${fileName} from Cloudinary`);
+            const buffer = await res.arrayBuffer();
+            
+            const reportBuffer = await processSingleFile(buffer, { topN, eyeconTopN, enableLookup, enableEyecon });
             if (reportBuffer) {
-                const fileName = file.name.split('.').slice(0, -1).join('.') + "_Analyzed.xlsx";
-                zip.file(fileName, reportBuffer);
+                const outFileName = fileName.split('.').slice(0, -1).join('.') + "_Analyzed.xlsx";
+                zip.file(outFileName, reportBuffer);
             }
         }
 

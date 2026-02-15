@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { PDFDocument } from "pdf-lib";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
+import { deleteFileFromStorageServer } from "@/lib/storageAdmin"; // Import for deletion
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
@@ -47,26 +48,44 @@ function extractFieldsFromText(text: string) {
  * Handles PDF page extraction and Image processing
  */
 export async function POST(req: NextRequest) {
+  let publicIdToClean: string | undefined; // To store publicId for deletion in finally block
   try {
     const formData = await req.formData();
-    const file = formData.get("file") as File;
+    const cloudinaryUrl = formData.get("cloudinaryUrl") as string;
+    const cloudinaryPublicId = formData.get("cloudinaryPublicId") as string;
     const action = formData.get("action") as string; // 'count' or 'process'
     const pageNum = parseInt(formData.get("page") as string || "1");
 
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    publicIdToClean = cloudinaryPublicId; // Set publicId for cleanup in finally block
+
+    if (!cloudinaryUrl || !cloudinaryPublicId) {
+      return NextResponse.json({ error: "Cloudinary file reference missing" }, { status: 400 });
     }
+
+    // Download the file from Cloudinary
+    const cloudinaryFileRes = await fetch(cloudinaryUrl);
+    if (!cloudinaryFileRes.ok) {
+        throw new Error(`Failed to download file from Cloudinary: ${cloudinaryFileRes.statusText}`);
+    }
+    const fileBuffer = await cloudinaryFileRes.arrayBuffer();
+
+    // Determine mimeType for further processing based on URL or original name if available
+    // For now, derive from URL if possible, otherwise default
+    let mimeType = cloudinaryFileRes.headers.get("Content-Type") || "application/octet-stream";
+    if (cloudinaryUrl.includes(".pdf")) mimeType = "application/pdf";
+    else if (cloudinaryUrl.match(/\.(jpeg|jpg)$/i)) mimeType = "image/jpeg";
+    else if (cloudinaryUrl.match(/\.png$/i)) mimeType = "image/png";
+
 
     // 1. Action: Count Pages
     if (action === "count") {
-        if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-            const buffer = await file.arrayBuffer();
+        if (mimeType === "application/pdf") {
             try {
-                const pdfDoc = await PDFDocument.load(buffer);
+                const pdfDoc = await PDFDocument.load(fileBuffer);
                 return NextResponse.json({ success: true, pageCount: pdfDoc.getPageCount() });
             } catch (pdfError: any) {
                 console.error("❌ PDF Parsing Error (Count Action):", pdfError);
-                return NextResponse.json({ error: "Failed to read PDF. It might be too large or corrupted for page counting." }, { status: 400 });
+                return NextResponse.json({ error: "Failed to read PDF from Cloudinary. It might be too large or corrupted for page counting." }, { status: 400 });
             }
         }
         return NextResponse.json({ success: true, pageCount: 1 });
@@ -88,27 +107,25 @@ export async function POST(req: NextRequest) {
     const genAI = new GoogleGenerativeAI(process.env.GENAI_API_KEY); // Initialize here
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    let mimeType = file.type;
     let finalBuffer: any;
 
     // 🚀 Handle PDF Page Extraction
-    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-        const fullBuffer = await file.arrayBuffer();
+    if (mimeType === "application/pdf") { // Use mimeType from Cloudinary fetch
         try {
-            const pdfDoc = await PDFDocument.load(fullBuffer);
+            const pdfDoc = await PDFDocument.load(fileBuffer); // Use downloaded buffer
             const newPdf = await PDFDocument.create();
             const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNum - 1]);
             newPdf.addPage(copiedPage);
             const pdfBytes = await newPdf.save();
             finalBuffer = pdfBytes.buffer;
-            mimeType = "application/pdf";
+            // mimeType remains application/pdf
         } catch (pdfError: any) {
             console.error("❌ PDF Parsing Error (Process Action):", pdfError);
-            return NextResponse.json({ error: "Failed to extract page from PDF. It might be too large or corrupted." }, { status: 400 });
+            return NextResponse.json({ error: "Failed to extract page from PDF from Cloudinary. It might be too large or corrupted." }, { status: 400 });
         }
     } else {
-        finalBuffer = await file.arrayBuffer();
-        if (!mimeType || mimeType === "undefined") mimeType = "image/jpeg";
+        finalBuffer = fileBuffer; // Use the downloaded buffer directly for images
+        // mimeType is already determined
     }
 
     // 🚀 RESTORED EXACT PYTHON PROMPT WITH ENGLISH NAME REQUIREMENT

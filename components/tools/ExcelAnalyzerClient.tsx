@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,11 +8,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { FileSpreadsheet, Loader2, Download, AlertTriangle, Settings2 } from "lucide-react";
 import { toast } from "sonner";
+import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/uploadHelper";
 import AlertModal from "@/components/ui/alert-modal";
 
 export default function ExcelAnalyzerClient() {
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<File[]>([]); // Keep File[] here for display purposes initially
+  const uploadedPublicIds = useRef<string[]>([]); // Track uploaded files for deletion
   const [loading, setLoading] = useState(false);
+
+  const addLog = (msg: string) => console.log(`[ExcelAnalyzer] ${msg}`);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [topN, setTopN] = useState(15);
   const [eyeconTopN, setEyeconTopN] = useState(5);
@@ -58,8 +62,23 @@ export default function ExcelAnalyzerClient() {
           return;
       }
       setFiles(selected);
-      setResultUrl(null); 
+      setResultUrl(null);
+      // Clear uploaded public IDs when new files are selected
+      uploadedPublicIds.current.forEach(publicId => deleteFileFromStorage(publicId)); // Attempt to delete old tracked files
+      uploadedPublicIds.current = [];
     }
+  };
+
+  const handleClearAll = async () => {
+    addLog("CLEARING ALL. DELETING TEMPORARY SUPABASE FILES...");
+    try {
+        await Promise.all(uploadedPublicIds.current.map(pid => deleteFileFromStorage(pid)));
+        uploadedPublicIds.current = [];
+    } catch (e) {
+        console.error("Cleanup error:", e);
+    }
+    setFiles([]);
+    setResultUrl(null);
   };
 
   const handleAnalyze = async () => {
@@ -99,8 +118,40 @@ export default function ExcelAnalyzerClient() {
 
     setLoading(true);
     setResultUrl(null);
+
+    // --- Upload files to Supabase first ---
+    addLog("UPLOADING FILES TO SUPABASE...");
+    const supabaseFiles: { url: string; publicId: string; name: string }[] = [];
+    try {
+        for (const file of files) {
+            addLog(`UPLOADING: ${file.name}`);
+            const supabaseResponse = await uploadFileToStorage(file, "excel-analyzer");
+            supabaseFiles.push({
+                url: supabaseResponse.secure_url,
+                publicId: supabaseResponse.public_id,
+                name: file.name, // Keep original file name for identification
+            });
+            uploadedPublicIds.current.push(supabaseResponse.public_id); // Track for deletion
+        }
+        addLog("ALL FILES UPLOADED TO SUPABASE.");
+    } catch (error: any) {
+        addLog(`ERROR UPLOADING TO SUPABASE: ${error.message}`);
+        toast.error(`Failed to upload files to Supabase: ${error.message}`);
+        setLoading(false);
+        // Attempt to clean up any files that were partially uploaded
+        await Promise.all(uploadedPublicIds.current.map(publicId => deleteFileFromStorage(publicId)));
+        uploadedPublicIds.current = [];
+        return;
+    }
+
+
     const formData = new FormData();
-    files.forEach(f => formData.append("file", f));
+    // Send Supabase URLs and public IDs instead of raw files
+    supabaseFiles.forEach((cf, index) => {
+        formData.append(`cloudinaryUrls[${index}]`, cf.url);
+        formData.append(`cloudinaryPublicIds[${index}]`, cf.publicId);
+        formData.append(`fileNames[${index}]`, cf.name); // Send original file name
+    });
     formData.append("top_n", topN.toString());
     formData.append("eyecon_top_n", eyeconTopN.toString());
     formData.append("enable_lookup", enableLookup.toString());
@@ -112,6 +163,10 @@ export default function ExcelAnalyzerClient() {
         method: "POST",
         body: formData,
       });
+
+      // Cleanup Supabase files after request (they are processed and results are returned as ZIP)
+      uploadedPublicIds.current.forEach(pid => deleteFileFromStorage(pid));
+      uploadedPublicIds.current = [];
 
       const contentType = res.headers.get("content-type");
 
@@ -301,7 +356,7 @@ export default function ExcelAnalyzerClient() {
                               >
                                 <Download size={20} /> Download Analyzed ZIP
                               </a>
-                              <Button variant="outline" onClick={() => { setFiles([]); setResultUrl(null); }} className="w-full h-11 rounded-xl">Analyze New Batch</Button>
+                              <Button variant="outline" onClick={handleClearAll} className="w-full h-11 rounded-xl">Analyze New Batch</Button>
                           </div>
                       ) : (
                           <div className="space-y-4">
@@ -316,7 +371,7 @@ export default function ExcelAnalyzerClient() {
                                     <><Settings2 className="mr-2 h-5 w-5" /> Start Bulk Analysis</>
                                 )}
                             </Button>
-                            <Button variant="ghost" onClick={() => setFiles([])} className="text-slate-500">Clear All</Button>
+                            <Button variant="ghost" onClick={handleClearAll} className="text-slate-500">Clear All</Button>
                           </div>
                       )}
                   </div>

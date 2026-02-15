@@ -266,8 +266,11 @@ export default function AddApplicationFormNormalUser() {
 
     setSubmitting(true);
     try {
-      const boxPicUrl = await uploadFileToStorage(formData.boxPicture, "applications");
-      const attestedUrl = await uploadFileToStorage(formData.attestedApplication, "applications");
+      const boxPicRes = await uploadFileToStorage(formData.boxPicture, "applications");
+      const attestedRes = await uploadFileToStorage(formData.attestedApplication, "applications");
+      
+      const boxPicUrl = boxPicRes.secure_url;
+      const attestedUrl = attestedRes.secure_url;
 
       const payload = {
         applicantName: formData.applicantName,

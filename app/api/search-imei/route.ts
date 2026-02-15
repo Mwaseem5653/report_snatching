@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
     }
 
     // 🚀 Logic: A match is only valid if at least one report is NOT 'complete'
-    const allReports = snapshot.docs.map(doc => doc.data());
-    const activeReport = allReports.find(report => report.status !== "complete");
+    const allReports = snapshot.docs.map((doc: any) => doc.data());
+    const activeReport = allReports.find((report: any) => report.status !== "complete");
 
     const isMatch = !!activeReport;
     const applicationId = snapshot.empty ? null : snapshot.docs[0].id;

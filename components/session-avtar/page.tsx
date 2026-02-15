@@ -101,7 +101,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
         {/* 🔹 Left: Logo */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="relative w-10 h-10">
-             <Image src="/logo.png" alt="Logo" fill className="object-contain" />
+             <Image src="/logo.png" alt="Logo" fill sizes="40px" className="object-contain" />
           </div>
           <div className="hidden lg:block leading-tight">
             <h1 className="text-lg font-bold text-slate-800">Sindh Police</h1>

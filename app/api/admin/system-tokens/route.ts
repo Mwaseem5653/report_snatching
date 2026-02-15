@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
         const pool = await getTokenPool();
         const logsSnapshot = await adminDb.collection("token_logs").orderBy("timestamp", "desc").limit(100).get();
-        const logs = logsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const logs = logsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
 
         return NextResponse.json({ pool, logs });
     } catch (err: any) {
