@@ -335,17 +335,31 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     const outWb = new ExcelJS.Workbook();
     const s1 = outWb.addWorksheet("Mobile Numbers");
-    const s1Cols = [{ header: "Mobile Number", key: "Mobile Number", width: 15 }];
+    const s1Cols: any[] = [{ header: "Mobile Number", key: "Mobile Number", width: 15 }];
+    
     if (enableEyecon) {
         s1Cols.push({ header: "Eyecon Name", key: "Eyecon Name", width: 40 });
-        if (includeImages) {
-            s1Cols.push({ header: "Eyecon Image", key: "eyeImage", width: 15 }, { header: "Facebook Link", key: "eyeFb", width: 15 });
+        if (includeImages === true) {
+            s1Cols.push({ header: "Eyecon Image", key: "eyeImage", width: 15 });
+            s1Cols.push({ header: "Facebook Link", key: "eyeFb", width: 15 });
         }
     }
-    if (enableLookup) s1Cols.push({ header: "Name", key: "Name", width: 25 }, { header: "CNIC", key: "CNIC", width: 20 }, { header: "Address", key: "Address", width: 45 });
-    s1Cols.push({ header: "Start", key: "Starting Date", width: 20 }, { header: "End", key: "Ending Date", width: 20 }, { header: "Count", key: "Count", width: 10 });
-    s1.columns = s1Cols;
+
+    if (enableLookup) {
+        s1Cols.push(
+            { header: "Name", key: "Name", width: 25 },
+            { header: "CNIC", key: "CNIC", width: 20 },
+            { header: "Address", key: "Address", width: 45 }
+        );
+    }
     
+    s1Cols.push(
+        { header: "Start", key: "Starting Date", width: 20 },
+        { header: "End", key: "Ending Date", width: 20 },
+        { header: "Count", key: "Count", width: 10 }
+    );
+    s1.columns = s1Cols;
+
     const safeLink = (url: string) => {
         if (!url) return "";
         if (url.length > 30000) return "Link (Too Large)";
@@ -362,7 +376,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             "CNIC": c ? (c.cnic ? " " + c.cnic : "No Record Found") : "",
             "Address": c ? (c.address || "No Record Found") : "",
         };
-        if (enableEyecon && includeImages) {
+        if (enableEyecon && includeImages === true) {
             rowData.eyeImage = safeLink(c?.eyeImage);
             rowData.eyeFb = safeLink(c?.eyeFb);
         }
@@ -383,20 +397,19 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             addr: c ? (c.address || "No Record Found") : "", 
             inS: log.inSms, outS: log.outSms, inC: log.inCall, outC: log.outCall, total: ms.count 
         };
-        if (enableEyecon && includeImages) {
+        if (enableEyecon && includeImages === true) {
             logEntry.eyeImage = safeLink(c?.eyeImage);
             logEntry.eyeFb = safeLink(c?.eyeFb);
         }
         return logEntry;
     }).sort((a, b) => b.total - a.total);
 
-    const s2Cols = [];
-
+    const s2Cols: any[] = [];
     s2Cols.push({ header: "B-Party", key: "num", width: 15 });
 
     if (enableEyecon) {
         s2Cols.push({ header: "Eyecon", key: "eye", width: 40 });
-        if (includeImages) {
+        if (includeImages === true) {
             s2Cols.push({ header: "Eyecon Image", key: "eyeImage", width: 15 });
             s2Cols.push({ header: "Facebook Link", key: "eyeFb", width: 15 });
         }
