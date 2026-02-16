@@ -33,10 +33,12 @@ export default function ExcelAnalyzerClient() {
         const data = await res.json();
         if (data.authenticated) {
           setSession(data);
-          // Set default limits for officers
-          if (data.role === "officer") {
+          // Set default limits
+          if (data.role === "admin" || data.role === "super_admin") {
+              // Keep defaults or set specific ones if needed
+          } else {
               setEyeconTopN(5);
-              setTopN(8);
+              if (data.role === "officer") setTopN(8);
           }
         }
       } catch (err) {
@@ -272,7 +274,7 @@ export default function ExcelAnalyzerClient() {
                     </div>
                     {enableEyecon && (
                         <div className="pl-6 space-y-3 animate-in slide-in-from-top-1">
-                            {session?.role !== "officer" && (
+                            {(session?.role === "admin" || session?.role === "super_admin") ? (
                                 <div className="space-y-1">
                                     <Label className="text-[10px] text-slate-500 font-bold uppercase">Eyecon Limit</Label>
                                     <Input 
@@ -283,6 +285,13 @@ export default function ExcelAnalyzerClient() {
                                     max={50}
                                     className="h-8 text-xs"
                                     />
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] text-slate-500 font-bold uppercase">Eyecon Limit (Fixed)</Label>
+                                    <div className="h-8 px-3 flex items-center bg-slate-100 border rounded text-xs text-slate-600 font-medium">
+                                        5 Records
+                                    </div>
                                 </div>
                             )}
                             <div className="flex items-center space-x-2">

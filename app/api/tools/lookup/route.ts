@@ -35,9 +35,10 @@ export async function GET(req: NextRequest) {
   }
 
   const url = "https://eyecon.p.rapidapi.com/api/v1/search";
+  const cleanNumber = number.replace(/^0+/, "");
 
   try {
-    const res = await fetch(`${url}?code=${code}&number=${number}`, {
+    const res = await fetch(`${url}?code=${code}&number=${cleanNumber}`, {
       headers: {
         "x-rapidapi-key": rapidApiKey,
         "x-rapidapi-host": "eyecon.p.rapidapi.com",
@@ -46,24 +47,43 @@ export async function GET(req: NextRequest) {
 
     const data = await res.json();
 
-    if (!data.status && !data.fullName) {
-      return NextResponse.json({ status: false, message: "No record found" });
+    // 🚀 Robust extraction logic
+    const names = new Set<string>();
+    let photo = "";
+    let facebook = "";
+
+    const processItem = (item: any) => {
+        if (!item) return;
+        const n = item.fullName || item.name;
+        if (n) names.add(n);
+        if (item.otherNames && Array.isArray(item.otherNames)) {
+            item.otherNames.forEach((o: any) => names.add(typeof o === 'string' ? o : o.name));
+        }
+        if (!photo && item.photo) photo = item.photo;
+        if (!facebook && item.facebookID?.url) facebook = item.facebookID.url;
+    };
+
+    if (Array.isArray(data)) {
+        data.forEach(processItem);
+    } else {
+        processItem(data);
+        if (data.data) {
+            if (Array.isArray(data.data)) data.data.forEach(processItem);
+            else processItem(data.data);
+        }
     }
 
-    // 🚀 Extract Enriched Data
-    const names = new Set<string>();
-    if (data.fullName) names.add(data.fullName);
-    if (data.otherNames && Array.isArray(data.otherNames)) {
-        data.otherNames.forEach((o: any) => names.add(typeof o === 'string' ? o : o.name));
+    if (names.size === 0) {
+      return NextResponse.json({ status: false, message: "No record found", raw: data });
     }
 
     const responseData = {
         status: true,
-        fullName: data.fullName,
+        fullName: Array.from(names)[0],
         allNames: Array.from(names),
-        photo: data.photo || (data.data?.photo) || "",
-        facebook: data.facebookID?.url || (data.data?.facebookID?.url) || "",
-        raw: data // Keep raw for compatibility
+        photo: photo || (data.photo) || "",
+        facebook: facebook || (data.facebookID?.url) || "",
+        raw: data
     };
 
     return NextResponse.json(responseData);

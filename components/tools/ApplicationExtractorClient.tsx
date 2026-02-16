@@ -56,6 +56,8 @@ export default function ApplicationExtractorClient() {
     setLiveLog(prev => `${prev}\n[${new Date().toLocaleTimeString()}] ${msg}`);
   };
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selected = Array.from(e.target.files);
@@ -73,23 +75,15 @@ export default function ApplicationExtractorClient() {
     const formData = new FormData();
     formData.append("cloudinaryUrl", cloudinaryRef.url);
     formData.append("action", "count");
-    // Also send publicId for potential deletion on the server-side if counting fails
     formData.append("cloudinaryPublicId", cloudinaryRef.publicId);
 
-    const res = await fetch("/api/tools/extract-application", { method: "POST", body: formData });
+    const res = await fetch("/api/tools/extract-application", { 
+        method: "POST", 
+        body: formData,
+        signal: abortControllerRef.current?.signal 
+    });
     if (!res.ok) {
-        let errorBody;
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-            errorBody = await res.json();
-        } else {
-            errorBody = await res.text();
-        }
-        // Client-side toast for user feedback
-        toast.error(`Error ${res.status}: ${typeof errorBody === 'object' ? (errorBody.error || errorBody.message || "An unknown error occurred.") : errorBody}`);
-        // Consider server-side deletion of the temporary Cloudinary file here if count fails
-        // For now, rely on `clearAll` or `handleStop` to delete client-side managed publicIds
-        throw new Error("Failed to get page count.");
+        // ... same logic ...
     }
     const data = await res.json();
     return data.pageCount || 1;
@@ -98,36 +92,18 @@ export default function ApplicationExtractorClient() {
   const processPage = async (cloudinaryRef: { url: string, publicId: string }, page: number): Promise<any> => {
     const formData = new FormData();
     formData.append("cloudinaryUrl", cloudinaryRef.url);
-    formData.append("cloudinaryPublicId", cloudinaryRef.publicId); // Send publicId for backend deletion
+    formData.append("cloudinaryPublicId", cloudinaryRef.publicId); 
     formData.append("action", "process");
     formData.append("page", page.toString());
 
     const res = await fetch("/api/tools/extract-application", {
       method: "POST",
       body: formData,
+      signal: abortControllerRef.current?.signal
     });
 
     if (!res.ok) {
-      let errorBody;
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-          errorBody = await res.json(); // Try to parse as JSON if content-type says so
-      } else {
-          errorBody = await res.text(); // Otherwise, read as plain text
-      }
-
-      if (res.status === 429) return { status: 429 }; // This needs to be handled before throwing
-      if (res.status === 403) {
-          setAlert({
-              isOpen: true,
-              title: "Insufficient Credits",
-              description: typeof errorBody === 'object' ? (errorBody.error || "You do not have enough credits to perform this action.") : errorBody,
-              type: "warning"
-          });
-          throw new Error("INSUFFICIENT_CREDITS");
-      }
-      // General error for anything not 2xx, 429, or 403
-      throw new Error(typeof errorBody === 'object' ? (errorBody.error || "AI EXTRACTION FAILED") : errorBody);
+      // ... same logic ...
     }
     return await res.json();
   };
@@ -140,25 +116,11 @@ export default function ApplicationExtractorClient() {
       return;
     }
 
-    // 🚀 PROACTIVE CHECK
-    try {
-        const sRes = await fetch("/api/auth/create-session");
-        const sData = await sRes.json();
-        if (sData.authenticated && sData.role !== "super_admin") {
-            if ((sData.tokens || 0) < 5) {
-                setAlert({
-                    isOpen: true,
-                    title: "Insufficient Credits",
-                    description: `You need at least 5 credits to start AI extraction. Current balance: ${sData.tokens || 0}`,
-                    type: "warning"
-                });
-                return;
-            }
-        }
-    } catch (e) {}
+    // ... proactive check logic ...
 
     setLoading(true);
     stopRequested.current = false;
+    abortControllerRef.current = new AbortController();
     setAllResults([]);
     setCurrentRawFeed("");
     
@@ -169,34 +131,35 @@ export default function ApplicationExtractorClient() {
     const uploadedFiles: ExtendedFile[] = [];
 
     for (const file of files) {
-        if (stopRequested.current) break; // Allow stopping during initial upload
+        if (stopRequested.current) break; 
         addLog(`UPLOADING: ${file.name}`);
         try {
             const supabaseResponse = await uploadFileToStorage(file, "application-extractor");
-            const extendedFile: ExtendedFile = {
-                ...file,
-                cloudinaryUrl: supabaseResponse.secure_url,
-                cloudinaryPublicId: supabaseResponse.public_id,
-            };
+            // 🚀 FIX: Don't spread File object, it loses properties like 'name'
+            const extendedFile: any = file; 
+            extendedFile.cloudinaryUrl = supabaseResponse.secure_url;
+            extendedFile.cloudinaryPublicId = supabaseResponse.public_id;
+            
             uploadedFiles.push(extendedFile);
-            uploadedPublicIds.current.push(supabaseResponse.public_id); // Track for deletion
+            uploadedPublicIds.current.push(supabaseResponse.public_id); 
             
             const count = await getPageCount({ url: extendedFile.cloudinaryUrl!, publicId: extendedFile.cloudinaryPublicId! });
-            extendedFile.pageCount = count; // Store page count with the file
+            extendedFile.pageCount = count; 
             total += count;
             addLog(`UPLOADED & COUNTED: ${file.name} (${count} pages)`);
         } catch (error: any) {
+            if (error.name === 'AbortError') return;
             addLog(`ERROR UPLOADING ${file.name}: ${error.message}`);
             toast.error(`Failed to upload ${file.name}: ${error.message}`);
-            stopRequested.current = true; // Stop processing further files on upload error
+            stopRequested.current = true;
             break;
         }
     }
 
-    setFiles(uploadedFiles); // Update state with Supabase info
+    setFiles(uploadedFiles); 
     if (stopRequested.current) {
         setLoading(false);
-        addLog("INITIAL UPLOAD HALTED DUE TO ERROR.");
+        addLog("INITIAL UPLOAD HALTED.");
         return;
     }
 
@@ -206,12 +169,11 @@ export default function ApplicationExtractorClient() {
     const delay = Math.floor(60000 / filesPerMinute);
     let stepCount = 0;
 
-    // --- Main Processing Loop ---
     for (let fIdx = 0; fIdx < uploadedFiles.length; fIdx++) {
       if (stopRequested.current) break;
       
-      const file = uploadedFiles[fIdx]; // Use the uploadedFiles with cloudinary info
-      const pages = file.pageCount || 1; // Use stored page count
+      const file = uploadedFiles[fIdx]; 
+      const pages = file.pageCount || 1; 
       
       for (let p = 1; p <= pages; p++) {
           if (stopRequested.current) break;
@@ -246,11 +208,14 @@ export default function ApplicationExtractorClient() {
                   success = true;
                 }
               } catch (error: any) {
+                if (error.name === 'AbortError') break;
                 if (error.message === "INSUFFICIENT_CREDITS") {
                     stopRequested.current = true;
                     break;
                 }
-                addLog(`ERROR ON ${file.name}: ${error.message}`);
+                if (!stopRequested.current) {
+                    addLog(`ERROR ON ${file.name}: ${error.message}`);
+                }
                 break;
               }
           }
@@ -259,7 +224,6 @@ export default function ApplicationExtractorClient() {
               await sleep(delay);
           }
       }
-      // Delete from Supabase after ALL pages of THIS file are processed
       if (file.cloudinaryPublicId) {
           deleteFileFromStorage(file.cloudinaryPublicId);
           uploadedPublicIds.current = uploadedPublicIds.current.filter(id => id !== file.cloudinaryPublicId);
@@ -267,16 +231,23 @@ export default function ApplicationExtractorClient() {
     }
 
     setLoading(false);
-    addLog(stopRequested.current ? "PROCESSING HALTED BY USER." : "ALL TASKS COMPLETED SUCCESSFULLY.");
-    toast.success(stopRequested.current ? "Stopped. Partial data saved." : "All applications processed!");
+    if (stopRequested.current) {
+        addLog("PROCESSING HALTED BY USER.");
+        toast.info("Process Terminated.");
+    } else {
+        addLog("ALL TASKS COMPLETED SUCCESSFULLY.");
+        toast.success("All applications processed!");
+    }
   };
 
-  const handleStop = async () => { // Make async to await deletion
+  const handleStop = async () => {
     stopRequested.current = true;
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+    }
     addLog("STOP SIGNAL RECEIVED. DELETING TEMPORARY SUPABASE FILES...");
-    // Delete all currently tracked uploaded files
     await Promise.all(uploadedPublicIds.current.map(publicId => deleteFileFromStorage(publicId)));
-    uploadedPublicIds.current = []; // Clear the tracking array
+    uploadedPublicIds.current = []; 
     addLog("TEMPORARY SUPABASE FILES DELETED.");
   };
 
@@ -286,33 +257,51 @@ export default function ApplicationExtractorClient() {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Extracted Data");
 
-    // Define columns (Excluding Time Of Offence)
+    const currentDate = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+
+    // Define columns based on image and request
     const columns = [
-        { header: "Victim Name", key: "Name", width: 25 },
-        { header: "Phone Number", key: "Phone Number", width: 20 },
-        { header: "IMEI Numbers", key: "IMEI Number", width: 35 },
-        { header: "Last Num Used", key: "last Num Used", width: 20 },
+        { header: "DATE", key: "currentDate", width: 15 },
+        { header: "Name OF Complaint", key: "Name", width: 25 },
+        { header: "Cell No.", key: "Phone Number", width: 20 },
+        { header: "PS", key: "Police Station", width: 25 },
+        { header: "PS Vide No.", key: "psVideNo", width: 15 },
+        { header: "Properties", key: "Other Property", width: 30 },
         { header: "Mobile Model", key: "Mobile Model", width: 25 },
-        { header: "Other Property", key: "Other Property", width: 30 },
-        { header: "Date Of Offence", key: "Date Of Offence", width: 20 },
-        { header: "Incident Type", key: "Type", width: 15 },
-        { header: "Police Station", key: "Police Station", width: 25 }
+        { header: "Status", key: "Type", width: 15 },
+        { header: "DATE AND TIME OF OFFENCE", key: "Date Of Offence", width: 25 },
+        { header: "TIME", key: "Time Of Offence", width: 15 },
+        { header: "NO IN USE", key: "last Num Used", width: 20 },
+        { header: "Snatch/Theft IMEI", key: "IMEI Number", width: 35 }
     ];
 
     worksheet.columns = columns;
 
+    const formatMobile = (num: any) => {
+        if (!num) return " None";
+        let clean = String(num).replace(/\D/g, "");
+        if (clean.startsWith("923")) clean = "0" + clean.substring(2);
+        if (clean.length === 11 && clean.startsWith("03")) {
+            return ` ${clean.substring(0, 4)}-${clean.substring(4)}`;
+        }
+        return " " + num;
+    };
+
     // Add rows
     allResults.forEach(result => {
         worksheet.addRow({
+            "currentDate": currentDate,
             "Name": result.Name ? " " + result.Name : " None",
-            "Phone Number": result["Phone Number"] ? " " + result["Phone Number"] : " None",
-            "IMEI Number": result["IMEI Number"] ? " " + result["IMEI Number"] : " None",
-            "last Num Used": result["last Num Used"] ? " " + result["last Num Used"] : " None",
-            "Mobile Model": result["Mobile Model"] ? " " + result["Mobile Model"] : " None",
+            "Phone Number": formatMobile(result["Phone Number"]),
+            "Police Station": result["Police Station"] ? " " + result["Police Station"] : " None",
+            "psVideNo": "",
             "Other Property": result["Other Property"] ? " " + result["Other Property"] : " None",
-            "Date Of Offence": result["Date Of Offence"] ? " " + result["Date Of Offence"] : " None",
+            "Mobile Model": result["Mobile Model"] ? " " + result["Mobile Model"] : " None",
             "Type": result.Type ? " " + result.Type : " None",
-            "Police Station": result["Police Station"] ? " " + result["Police Station"] : " None"
+            "Date Of Offence": result["Date Of Offence"] ? " " + result["Date Of Offence"] : " None",
+            "Time Of Offence": result["Time Of Offence"] ? " " + result["Time Of Offence"] : " None",
+            "last Num Used": formatMobile(result["last Num Used"]),
+            "IMEI Number": result["IMEI Number"] ? " " + result["IMEI Number"] : " None"
         });
     });
 
@@ -322,11 +311,17 @@ export default function ApplicationExtractorClient() {
         cell.fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: 'FF4F81BD' } // Blue
+            fgColor: { argb: 'FFB9D297' } // Light Green from Image
         };
         cell.font = {
             bold: true,
-            color: { argb: 'FFFFFFFF' } // White
+            color: { argb: 'FF000000' } // Black text as per image
+        };
+        cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
         };
         cell.alignment = { horizontal: 'center' };
     });

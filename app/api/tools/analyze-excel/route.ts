@@ -53,29 +53,40 @@ async function fetchEyeconInfo(number: string, code = "92") {
         if (!res.ok) return null;
         const data = await res.json();
 
-        // 1. Extract Names (Exhaustive)
+        // 1. Extract Names (Exhaustive & Robust)
         const names = new Set<string>();
-        const extractNames = (d: any) => {
-            if (!d) return;
-            const fname = d.fullName || d.name;
+        let facebook = "";
+        let photo = "";
+
+        const processItem = (item: any) => {
+            if (!item) return;
+            const fname = item.fullName || item.name;
             if (fname) names.add(fname);
-            if (Array.isArray(d.otherNames)) {
-                d.otherNames.forEach((o: any) => {
+            if (Array.isArray(item.otherNames)) {
+                item.otherNames.forEach((o: any) => {
                     const n = typeof o === 'string' ? o : o.name;
                     if (n) names.add(n);
                 });
             }
+            if (!photo && item.photo) photo = item.photo;
+            if (!facebook && item.facebookID?.url) facebook = item.facebookID.url;
         };
-        extractNames(data);
-        if (data.data) extractNames(data.data);
+
+        if (Array.isArray(data)) {
+            data.forEach(processItem);
+        } else {
+            processItem(data);
+            if (data.data) {
+                if (Array.isArray(data.data)) data.data.forEach(processItem);
+                else processItem(data.data);
+            }
+        }
+
+        if (names.size === 0) return null;
         const finalName = Array.from(names).join(" | ");
 
         // 2. Extract Image URL (Priority Logic)
-        let image_url = "";
-        const source = data.data || data;
-        
-        if (source.photo) image_url = source.photo;
-        else if (data.photo) image_url = data.photo;
+        let image_url = photo;
 
         const getImagesUrl = (d: any) => {
             if (d && Array.isArray(d.images)) {
@@ -90,25 +101,21 @@ async function fetchEyeconInfo(number: string, code = "92") {
         };
 
         if (!image_url || !String(image_url).startsWith("http")) {
-            image_url = getImagesUrl(data) || getImagesUrl(data.data);
+            image_url = getImagesUrl(data) || getImagesUrl(data.data) || image_url;
         }
 
         // Fallback to Base64
-        if (!image_url) {
+        if (!image_url || !String(image_url).startsWith("http")) {
             const rawB64 = data.b64 || (data.data && data.data.b64);
             if (rawB64) {
                 image_url = String(rawB64).startsWith("data:image") ? rawB64 : `data:image/jpeg;base64,${rawB64}`;
             }
         }
 
-        // 3. Extract Facebook URL
-        const facebookID = data.facebookID || (data.data && data.data.facebookID) || {};
-        const extractedFb = facebookID.url || "";
-
         return {
-            name: finalName || "No Record Found",
+            name: finalName,
             image: image_url,
-            facebook: extractedFb
+            facebook: facebook
         };
     } catch (e: any) { 
         return null; 
@@ -197,7 +204,7 @@ function parseExcelDate(val: any): Date {
 }
 
 async function processSingleFile(buffer: ArrayBuffer, options: any) {
-    const { topN, eyeconTopN, enableLookup, enableEyecon } = options;
+    const { topN, eyeconTopN, enableLookup, enableEyecon, includeImages } = options;
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
     const sheetName = wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
@@ -330,7 +337,10 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const s1 = outWb.addWorksheet("Mobile Numbers");
     const s1Cols = [{ header: "Mobile Number", key: "Mobile Number", width: 15 }];
     if (enableEyecon) {
-        s1Cols.push({ header: "Eyecon Name", key: "Eyecon Name", width: 40 }, { header: "Eyecon Image", key: "eyeImage", width: 15 }, { header: "Facebook Link", key: "eyeFb", width: 15 });
+        s1Cols.push({ header: "Eyecon Name", key: "Eyecon Name", width: 40 });
+        if (includeImages) {
+            s1Cols.push({ header: "Eyecon Image", key: "eyeImage", width: 15 }, { header: "Facebook Link", key: "eyeFb", width: 15 });
+        }
     }
     if (enableLookup) s1Cols.push({ header: "Name", key: "Name", width: 25 }, { header: "CNIC", key: "CNIC", width: 20 }, { header: "Address", key: "Address", width: 45 });
     s1Cols.push({ header: "Start", key: "Starting Date", width: 20 }, { header: "End", key: "Ending Date", width: 20 }, { header: "Count", key: "Count", width: 10 });
@@ -345,32 +355,39 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     mobileSummary.forEach(rec => {
         const num = rec["Mobile Number"];
         const c = cache.get(num) || null;
-        s1.addRow({
+        const rowData: any = {
             ...rec,
             "Eyecon Name": c ? (c.eye || "No Record Found") : "",
             "Name": c ? (c.name || "No Record Found") : "",
             "CNIC": c ? (c.cnic ? " " + c.cnic : "No Record Found") : "",
             "Address": c ? (c.address || "No Record Found") : "",
-            eyeImage: safeLink(c?.eyeImage),
-            eyeFb: safeLink(c?.eyeFb)
-        });
+        };
+        if (enableEyecon && includeImages) {
+            rowData.eyeImage = safeLink(c?.eyeImage);
+            rowData.eyeFb = safeLink(c?.eyeFb);
+        }
+        s1.addRow(rowData);
     });
 
     const s2 = outWb.addWorksheet("Call Logs");
     const logs = Array.from(callLogMap.entries()).map(([num, log]) => {
         const c = cache.get(num) || null;
         const ms = mobileSummaryMap.get(num);
-        return { 
+        const logEntry: any = { 
             num, 
             start: ms.start.getTime() > 0 ? ms.start.toISOString().substring(0, 10) : "N/A", 
             end: ms.end.getTime() > 0 ? ms.end.toISOString().substring(0, 10) : "N/A", 
             name: c ? (c.name || "No Record Found") : "", 
             eye: c ? (c.eye || "No Record Found") : "", 
-            eyeImage: safeLink(c?.eyeImage), eyeFb: safeLink(c?.eyeFb),
             cnic: c ? (c.cnic ? " " + c.cnic : "No Record Found") : "", 
             addr: c ? (c.address || "No Record Found") : "", 
             inS: log.inSms, outS: log.outSms, inC: log.inCall, outC: log.outCall, total: ms.count 
         };
+        if (enableEyecon && includeImages) {
+            logEntry.eyeImage = safeLink(c?.eyeImage);
+            logEntry.eyeFb = safeLink(c?.eyeFb);
+        }
+        return logEntry;
     }).sort((a, b) => b.total - a.total);
 
     const s2Cols = [];
@@ -379,8 +396,10 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     if (enableEyecon) {
         s2Cols.push({ header: "Eyecon", key: "eye", width: 40 });
-        s2Cols.push({ header: "Eyecon Image", key: "eyeImage", width: 15 });
-        s2Cols.push({ header: "Facebook Link", key: "eyeFb", width: 15 });
+        if (includeImages) {
+            s2Cols.push({ header: "Eyecon Image", key: "eyeImage", width: 15 });
+            s2Cols.push({ header: "Facebook Link", key: "eyeFb", width: 15 });
+        }
     }
 
     if (enableLookup) {
@@ -477,6 +496,7 @@ export async function POST(req: NextRequest) {
         const eyeconTopN = parseInt(formData.get("eyecon_top_n") as string || "15");
         const enableLookup = formData.get("enable_lookup") === "true";
         const enableEyecon = formData.get("enable_eyecon") === "true";
+        const includeImages = formData.get("include_images") === "true";
 
         if (cloudinaryUrls.length === 0) return NextResponse.json({ error: "No files provided" }, { status: 400 });
 
@@ -499,7 +519,7 @@ export async function POST(req: NextRequest) {
             if (!res.ok) throw new Error(`Failed to download ${fileName} from Cloudinary`);
             const buffer = await res.arrayBuffer();
             
-            const reportBuffer = await processSingleFile(buffer, { topN, eyeconTopN, enableLookup, enableEyecon });
+            const reportBuffer = await processSingleFile(buffer, { topN, eyeconTopN, enableLookup, enableEyecon, includeImages });
             if (reportBuffer) {
                 const outFileName = fileName.split('.').slice(0, -1).join('.') + "_Analyzed.xlsx";
                 zip.file(outFileName, reportBuffer);
