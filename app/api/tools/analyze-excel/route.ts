@@ -223,7 +223,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const bCol = findColumn(headers, [
         "B Number", "BNUMBER", "b number", "b party", "b_party", "BParty", 
         "CALL_DIALED_NUM", "DIALED_NUMBER", "Dialled Number", "CONNECTED_NUMBER",
-        "Other Party", "OTHER_MSISDN", "Destination Number", "Called Number", "MSISDN"
+        "Other Party", "OTHER_MSISDN", "Destination Number", "Called Number"
     ]);
     if (!bCol) return null;
 
