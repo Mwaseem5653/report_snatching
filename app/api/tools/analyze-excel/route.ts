@@ -410,6 +410,24 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     }
 
     const outWb = new ExcelJS.Workbook();
+
+    // 🚀 Move "Formatted Data" to the very first position
+    const sRaw = outWb.addWorksheet("Formatted Data");
+    sRaw.columns = headers.map(h => ({ header: h, key: h, width: 15 }));
+    jsonData.forEach(row => {
+        const cleanRow: any = {};
+        headers.forEach(h => {
+            const val = row[h];
+            if (val instanceof Date) cleanRow[h] = val.toISOString().replace("T", " ").substring(0, 19);
+            else {
+                const strVal = String(val);
+                if (/^\d{10,}$/.test(strVal)) cleanRow[h] = " " + strVal;
+                else cleanRow[h] = val;
+            }
+        });
+        sRaw.addRow(cleanRow);
+    });
+
     const s1 = outWb.addWorksheet("Mobile Numbers");
     const s1Cols: any[] = [{ header: "Mobile Number", key: "Mobile Number", width: 15 }];
     
@@ -534,22 +552,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         s4.columns = [{ header: "IMEI Number", key: "imei", width: 25 }, { header: "Count", key: "count", width: 10 }, { header: "Start", key: "start", width: 20 }, { header: "End", key: "end", width: 20 }];
         s4.addRows(Array.from(imeiSummaryMap.entries()).map(([i, s]) => ({ imei: " " + i, count: s.count, start: s.start.getTime() > 0 ? s.start.toISOString().replace("T", " ").substring(0, 19) : "N/A", end: s.end.getTime() > 0 ? s.end.toISOString().replace("T", " ").substring(0, 19) : "N/A" })).sort((a, b) => b.count - a.count));
     }
-
-    const sRaw = outWb.addWorksheet("Formatted Data");
-    sRaw.columns = headers.map(h => ({ header: h, key: h, width: 15 }));
-    jsonData.forEach(row => {
-        const cleanRow: any = {};
-        headers.forEach(h => {
-            const val = row[h];
-            if (val instanceof Date) cleanRow[h] = val.toISOString().replace("T", " ").substring(0, 19);
-            else {
-                const strVal = String(val);
-                if (/^\d{10,}$/.test(strVal)) cleanRow[h] = " " + strVal;
-                else cleanRow[h] = val;
-            }
-        });
-        sRaw.addRow(cleanRow);
-    });
 
     // --- Intelligence Sheet (Game Changer Features) ---
     if (enableIntel) {

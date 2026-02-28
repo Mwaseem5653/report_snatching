@@ -19,18 +19,37 @@ export default function MapView({ data, currentTime, selectedDate }: MapViewProp
     const hourlyMarkersRef = useRef<L.LayerGroup | null>(null);
     const landmarkMarkersRef = useRef<L.LayerGroup | null>(null);
 
-    // 1. Initialize Map
+    // 1. Initialize Map with Detailed Layers
     useEffect(() => {
         if (!mapRef.current || mapInstance.current) return;
 
+        // --- TILE LAYERS ---
+        const streets = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+            attribution: '&copy; OpenStreetMap'
+        });
+
+        const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+            attribution: '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community'
+        });
+
+        const terrain = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+            attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)'
+        });
+
         mapInstance.current = L.map(mapRef.current, {
             zoomControl: false,
-            attributionControl: false
+            attributionControl: false,
+            preferCanvas: true, // 🚀 Enable Canvas for smoother performance
+            layers: [streets] // Default layer
         }).setView([24.8607, 67.0011], 13);
 
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-            attribution: '&copy; OpenStreetMap'
-        }).addTo(mapInstance.current);
+        // --- LAYER CONTROL (The Switcher) ---
+        const baseMaps = {
+            "Default View": streets,
+            "Detailed Satellite": satellite,
+            "Terrain View": terrain
+        };
+        L.control.layers(baseMaps, {}, { position: 'bottomleft' }).addTo(mapInstance.current);
 
         L.control.zoom({ position: 'bottomright' }).addTo(mapInstance.current);
         
@@ -45,7 +64,7 @@ export default function MapView({ data, currentTime, selectedDate }: MapViewProp
         };
     }, []);
 
-    // 2. Global Reset / Cleanup when data is cleared
+    // 2. Global Reset / Cleanup
     useEffect(() => {
         if (data.length === 0 && mapInstance.current) {
             if (arrowMarkerRef.current) { arrowMarkerRef.current.remove(); arrowMarkerRef.current = null; }
@@ -57,7 +76,7 @@ export default function MapView({ data, currentTime, selectedDate }: MapViewProp
         }
     }, [data]);
 
-    // 3. Pre-calculate Hourly Landmarks
+    // 3. Landmarks Calculation
     const hourlyPoints = useMemo(() => {
         const landmarks: any[] = [];
         if (data.length === 0) return landmarks;
@@ -127,38 +146,47 @@ export default function MapView({ data, currentTime, selectedDate }: MapViewProp
 
         // Ghost Line
         if (!fullPathRef.current) {
-            fullPathRef.current = L.polyline(data.map(p => [p.lat, p.lon]), {
-                color: '#cbd5e1', weight: 2, opacity: 0.4, dashArray: '5, 5'
-            }).addTo(mapInstance.current);
+            const validAllCoords = data
+                .filter(p => p.lat !== null && p.lon !== null && !isNaN(p.lat) && !isNaN(p.lon))
+                .map(p => [p.lat, p.lon] as [number, number]);
+            
+            if (validAllCoords.length > 1) {
+                fullPathRef.current = L.polyline(validAllCoords, {
+                    color: '#cbd5e1', weight: 2, opacity: 0.4, dashArray: '5, 5'
+                }).addTo(mapInstance.current);
+            }
         }
 
         // Landmarks (Start/End)
-        if (landmarkMarkersRef.current && landmarkMarkersRef.current.getLayers().length === 0) {
+        if (landmarkMarkersRef.current && landmarkMarkersRef.current.getLayers().length === 0 && data.length > 0) {
             const first = data[0];
             const last = data[data.length - 1];
             
-            L.circleMarker([first.lat, first.lon], {
-                radius: 8, fillColor: "#10b981", color: "white", weight: 2, fillOpacity: 0.9
-            }).addTo(landmarkMarkersRef.current).bindPopup(`<b>Start Point</b><br/>${first.displayTime}`);
+            if (first.lat !== null && !isNaN(first.lat)) {
+                L.circleMarker([first.lat, first.lon], {
+                    radius: 8, fillColor: "#10b981", color: "white", weight: 2, fillOpacity: 0.9
+                }).addTo(landmarkMarkersRef.current).bindPopup(`<b>Start Point</b><br/>${first.displayTime}`);
+            }
 
-            L.circleMarker([last.lat, last.lon], {
-                radius: 8, fillColor: "#f43f5e", color: "white", weight: 2, fillOpacity: 0.9
-            }).addTo(landmarkMarkersRef.current).bindPopup(`<b>End Point</b><br/>${last.displayTime}`);
+            if (last.lat !== null && !isNaN(last.lat)) {
+                L.circleMarker([last.lat, last.lon], {
+                    radius: 8, fillColor: "#f43f5e", color: "white", weight: 2, fillOpacity: 0.9
+                }).addTo(landmarkMarkersRef.current).bindPopup(`<b>End Point</b><br/>${last.displayTime}`);
+            }
         }
 
         // Progressive Path
         if (progressiveLineRef.current) {
             progressiveLineRef.current.setLatLngs(passedCoords);
-        } else {
+        } else if (passedCoords.length > 1) {
             progressiveLineRef.current = L.polyline(passedCoords, {
                 color: '#2563eb', weight: 5, opacity: 0.8, lineJoin: 'round'
             }).addTo(mapInstance.current);
         }
 
-        // Hourly Markers (Grouped by Location to prevent overlap)
+        // Hourly Markers (Grouped)
         if (hourlyMarkersRef.current) {
             hourlyMarkersRef.current.clearLayers();
-            
             const locationGroups = new Map<string, any[]>();
             hourlyPoints.forEach(hp => {
                 if (currentTime >= hp.minuteOfDay) {
@@ -182,24 +210,14 @@ export default function MapView({ data, currentTime, selectedDate }: MapViewProp
                     label = h > 12 ? `${h - 12}PM` : `${h}AM`;
                 }
 
-                const textIcon = L.divIcon({
-                    className: "hour-text-icon",
-                    html: `<div style="color: #1e293b; font-weight: 900; font-size: 10px; text-shadow: 0 0 3px white; white-space: nowrap;">${label}</div>`,
-                    iconSize: [60, 20],
-                    iconAnchor: [30, 10]
-                });
-
                 L.marker([lat, lon], { 
-                    icon: textIcon,
+                    icon: L.divIcon({
+                        className: "hour-text-icon",
+                        html: `<div style="color: #1e293b; font-weight: 900; font-size: 10px; text-shadow: 0 0 3px white; white-space: nowrap;">${label}</div>`,
+                        iconSize: [60, 20], iconAnchor: [30, 10]
+                    }),
                     zIndexOffset: 1000 
-                })
-                .addTo(hourlyMarkersRef.current!)
-                .bindPopup(`
-                    <div style="font-family: sans-serif;">
-                        <b style="color: #2563eb;">Stay Location</b><br/>
-                        ${points.map(p => `• ${p.hour > 12 ? p.hour-12+'PM' : p.hour+'AM'}: ${p.addr}`).join('<br/>')}
-                    </div>
-                `);
+                }).addTo(hourlyMarkersRef.current!).bindPopup(`<b>Stay Location</b><br/>${points.map(p => `• ${p.hour > 12 ? p.hour-12+'PM' : p.hour+'AM'}: ${p.addr}`).join('<br/>')}`);
             });
         }
 
@@ -215,17 +233,14 @@ export default function MapView({ data, currentTime, selectedDate }: MapViewProp
         } else {
             const ArrowIcon = L.divIcon({
                 className: "custom-nav-icon",
-                html: `<div class="arrow-head" style="width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 20px solid #ef4444; transform: rotate(${rotation}deg); filter: drop-shadow(0 0 5px rgba(239,68,68,0.5));"></div>`,
+                html: `<div class="arrow-head" style="width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 26px solid #ef4444; transform: rotate(${rotation}deg); filter: drop-shadow(0 0 5px rgba(239,68,68,0.5));"></div>`,
                 iconSize: [20, 20], iconAnchor: [10, 10]
             });
 
-            arrowMarkerRef.current = L.marker(currentPos, { 
-                icon: ArrowIcon,
-                zIndexOffset: 5000 // 🚀 Force arrow to stay ABOVE everything
-            })
+            arrowMarkerRef.current = L.marker(currentPos, { icon: ArrowIcon, zIndexOffset: 5000 })
                 .addTo(mapInstance.current)
                 .bindTooltip("", { 
-                    permanent: true, direction: "top", offset: [0, -25], // 🚀 Move tooltip higher up
+                    permanent: true, direction: "top", offset: [0, -25],
                     className: "bg-red-600 text-white font-black text-[11px] px-2 py-0.5 rounded shadow-xl border-none"
                 });
         }

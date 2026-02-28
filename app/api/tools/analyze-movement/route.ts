@@ -81,10 +81,19 @@ export async function POST(req: NextRequest) {
             const rawDate = dateCol ? rowObj[dateCol] : null;
             const dateObj = rawDate ? parseExcelDate(rawDate) : new Date(0);
             
-            // Safe parsing: only parse if column was actually found
-            const lat = (latCol && rowObj[latCol]) ? parseFloat(rowObj[latCol]) : null;
-            const lon = (lonCol && rowObj[lonCol]) ? parseFloat(rowObj[lonCol]) : null;
-            const addr = addressCol ? String(rowObj[addressCol] || "").trim() : "";
+            let lat = (latCol && rowObj[latCol]) ? parseFloat(rowObj[latCol]) : null;
+            let lon = (lonCol && rowObj[lonCol]) ? parseFloat(rowObj[lonCol]) : null;
+            let addr = addressCol ? String(rowObj[addressCol] || "").trim() : "";
+
+            // 🚀 SMART FIX: Handle pipe-separated format (Address|Lat|Lon)
+            if (addr.includes("|")) {
+                const parts = addr.split("|");
+                if (parts.length >= 3) {
+                    addr = parts[0].trim();
+                    if (lat === null || isNaN(lat)) lat = parseFloat(parts[1]);
+                    if (lon === null || isNaN(lon)) lon = parseFloat(parts[2]);
+                }
+            }
 
             const hasLoc = (lat !== null && !isNaN(lat) && lon !== null && !isNaN(lon)) || (addr && addr !== "None" && addr !== "");
 
