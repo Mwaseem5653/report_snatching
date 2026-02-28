@@ -82,9 +82,9 @@ export default function UserManagement() {
     if (!currentUser) return [];
     switch (currentUser.role) {
       case "super_admin":
-        return ["super_admin", "admin", "officer", "ps_user", "market_user"];
+        return ["super_admin", "admin", "officer", "ps_user", "market_user", "advanced_tool"];
       case "admin":
-        return ["officer", "ps_user", "market_user"];
+        return ["officer", "ps_user", "market_user", "advanced_tool"];
       case "officer":
         return ["ps_user", "market_user"];
       default:
@@ -417,6 +417,7 @@ export default function UserManagement() {
                                 {[
                                     { key: 'excel_analyzer', label: 'Excel Analyzer' },
                                     { key: 'geo_fencing', label: 'Geo Fencing' },
+                                    { key: 'movement_visualizer', label: 'Movement Visualizer' },
                                     { key: 'ai_extractor', label: 'AI Extractor' },
                                     { key: 'info_tools', label: 'Info Tools' },
                                     { key: 'cdr_generator', label: 'CDR Generator' },

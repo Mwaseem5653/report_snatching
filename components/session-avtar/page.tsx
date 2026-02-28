@@ -150,7 +150,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                 <p className="text-xs text-slate-500 truncate">{session?.email ?? "No email"}</p>
                 
                 {(session?.role === "super_admin" || 
-                  (["admin", "officer"].includes(session?.role || "") && hasTools) ||
+                  (["admin", "officer", "advanced_tool"].includes(session?.role || "") && hasTools) ||
                   session?.permissions?.token_pool
                 ) && (
                     <div className="mt-3 flex flex-col gap-2">
@@ -158,7 +158,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
                             {session?.tokens || 0} Credits Available
                         </div>
-                        {(session?.role === "super_admin" || (session?.permissions?.eyecon_access && (session?.role === "admin" || session?.role === "officer"))) && (
+                        {(session?.role === "super_admin" || session?.permissions?.eyecon_access) && (
                             <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-indigo-100 text-indigo-700 rounded-lg font-black text-[9px] uppercase tracking-wider">
                                 <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
                                 {session?.eyeconTokens || 0} Eyecon Tokens

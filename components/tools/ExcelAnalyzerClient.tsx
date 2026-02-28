@@ -22,6 +22,7 @@ export default function ExcelAnalyzerClient() {
   const [eyeconTopN, setEyeconTopN] = useState(5);
   const [enableLookup, setEnableLookup] = useState(false);
   const [enableEyecon, setEnableEyecon] = useState(false);
+  const [enableIntel, setEnableIntel] = useState(true);
   const [includeImages, setIncludeImages] = useState(false);
   const [session, setSession] = useState<any>(null);
 
@@ -158,6 +159,7 @@ export default function ExcelAnalyzerClient() {
     formData.append("eyecon_top_n", eyeconTopN.toString());
     formData.append("enable_lookup", enableLookup.toString());
     formData.append("enable_eyecon", enableEyecon.toString());
+    formData.append("enable_intel", enableIntel.toString());
     formData.append("include_images", includeImages.toString());
 
     try {
@@ -259,6 +261,18 @@ export default function ExcelAnalyzerClient() {
                         />
                     </div>
                 )}
+              </div>
+
+              <div className="flex flex-col space-y-3 border p-3 rounded-lg bg-slate-50 border-indigo-100">
+                <div className="flex items-center space-x-2">
+                    <Checkbox id="intel" checked={enableIntel} onCheckedChange={(c) => setEnableIntel(!!c)} />
+                    <div className="grid gap-1.5 leading-none">
+                        <label htmlFor="intel" className="text-sm font-bold leading-none text-indigo-700">
+                            Intelligence Report
+                        </label>
+                        <p className="text-[10px] text-muted-foreground">Pattern Analysis & Investigation Summary</p>
+                    </div>
+                </div>
               </div>
 
               {(session?.role === "super_admin" || (session?.permissions?.eyecon_access && (session?.role === "admin" || session?.role === "officer"))) && (

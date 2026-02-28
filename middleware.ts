@@ -11,6 +11,7 @@ const ROLE_PATHS: Record<string, string> = {
   officer: "/dashboard/officer-user",
   market_user: "/dashboard/market-user",
   ps_user: "/dashboard/ps-user",
+  advanced_tool: "/dashboard/advanced-tool",
 };
 
 export async function middleware(req: NextRequest) {

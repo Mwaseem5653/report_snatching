@@ -1,0 +1,138 @@
+import { NextRequest, NextResponse } from "next/server";
+import * as XLSX from "xlsx";
+import { cookies } from "next/headers";
+import jwt from "jsonwebtoken";
+import { checkAndDeductTokens } from "@/lib/tokenHelper";
+
+const SECRET = process.env.SESSION_JWT_SECRET!;
+
+function parseExcelDate(val: any): Date {
+    if (val instanceof Date) return val;
+    if (!val) return new Date(0);
+    if (typeof val === 'number') {
+        const utc_days  = Math.floor(val - 25569);
+        const utc_value = utc_days * 86400;                                        
+        const date_info = new Date(utc_value * 1000);
+        const fractional_day = val - Math.floor(val) + 0.0000001;
+        const total_seconds = Math.floor(86400 * fractional_day);
+        const seconds = total_seconds % 60;
+        const minutes = Math.floor(total_seconds / 60) % 60;
+        const hours   = Math.floor(total_seconds / 3600);
+        return new Date(date_info.getFullYear(), date_info.getMonth(), date_info.getDate(), hours, minutes, seconds);
+    }
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? new Date(0) : d;
+}
+
+function findColumn(headers: string[], candidates: string[]): string | null {
+    const lowerCandidates = candidates.map(c => c.toLowerCase());
+    return headers.find(h => lowerCandidates.includes(h.trim().toLowerCase())) || null;
+}
+
+function findTableHeaders(rows: any[][]) {
+    const keywords = ['call', 'type', 'msisdn', 'bnumber', 'a number', 'imei', 'start', 'end', 'party'];
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+        const values = rows[i].map(v => String(v).toLowerCase());
+        const matchCount = values.filter(v => keywords.some(k => v.includes(k))).length;
+        if (matchCount >= 2) return { index: i, headers: rows[i].map(String) };
+    }
+    return { index: 0, headers: rows[0].map(String) };
+}
+
+export async function POST(req: NextRequest) {
+    try {
+        const cookieStore = await cookies();
+        const token = cookieStore.get("sessionToken")?.value;
+        if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const decoded: any = jwt.verify(token, SECRET);
+
+        const formData = await req.formData();
+        const fileUrl = formData.get("url") as string;
+        
+        if (!fileUrl) return NextResponse.json({ error: "No file URL provided" }, { status: 400 });
+
+        const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, 10); // 10 tokens for visual analysis
+        if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
+
+        // Fetch from Supabase URL
+        const fileRes = await fetch(fileUrl);
+        if (!fileRes.ok) throw new Error("Failed to download file from storage.");
+        const buffer = await fileRes.arrayBuffer();
+        
+        const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+        if (rawRows.length === 0) return NextResponse.json({ error: "Empty file" }, { status: 400 });
+
+        const { index: headerIndex, headers } = findTableHeaders(rawRows);
+        const dateCol = findColumn(headers, ["CALL_START_DT_TM", "Start Date", "Datetime", "Date", "STRT_TM", "Start Time", "Time"]);
+        const addressCol = findColumn(headers, ["Address", "Location", "Addr", "SITE_ADDRESS", "SiteLocation", "Cell ID Address", "CellAddress", "Cell Name", "Tower", "Site Name"]);
+        const latCol = findColumn(headers, ["Latitude", "Lat", "LATITUDE", "CELL_LAT", "SITE_LAT", "X_COORD", "GPS_LAT"]);
+        const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON"]);
+
+        const dataRows = rawRows.slice(headerIndex + 1);
+        const allMovements: any[] = [];
+
+        dataRows.forEach((row) => {
+            const rowObj: any = {};
+            headers.forEach((h, i) => { rowObj[h] = row[i]; });
+
+            const rawDate = dateCol ? rowObj[dateCol] : null;
+            const dateObj = rawDate ? parseExcelDate(rawDate) : new Date(0);
+            
+            // Safe parsing: only parse if column was actually found
+            const lat = (latCol && rowObj[latCol]) ? parseFloat(rowObj[latCol]) : null;
+            const lon = (lonCol && rowObj[lonCol]) ? parseFloat(rowObj[lonCol]) : null;
+            const addr = addressCol ? String(rowObj[addressCol] || "").trim() : "";
+
+            const hasLoc = (lat !== null && !isNaN(lat) && lon !== null && !isNaN(lon)) || (addr && addr !== "None" && addr !== "");
+
+            if (dateObj.getTime() > 0 && hasLoc) {
+                allMovements.push({
+                    timestamp: dateObj.getTime(),
+                    displayTime: dateObj.toISOString().replace("T", " ").substring(0, 19),
+                    lat: lat,
+                    lon: lon,
+                    address: addr || `Coords: ${lat}, ${lon}`
+                });
+            }
+        });
+
+        // 1. Sort by time first
+        allMovements.sort((a, b) => a.timestamp - b.timestamp);
+
+        // 2. Sequential Deduplication (Smart Sampling)
+        // If suspect stays at one tower for 100 calls, only keep the first entry.
+        const optimizedMovements: any[] = [];
+        allMovements.forEach((m) => {
+            const last = optimizedMovements[optimizedMovements.length - 1];
+            if (!last) {
+                optimizedMovements.push(m);
+            } else {
+                const isSameAddr = last.address === m.address;
+                const isSameCoords = last.lat === m.lat && last.lon === m.lon;
+                
+                // Only push if location changed
+                if (!isSameAddr || !isSameCoords) {
+                    optimizedMovements.push(m);
+                }
+            }
+        });
+
+        return NextResponse.json({
+            success: true,
+            movements: optimizedMovements,
+            summary: {
+                totalOriginal: allMovements.length,
+                totalOptimized: optimizedMovements.length,
+                startDate: optimizedMovements.length > 0 ? optimizedMovements[0].displayTime : null,
+                endDate: optimizedMovements.length > 0 ? optimizedMovements[optimizedMovements.length - 1].displayTime : null
+            }
+        });
+
+    } catch (error: any) {
+        console.error("Movement Analysis Error:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}

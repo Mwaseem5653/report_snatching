@@ -40,6 +40,7 @@ export default function AddUserForm({
   const [permissions, setPermissions] = useState({
       excel_analyzer: false,
       geo_fencing: false,
+      movement_visualizer: false,
       ai_extractor: false,
       info_tools: false,
       cdr_generator: false,
@@ -94,9 +95,9 @@ export default function AddUserForm({
   const getAvailableRoles = () => {
     switch (sessionRole) {
       case "super_admin":
-        return ["super_admin", "admin", "officer"];
+        return ["super_admin", "admin", "officer", "advanced_tool"];
       case "admin":
-        return ["officer", "ps_user", "market_user"];
+        return ["officer", "ps_user", "market_user", "advanced_tool"];
       case "officer":
         return ["ps_user", "market_user"];
       default:
@@ -151,6 +152,7 @@ export default function AddUserForm({
   const ALL_TOOLS = [
     { key: 'excel_analyzer', label: 'Excel Analyzer' },
     { key: 'geo_fencing', label: 'Geo Fencing' },
+    { key: 'movement_visualizer', label: 'Movement Visualizer' },
     { key: 'ai_extractor', label: 'AI Application Extractor' },
     { key: 'info_tools', label: 'Info & Lookup Tools' },
     { key: 'cdr_generator', label: 'CDR Generator' },

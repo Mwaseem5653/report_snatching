@@ -204,7 +204,7 @@ function parseExcelDate(val: any): Date {
 }
 
 async function processSingleFile(buffer: ArrayBuffer, options: any) {
-    const { topN, eyeconTopN, enableLookup, enableEyecon, includeImages } = options;
+    const { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages } = options;
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
     const sheetName = wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
@@ -214,12 +214,8 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     const { index: headerIndex, headers } = findTableHeaders(rawRows);
     const dataRows = rawRows.slice(headerIndex + 1);
-    const jsonData = dataRows.map(row => {
-        const obj: any = {};
-        headers.forEach((h, i) => { obj[h] = row[i]; });
-        return obj;
-    });
-
+    
+    // Identify columns first to avoid ReferenceError
     const bCol = findColumn(headers, [
         "B Number", "BNUMBER", "b number", "b party", "b_party", "BParty", 
         "CALL_DIALED_NUM", "DIALED_NUMBER", "Dialled Number", "CONNECTED_NUMBER",
@@ -227,25 +223,103 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     ]);
     if (!bCol) return null;
 
+    const aCol = findColumn(headers, ["MSISDN", "A Number", "ANUMBER", "a party", "a_party", "AParty", "Subscriber Number", "ORIGINATING_NUMBER", "OWNER_NUMBER"]);
     const dateCol = findColumn(headers, ["CALL_START_DT_TM", "Start Date", "Datetime", "Date", "STRT_TM", "Start Time", "Time"]);
     const typeCol = findColumn(headers, ["CallType", "CALL_TYPE", "Type", "Usage Type", "Service Type"]);
-    const directionCol = findColumn(headers, ["INBOUND_OUTBOUND_IND", "Direction"]);
-    const addressCol = findColumn(headers, ["Address", "Location", "Addr", "SITE_ADDRESS", "SiteLocation", "Cell ID Address", "CellAddress"]);
+    const directionCol = findColumn(headers, ["INBOUND_OUTBOUND_IND", "Direction", "Call Direction", "Direct"]);
+    const addressCol = findColumn(headers, ["Address", "Location", "Addr", "SITE_ADDRESS", "SiteLocation", "Cell ID Address", "CellAddress", "Cell Name", "Tower", "Site Name"]);
     const imeiCol = findColumn(headers, ["IMEI", "imei", "Imei number", "Device IMEI"]);
+    const latCol = findColumn(headers, ["Latitude", "Lat", "LATITUDE", "CELL_LAT", "SITE_LAT", "X_COORD", "GPS_LAT"]);
+    const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON"]);
+
+    // Sort rows chronologically for movement tracking
+    const jsonData = dataRows.map(row => {
+        const obj: any = {};
+        headers.forEach((h, i) => { obj[h] = row[i]; });
+        const rawDate = dateCol ? obj[dateCol] : null;
+        obj._dateObj = rawDate ? parseExcelDate(rawDate) : new Date(0);
+        return obj;
+    }).sort((a, b) => a._dateObj.getTime() - b._dateObj.getTime());
 
     const mobileSummaryMap = new Map<string, any>();
     const addressSummaryMap = new Map<string, any>();
     const imeiSummaryMap = new Map<string, any>();
     const callLogMap = new Map<string, any>();
+    
+    // --- Intelligence Tracking ---
+    const nightActivity: any[] = [];
+    const mainImeiHistory = new Set<string>();
+    const disposableCheck = new Map<string, number>();
+    const aPartyNumber = new Set<string>();
+    const hourlyActivity = new Array(24).fill(0);
+    const dailyActivity = new Array(7).fill(0); // 0=Sun, 1=Mon...
+    const locationTimeFreq = new Map<string, number>(); // Key: "Day-Hour-Location"
+    const uniqueDates = new Set<string>();
+    const dailyMovementMap = new Map<string, any[]>(); // Key: "Date", Value: Array of sequential unique points
 
     jsonData.forEach((row) => {
         const rawB = row[bCol];
+        const rawA = aCol ? row[aCol] : null;
         const cleanB = normalizeNumber(rawB);
-        const rawAddr = addressCol ? String(row[addressCol] || "").trim() : null;
+        const cleanA = normalizeNumber(rawA);
+        const rawAddr = addressCol ? String(row[addressCol] || "").trim() : "";
         const rawImei = imeiCol ? String(row[imeiCol] || "").trim() : null;
-        const dateObj = dateCol ? parseExcelDate(row[dateCol]) : new Date(0);
+        const dateObj = row._dateObj;
+        
+        // Robust coordinate capture
+        const rawLat = latCol ? row[latCol] : null;
+        const rawLon = lonCol ? row[lonCol] : null;
+
+        if (cleanA) aPartyNumber.add(cleanA);
+        if (rawImei && rawImei !== "None" && rawImei !== "") mainImeiHistory.add(rawImei);
+
+        if (dateObj && dateObj.getTime() > 0) {
+            const dStr = dateObj.toISOString().split("T")[0];
+            hourlyActivity[dateObj.getHours()]++;
+            dailyActivity[dateObj.getDay()]++;
+            uniqueDates.add(dStr);
+            
+            // Fixed: Check if lat/lon are numbers even if they are 0
+            const hasCoords = (rawLat !== null && rawLat !== undefined && rawLat !== "") && 
+                              (rawLon !== null && rawLon !== undefined && rawLon !== "");
+            const hasAddr = rawAddr && rawAddr !== "None" && rawAddr !== "";
+            
+            if (hasAddr || hasCoords) {
+                const locationKey = rawAddr || `${rawLat},${rawLon}`;
+                const key = `${dateObj.getDay()}-${dateObj.getHours()}-${locationKey}`;
+                locationTimeFreq.set(key, (locationTimeFreq.get(key) || 0) + 1);
+
+                // Tracking movement sequence
+                const currentMovements = dailyMovementMap.get(dStr) || [];
+                const lastMove = currentMovements[currentMovements.length - 1];
+                
+                if (!lastMove || lastMove.addr !== rawAddr || lastMove.lat !== rawLat || lastMove.lon !== rawLon) {
+                    currentMovements.push({
+                        time: dateObj.toISOString().substring(11, 19),
+                        addr: rawAddr || `Coords: ${rawLat}, ${rawLon}`,
+                        lat: rawLat,
+                        lon: rawLon
+                    });
+                    dailyMovementMap.set(dStr, currentMovements);
+                }
+            }
+        }
 
         if (cleanB) {
+            // Disposable Check
+            disposableCheck.set(cleanB, (disposableCheck.get(cleanB) || 0) + 1);
+
+            // Night Activity Check (12 AM to 5 AM)
+            const hour = dateObj.getHours();
+            if (dateObj.getTime() > 0 && (hour >= 0 && hour <= 5)) {
+                nightActivity.push({
+                    number: cleanB,
+                    time: dateObj.toISOString().replace("T", " ").substring(0, 19),
+                    type: directionCol ? (row[directionCol] || "N/A") : "N/A",
+                    location: rawAddr || "N/A"
+                });
+            }
+
             const stats = mobileSummaryMap.get(cleanB) || { count: 0, start: dateObj, end: dateObj };
             stats.count++;
             if (dateObj.getTime() > 0) {
@@ -264,12 +338,14 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         }
 
         if (rawAddr && rawAddr !== "None" && rawAddr !== "") {
-            const stats = addressSummaryMap.get(rawAddr) || { count: 0, start: dateObj, end: dateObj };
+            const stats = addressSummaryMap.get(rawAddr) || { count: 0, start: dateObj, end: dateObj, lat: null, lon: null };
             stats.count++;
             if (dateObj.getTime() > 0) {
                 if (stats.start.getTime() === 0 || dateObj < stats.start) stats.start = dateObj;
                 if (dateObj > stats.end) stats.end = dateObj;
             }
+            if (!stats.lat && latCol) stats.lat = row[latCol];
+            if (!stats.lon && lonCol) stats.lon = row[lonCol];
             addressSummaryMap.set(rawAddr, stats);
         }
 
@@ -305,8 +381,8 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                     rec["Name"] = data.name; rec["CNIC"] = " " + data.cnic; rec["Address"] = data.address;
                     cache.set(rec["Mobile Number"], { ...cache.get(rec["Mobile Number"]), name: data.name, cnic: data.cnic, address: data.address });
                 } else {
-                    rec["Name"] = "No Record Found"; rec["CNIC"] = "No Record Found"; rec["Address"] = "No Record Found";
-                    cache.set(rec["Mobile Number"], { ...cache.get(rec["Mobile Number"]), name: "No Record Found", cnic: "No Record Found", address: "No Record Found" });
+                    rec["Name"] = " "; rec["CNIC"] = " "; rec["Address"] = " ";
+                    cache.set(rec["Mobile Number"], { ...cache.get(rec["Mobile Number"]), name: " ", cnic: " ", address: " " });
                 }
             }));
         }
@@ -324,7 +400,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                         ...cache.get(rec["Mobile Number"]), eye: eyeData.name, eyeImage: eyeData.image, eyeFb: eyeData.facebook
                     });
                 } else {
-                    rec["Eyecon Name"] = "No Record Found";
+                    rec["Eyecon Name"] = " ";
                 }
             }));
             // A small delay between batches if necessary for rate limiting, but start with none.
@@ -371,10 +447,10 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         const c = cache.get(num) || null;
         const rowData: any = {
             ...rec,
-            "Eyecon Name": c ? (c.eye || "No Record Found") : "",
-            "Name": c ? (c.name || "No Record Found") : "",
-            "CNIC": c ? (c.cnic ? " " + c.cnic : "No Record Found") : "",
-            "Address": c ? (c.address || "No Record Found") : "",
+            "Eyecon Name": c ? (c.eye || " ") : "",
+            "Name": c ? (c.name || " ") : "",
+            "CNIC": c ? (c.cnic ? " " + c.cnic : " ") : "",
+            "Address": c ? (c.address || " ") : "",
         };
         if (enableEyecon && includeImages === true) {
             rowData.eyeImage = safeLink(c?.eyeImage);
@@ -391,10 +467,10 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             num, 
             start: ms.start.getTime() > 0 ? ms.start.toISOString().substring(0, 10) : "N/A", 
             end: ms.end.getTime() > 0 ? ms.end.toISOString().substring(0, 10) : "N/A", 
-            name: c ? (c.name || "No Record Found") : "", 
-            eye: c ? (c.eye || "No Record Found") : "", 
-            cnic: c ? (c.cnic ? " " + c.cnic : "No Record Found") : "", 
-            addr: c ? (c.address || "No Record Found") : "", 
+            name: c ? (c.name || " ") : "", 
+            eye: c ? (c.eye || " ") : "", 
+            cnic: c ? (c.cnic ? " " + c.cnic : " ") : "", 
+            addr: c ? (c.address || " ") : "", 
             inS: log.inSms, outS: log.outSms, inC: log.inCall, outC: log.outCall, total: ms.count 
         };
         if (enableEyecon && includeImages === true) {
@@ -436,8 +512,22 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     if (addressSummaryMap.size > 0) {
         const s3 = outWb.addWorksheet("Addresses");
-        s3.columns = [{ header: "Site Address", key: "addr", width: 60 }, { header: "Count", key: "count", width: 10 }, { header: "Start", key: "start", width: 20 }, { header: "End", key: "end", width: 20 }];
-        s3.addRows(Array.from(addressSummaryMap.entries()).map(([a, s]) => ({ addr: a, count: s.count, start: s.start.getTime() > 0 ? s.start.toISOString().replace("T", " ").substring(0, 19) : "N/A", end: s.end.getTime() > 0 ? s.end.toISOString().replace("T", " ").substring(0, 19) : "N/A" })).sort((a, b) => b.count - a.count));
+        s3.columns = [
+            { header: "Site Address", key: "addr", width: 60 }, 
+            { header: "Count", key: "count", width: 10 }, 
+            { header: "Latitude", key: "lat", width: 15 }, 
+            { header: "Longitude", key: "lon", width: 15 }, 
+            { header: "Start", key: "start", width: 20 }, 
+            { header: "End", key: "end", width: 20 }
+        ];
+        s3.addRows(Array.from(addressSummaryMap.entries()).map(([a, s]) => ({ 
+            addr: a, 
+            count: s.count, 
+            lat: s.lat, 
+            lon: s.lon, 
+            start: s.start.getTime() > 0 ? s.start.toISOString().replace("T", " ").substring(0, 19) : "N/A", 
+            end: s.end.getTime() > 0 ? s.end.toISOString().replace("T", " ").substring(0, 19) : "N/A" 
+        })).sort((a, b) => b.count - a.count));
     }
     if (imeiSummaryMap.size > 0) {
         const s4 = outWb.addWorksheet("IMEI Numbers");
@@ -460,6 +550,164 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         });
         sRaw.addRow(cleanRow);
     });
+
+    // --- Intelligence Sheet (Game Changer Features) ---
+    if (enableIntel) {
+        const sIntel = outWb.addWorksheet("Intelligence Report");
+        
+        // Setup Columns
+        sIntel.columns = [
+            { key: "label", width: 35 },
+            { key: "v1", width: 40 },
+            { key: "v2", width: 25 },
+            { key: "v3", width: 50 }
+        ];
+
+        // Header Styling
+        const addHeader = (text: string, color: string = "FF1E3A8A") => {
+            const row = sIntel.addRow([text.toUpperCase()]);
+            row.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
+            row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } };
+            sIntel.addRow([]); // Spacer
+        };
+
+        const addSubHeader = (text: string) => {
+            const row = sIntel.addRow([text]);
+            row.font = { bold: true, size: 10, color: { argb: "FF1E3A8A" } };
+            row.border = { bottom: { style: "thin" } };
+        };
+
+        addHeader("CDR INVESTIGATION INTELLIGENCE SUMMARY", "FF1E3A8A");
+
+        // 1. Suspect Profile
+        addSubHeader("SUSPECT PROFILE & DEVICE HISTORY");
+        const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const maxDayIndex = dailyActivity.indexOf(Math.max(...dailyActivity));
+
+        sIntel.addRow(["Primary MSISDN(s)", Array.from(aPartyNumber).join(", ") || "N/A"]);
+        sIntel.addRow(["Handset IMEI History", Array.from(mainImeiHistory).join(", ") || "N/A"]);
+        sIntel.addRow(["Total Days in CDR", uniqueDates.size]);
+        sIntel.addRow(["Most Active Day", daysOfWeek[maxDayIndex]]);
+        sIntel.addRow(["Total Unique Contacts", mobileSummaryMap.size]);
+        sIntel.addRow(["Total Locations Visited", addressSummaryMap.size]);
+        sIntel.addRow([]);
+
+        // 2. Pattern of Life (Hourly Activity)
+        addSubHeader("PATTERN OF LIFE (HOURLY ACTIVITY BREAKDOWN)");
+        sIntel.addRow(["Hour", "Activity Count", "Percentage", "Visualization"]);
+        const totalCalls = hourlyActivity.reduce((a, b) => a + b, 0);
+        const maxActivity = Math.max(...hourlyActivity);
+        
+        hourlyActivity.forEach((count, hour) => {
+            const pct = totalCalls > 0 ? ((count / totalCalls) * 100).toFixed(1) : "0";
+            const bar = "█".repeat(Math.round(count / (totalCalls || 1) * 50));
+            const hStr = `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`;
+            const row = sIntel.addRow([hStr, count, pct + "%", bar]);
+            
+            // Highlight peak activity hour in red
+            if (count > 0 && count === maxActivity) {
+                row.font = { color: { argb: "FFFF0000" }, bold: true };
+            }
+        });
+        sIntel.addRow([]);
+
+        // 2.5 Day-Hour-Location Correlation (Predictive Presence)
+        addHeader("LOCATION-TIME CORRELATION (PREDICTIVE ANALYSIS)", "FF1E3A8A");
+        sIntel.addRow(["Where is the suspect most likely to be at a specific time?"]);
+        sIntel.addRow(["Day", "Time Window", "Most Frequent Location", "Confidence (Total Hits)"]);
+        
+        // Group by Day-Hour and pick the top location
+        const groupMap = new Map<string, { loc: string, count: number }>();
+        locationTimeFreq.forEach((count, key) => {
+            const [day, hour, ...locArr] = key.split("-");
+            const loc = locArr.join("-");
+            const groupKey = `${day}-${hour}`;
+            if (!groupMap.has(groupKey) || count > groupMap.get(groupKey)!.count) {
+                groupMap.set(groupKey, { loc, count });
+            }
+        });
+
+        // Filter and show top 15 most consistent patterns
+        const sortedGroups = Array.from(groupMap.entries())
+            .sort((a, b) => b[1].count - a[1].count)
+            .slice(0, 15);
+
+        sortedGroups.forEach(([key, val]) => {
+            const [dayIdx, hour] = key.split("-");
+            const timeStr = `${hour.padStart(2, '0')}:00 - ${(parseInt(hour) + 1).toString().padStart(2, '0')}:00`;
+            sIntel.addRow([daysOfWeek[parseInt(dayIdx)], timeStr, val.loc, val.count]);
+        });
+        sIntel.addRow([]);
+
+        // 3. Night Activity
+        addHeader("SUSPICIOUS NIGHT ACTIVITY (12 AM - 5 AM)", "FF991B1B");
+        sIntel.addRow(["Number", "Timestamp", "Type", "Location"]);
+        nightActivity.slice(0, 30).forEach(n => {
+            sIntel.addRow([n.number, n.time, n.type, n.location]);
+        });
+        if (nightActivity.length === 0) sIntel.addRow(["No suspicious night activity found."]);
+        sIntel.addRow([]);
+
+        // 4. Priority Contacts
+        addHeader("TOP 5 PRIORITY CONTACTS", "FF065F46");
+        sIntel.addRow(["Rank", "Mobile Number", "Total Contact Count", "First Seen", "Last Seen"]);
+        mobileSummary.slice(0, 5).forEach((m, i) => {
+            sIntel.addRow([i + 1, m["Mobile Number"], m["Count"], m["Starting Date"], m["Ending Date"]]);
+        });
+        sIntel.addRow([]);
+
+        // 5. Disposable SIM Check
+        addHeader("DISPOSABLE SIM ALERT (Single-Use Numbers)", "FF854D0E");
+        sIntel.addRow(["Criminals often use a SIM once and discard it."]);
+        sIntel.addRow(["S.No", "Number", "Contact Timestamp", "Location (if avail)"]);
+        let discCount = 0;
+        for (const [num, count] of disposableCheck.entries()) {
+            if (count === 1 && discCount < 30) {
+                const ms = mobileSummaryMap.get(num);
+                sIntel.addRow([discCount + 1, num, ms?.start.toISOString().replace("T", " ").substring(0, 19) || "N/A"]);
+                discCount++;
+            }
+        }
+        if (discCount === 0) sIntel.addRow(["No single-use numbers detected."]);
+
+        // --- Movement Tracker Sheet (New Visualization Feature) ---
+        const sMove = outWb.addWorksheet("Movement Tracker");
+        addHeader.apply(null, ["DAILY MOVEMENT & TRAVEL PATHS", "FF1E3A8A"] as any);
+        sMove.addRow(["Investigator Note: Use the 'Map Path' links to visualize travel route on Google Maps."]);
+        sMove.addRow(["Date", "Movement Sequence (Time - Location)", "Map Path (Google Maps Link)"]);
+        
+        Array.from(dailyMovementMap.entries())
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .forEach(([date, moves]) => {
+                const seq = moves.map(m => `[${m.time}] ${m.addr}`).join(" → ");
+                
+                // Build Google Maps Dir Link (Limit to 10 points for reliable link)
+                const points = moves.filter(m => m.lat && m.lon).slice(0, 10);
+                let mapLink: any = "";
+                if (points.length > 1) {
+                    const origin = `${points[0].lat},${points[0].lon}`;
+                    const dest = `${points[points.length-1].lat},${points[points.length-1].lon}`;
+                    const waypoints = points.slice(1, -1).map(p => `${p.lat},${p.lon}`).join("|");
+                    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=driving`;
+                    mapLink = { text: "Open Route in Maps", hyperlink: url };
+                } else if (points.length === 1) {
+                    const url = `https://www.google.com/maps/search/?api=1&query=${points[0].lat},${points[0].lon}`;
+                    mapLink = { text: "Open Location in Maps", hyperlink: url };
+                }
+
+                const row = sMove.addRow([date, seq, mapLink]);
+                row.getCell(2).alignment = { wrapText: true };
+            });
+        
+        sMove.getColumn(1).width = 15;
+        sMove.getColumn(2).width = 100;
+        sMove.getColumn(3).width = 25;
+
+        // Global formatting for Intel Sheet
+        sIntel.eachRow((row) => {
+            row.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+        });
+    }
 
     outWb.worksheets.forEach(ws => {
         const headerRow = ws.getRow(1);
@@ -509,6 +757,7 @@ export async function POST(req: NextRequest) {
         const eyeconTopN = parseInt(formData.get("eyecon_top_n") as string || "15");
         const enableLookup = formData.get("enable_lookup") === "true";
         const enableEyecon = formData.get("enable_eyecon") === "true";
+        const enableIntel = formData.get("enable_intel") === "true";
         const includeImages = formData.get("include_images") === "true";
 
         if (cloudinaryUrls.length === 0) return NextResponse.json({ error: "No files provided" }, { status: 400 });
@@ -532,7 +781,7 @@ export async function POST(req: NextRequest) {
             if (!res.ok) throw new Error(`Failed to download ${fileName} from Cloudinary`);
             const buffer = await res.arrayBuffer();
             
-            const reportBuffer = await processSingleFile(buffer, { topN, eyeconTopN, enableLookup, enableEyecon, includeImages });
+            const reportBuffer = await processSingleFile(buffer, { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages });
             if (reportBuffer) {
                 const outFileName = fileName.split('.').slice(0, -1).join('.') + "_Analyzed.xlsx";
                 zip.file(outFileName, reportBuffer);

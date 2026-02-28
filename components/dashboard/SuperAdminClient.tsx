@@ -12,6 +12,7 @@ import InfoToolsClient from "@/components/tools/InfoToolsClient";
 import CdrFormatClient from "@/components/tools/CdrFormatClient";
 import ExcelAnalyzerClient from "@/components/tools/ExcelAnalyzerClient";
 import GeoFencingClient from "@/components/tools/GeoFencingClient";
+import MovementVisualizerClient from "@/components/tools/MovementVisualizerClient";
 import TokenManagement from "@/components/dashboard/TokenManagement";
 import { 
   DropdownMenu, 
@@ -32,7 +33,8 @@ import {
   Wrench,
   ChevronDown,
   Coins,
-  MapPin
+  MapPin,
+  Navigation
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +72,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
   const TOOLS_MENU = [
     { id: "analyzer", label: "Excel Analyzer", icon: FileSpreadsheet, key: "excel_analyzer" },
     { id: "geo", label: "Geo Fencing", icon: MapPin, key: "geo_fencing" },
+    { id: "visualizer", label: "Movement Visualizer", icon: Navigation, key: "movement_visualizer" },
     { id: "extractor", label: "AI Extractor", icon: ScanText, key: "ai_extractor" },
     { id: "utilities", label: "Info Lookup", icon: LayoutGrid, key: "info_tools" },
     { id: "cdr", label: "CDR Generator", icon: FileCode, key: "cdr_generator" },
@@ -141,6 +144,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
         
         {(activeTab === "analyzer" && (isSuper || perms.excel_analyzer)) && <ExcelAnalyzerClient />}
         {(activeTab === "geo" && (isSuper || perms.geo_fencing)) && <GeoFencingClient />}
+        {(activeTab === "visualizer" && (isSuper || perms.movement_visualizer)) && <MovementVisualizerClient />}
         {(activeTab === "extractor" && (isSuper || perms.ai_extractor)) && <ApplicationExtractorClient />}
         {(activeTab === "utilities" && (isSuper || perms.info_tools)) && <InfoToolsClient />}
         {(activeTab === "cdr" && (isSuper || perms.cdr_generator)) && <CdrFormatClient />}
