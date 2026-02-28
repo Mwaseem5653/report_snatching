@@ -131,7 +131,7 @@ export default function MovementVisualizerClient() {
       if (result.success) {
         setAllData(result.movements);
         const dates = Array.from(new Set(result.movements.map((m: any) => m.displayTime.split(" ")[0]))).sort();
-        if (dates.length > 0) setSelectedDate(dates[0]);
+        if (dates.length > 0) setSelectedDate(dates[0] as string);
         toast.success("Tactical Data Loaded.");
       }
     } catch (err: any) { toast.error("Analysis failed."); } finally { setLoading(false); }
