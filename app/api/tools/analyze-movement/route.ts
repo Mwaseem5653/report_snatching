@@ -20,6 +20,23 @@ function parseExcelDate(val: any): Date {
         const hours   = Math.floor(total_seconds / 3600);
         return new Date(date_info.getFullYear(), date_info.getMonth(), date_info.getDate(), hours, minutes, seconds);
     }
+    
+    // 🚀 SMART FIX: Handle DD/MM/YYYY HH:MM:SS string format
+    const s = String(val).trim();
+    const ddmmyyyy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(.*)$/);
+    if (ddmmyyyy) {
+        const day = parseInt(ddmmyyyy[1]);
+        const month = parseInt(ddmmyyyy[2]) - 1; // JS months are 0-indexed
+        const year = parseInt(ddmmyyyy[3]);
+        const timePart = ddmmyyyy[4].trim();
+        
+        if (timePart) {
+            const t = timePart.split(":");
+            return new Date(year, month, day, parseInt(t[0]) || 0, parseInt(t[1]) || 0, parseInt(t[2]) || 0);
+        }
+        return new Date(year, month, day);
+    }
+
     const d = new Date(val);
     return isNaN(d.getTime()) ? new Date(0) : d;
 }
@@ -67,9 +84,9 @@ export async function POST(req: NextRequest) {
 
         const { index: headerIndex, headers } = findTableHeaders(rawRows);
         const dateCol = findColumn(headers, ["CALL_START_DT_TM", "Start Date", "Datetime", "Date", "STRT_TM", "Start Time", "Time"]);
-        const addressCol = findColumn(headers, ["Address", "Location", "Addr", "SITE_ADDRESS", "SiteLocation", "Cell ID Address", "CellAddress", "Cell Name", "Tower", "Site Name"]);
+        const addressCol = findColumn(headers, ["Address", "Location", "Addr", "SITE_ADDRESS", "SITE_ADDR", "SiteLocation", "Cell ID Address", "CellAddress", "Cell Name", "Tower", "Site Name"]);
         const latCol = findColumn(headers, ["Latitude", "Lat", "LATITUDE", "CELL_LAT", "SITE_LAT", "X_COORD", "GPS_LAT"]);
-        const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON"]);
+        const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LNG", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON"]);
 
         const dataRows = rawRows.slice(headerIndex + 1);
         const allMovements: any[] = [];
