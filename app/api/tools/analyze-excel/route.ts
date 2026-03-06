@@ -285,31 +285,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const cellCol = findColumn(headers, ["CELL_ID", "CELL", "CellID", "SITE_ID", "Site ID", "CELL_CODE"]);
     const cellidSpecialCol = findColumn(headers, ["cellid"]);
 
-    // 🚀 Pre-process rows for combined SiteLocation format
-    if (addressCol && addressCol.toLowerCase() === 'sitelocation') {
-        const addrIdx = headers.indexOf(addressCol);
-        const latIdx = latCol ? headers.indexOf(latCol) : -1;
-        const lonIdx = lonCol ? headers.indexOf(lonCol) : -1;
-
-        dataRows.forEach(row => {
-            const cellValue = String(row[addrIdx] || "").trim();
-            if (cellValue.includes('|')) {
-                const parts = cellValue.split('|');
-                if (parts.length === 3) {
-                    const potentialLat = parseFloat(parts[1]);
-                    const potentialLon = parseFloat(parts[2]);
-                    
-                    if (!isNaN(potentialLat) && !isNaN(potentialLon)) {
-                        row[addrIdx] = parts[0].trim(); // Clean the address
-                        if (latIdx !== -1) row[latIdx] = potentialLat;
-                        if (lonIdx !== -1) row[lonIdx] = potentialLon;
-                    }
-                }
-            }
-        });
-    }
-
-    // 🚀 SPECIAL FORMAT DETECTION: MSISDN + call_org_num + CALL_DIALED_NUM
     const orgNumCol = findColumn(headers, ["call_org_num", "ORG_NUM", "Originating Number"]);
     const dialedNumCol = findColumn(headers, ["CALL_DIALED_NUM", "DIALED_NUM", "Dialed Number"]);
 
@@ -342,31 +317,36 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         const rawA = aCol ? row[aCol] : null;
         const cleanA = normalizeNumber(rawA);
         
-        // 🚀 SPECIAL LOGIC: Cross-check MSISDN against Org/Dialed numbers
         let finalB: string | null = null;
-
         if (orgNumCol && dialedNumCol) {
             const cleanOrg = normalizeNumber(row[orgNumCol]);
             const cleanDialed = normalizeNumber(row[dialedNumCol]);
-
-            // Strictly collect only numeric values that are NOT the subscriber's number
-            if (cleanOrg && cleanOrg !== cleanA) {
-                finalB = cleanOrg;
-            } else if (cleanDialed && cleanDialed !== cleanA) {
-                finalB = cleanDialed;
-            }
+            if (cleanOrg && cleanOrg !== cleanA) finalB = cleanOrg;
+            else if (cleanDialed && cleanDialed !== cleanA) finalB = cleanDialed;
         } else if (bCol) {
             finalB = normalizeNumber(row[bCol]);
         }
 
-        const rawAddr = addressCol ? String(row[addressCol] || "").trim() : "";
+        let rawAddr = addressCol ? String(row[addressCol] || "").trim() : "";
+        let rawLat: any = latCol ? row[latCol] : null;
+        let rawLon: any = lonCol ? row[lonCol] : null;
         const rawImei = imeiCol ? String(row[imeiCol] || "").trim() : null;
         const dateObj = row._dateObj;
-        
-        // Robust coordinate capture
-        const rawLat = latCol ? row[latCol] : null;
-        const rawLon = lonCol ? row[lonCol] : null;
 
+        // 🚀 PERMANENT SOLUTION: Extract lat/lon from SiteLocation if format matches
+        if (addressCol && addressCol.toLowerCase() === 'sitelocation' && rawAddr.includes('|')) {
+            const parts = rawAddr.split('|');
+            if (parts.length === 3) {
+                const potentialLat = parseFloat(parts[1]);
+                const potentialLon = parseFloat(parts[2]);
+                if (!isNaN(potentialLat) && !isNaN(potentialLon)) {
+                    rawAddr = parts[0].trim(); // Use cleaned address
+                    rawLat = potentialLat;     // Overwrite lat/lon variables for this row
+                    rawLon = potentialLon;
+                }
+            }
+        }
+        
         if (cleanA) aPartyNumber.add(cleanA);
         if (rawImei && rawImei !== "None" && rawImei !== "") mainImeiHistory.add(rawImei);
 
@@ -376,9 +356,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             dailyActivity[dateObj.getDay()]++;
             uniqueDates.add(dStr);
             
-            // Fixed: Check if lat/lon are numbers even if they are 0
-            const hasCoords = (rawLat !== null && rawLat !== undefined && rawLat !== "") && 
-                              (rawLon !== null && rawLon !== undefined && rawLon !== "");
+            const hasCoords = (rawLat !== null && rawLat !== undefined && rawLat !== "");
             const hasAddr = rawAddr && rawAddr !== "None" && rawAddr !== "";
             
             if (hasAddr || hasCoords) {
@@ -386,7 +364,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                 const key = `${dateObj.getDay()}-${dateObj.getHours()}-${locationKey}`;
                 locationTimeFreq.set(key, (locationTimeFreq.get(key) || 0) + 1);
 
-                // Tracking movement sequence
                 const currentMovements = dailyMovementMap.get(dStr) || [];
                 const lastMove = currentMovements[currentMovements.length - 1];
                 
@@ -403,20 +380,11 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         }
 
         if (finalB) {
-            // Disposable Check
             disposableCheck.set(finalB, (disposableCheck.get(finalB) || 0) + 1);
-
-            // Night Activity Check (12 AM to 5 AM)
             const hour = dateObj.getHours();
             if (dateObj.getTime() > 0 && (hour >= 0 && hour <= 5)) {
-                nightActivity.push({
-                    number: finalB,
-                    time: dateObj.toISOString().replace("T", " ").substring(0, 19),
-                    type: directionCol ? (row[directionCol] || "N/A") : "N/A",
-                    location: rawAddr || "N/A"
-                });
+                nightActivity.push({ number: finalB, time: dateObj.toISOString().replace("T", " ").substring(0, 19), type: directionCol ? (row[directionCol] || "N/A") : "N/A", location: rawAddr || "N/A" });
             }
-
             const stats = mobileSummaryMap.get(finalB) || { count: 0, start: dateObj, end: dateObj };
             stats.count++;
             if (dateObj.getTime() > 0) {
@@ -426,9 +394,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             mobileSummaryMap.set(finalB, stats);
 
             const log = callLogMap.get(finalB) || { inSms: 0, outSms: 0, inCall: 0, outCall: 0 };
-            const dirVal = directionCol ? row[directionCol] : "";
-            const typeVal = typeCol ? row[typeCol] : "";
-            let typeStr = `${dirVal || ""} ${typeVal || ""}`;
+            const typeStr = `${directionCol ? row[directionCol] : ""} ${typeCol ? row[typeCol] : ""}`;
             const category = getCallCategory(typeStr);
             if (category) log[category]++;
             callLogMap.set(finalB, log);
@@ -441,23 +407,18 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                 if (stats.start.getTime() === 0 || dateObj < stats.start) stats.start = dateObj;
                 if (dateObj > stats.end) stats.end = dateObj;
             }
-            // If the current row has a valid lat/lon, prioritize it.
-            if (latCol && (row[latCol] !== null && row[latCol] !== '')) stats.lat = row[latCol];
-            if (lonCol && (row[lonCol] !== null && row[lonCol] !== '')) stats.lon = row[lonCol];
+            if (rawLat !== null && rawLat !== '') stats.lat = rawLat;
+            if (rawLon !== null && rawLon !== '') stats.lon = rawLon;
             if (!stats.lac && lacCol) stats.lac = row[lacCol];
             if (!stats.cell && cellCol) stats.cell = row[cellCol];
 
-            // 🚀 SPECIAL HEX LOGIC: Extract LAC/CELL from 'cellid' column
             if (cellidSpecialCol) {
                 const hexVal = String(row[cellidSpecialCol] || "").trim();
                 if (hexVal && hexVal.length >= 4) {
                     try {
-                        // LAC: First 4 chars reversed
                         const lacHex = hexVal.substring(0, 4).split('').reverse().join('');
                         const lacDec = parseInt(lacHex, 16);
                         if (!isNaN(lacDec)) stats.lac = lacDec;
-
-                        // CELL: Chars 5-8 reversed (if exists)
                         const cellPart = hexVal.substring(4, 8);
                         if (cellPart) {
                             const cellHex = cellPart.split('').reverse().join('');
@@ -524,15 +485,10 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                     rec["Eyecon Name"] = " ";
                 }
             }));
-            // A small delay between batches if necessary for rate limiting, but start with none.
-            // If issues persist, add a small timeout here (e.g., 200ms).
-            // await new Promise(resolve => setTimeout(resolve, 200));
         }
     }
 
     const outWb = new ExcelJS.Workbook();
-
-    // 🚀 Move "Formatted Data" to the very first position
     const sRaw = outWb.addWorksheet("Formatted Data");
     sRaw.columns = headers.map(h => ({ header: h, key: h, width: 15 }));
     jsonData.forEach(row => {
@@ -678,39 +634,24 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         s4.addRows(Array.from(imeiSummaryMap.entries()).map(([i, s]) => ({ imei: " " + i, count: s.count, start: s.start.getTime() > 0 ? s.start.toISOString().replace("T", " ").substring(0, 19) : "N/A", end: s.end.getTime() > 0 ? s.end.toISOString().replace("T", " ").substring(0, 19) : "N/A" })).sort((a, b) => b.count - a.count));
     }
 
-    // --- Intelligence Sheet (Game Changer Features) ---
     if (enableIntel) {
         const sIntel = outWb.addWorksheet("Intelligence Report");
-        
-        // Setup Columns
-        sIntel.columns = [
-            { key: "label", width: 35 },
-            { key: "v1", width: 40 },
-            { key: "v2", width: 25 },
-            { key: "v3", width: 50 }
-        ];
-
-        // Header Styling
+        sIntel.columns = [ { key: "label", width: 35 }, { key: "v1", width: 40 }, { key: "v2", width: 25 }, { key: "v3", width: 50 } ];
         const addHeader = (text: string, color: string = "FF1E3A8A") => {
             const row = sIntel.addRow([text.toUpperCase()]);
             row.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
             row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } };
-            sIntel.addRow([]); // Spacer
+            sIntel.addRow([]);
         };
-
         const addSubHeader = (text: string) => {
             const row = sIntel.addRow([text]);
             row.font = { bold: true, size: 10, color: { argb: "FF1E3A8A" } };
             row.border = { bottom: { style: "thin" } };
         };
-
         addHeader("CDR INVESTIGATION INTELLIGENCE SUMMARY", "FF1E3A8A");
-
-        // 1. Suspect Profile
         addSubHeader("SUSPECT PROFILE & DEVICE HISTORY");
         const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         const maxDayIndex = dailyActivity.indexOf(Math.max(...dailyActivity));
-
         sIntel.addRow(["Primary MSISDN(s)", Array.from(aPartyNumber).join(", ") || "N/A"]);
         sIntel.addRow(["Handset IMEI History", Array.from(mainImeiHistory).join(", ") || "N/A"]);
         sIntel.addRow(["Total Days in CDR", uniqueDates.size]);
@@ -718,32 +659,23 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         sIntel.addRow(["Total Unique Contacts", mobileSummaryMap.size]);
         sIntel.addRow(["Total Locations Visited", addressSummaryMap.size]);
         sIntel.addRow([]);
-
-        // 2. Pattern of Life (Hourly Activity)
         addSubHeader("PATTERN OF LIFE (HOURLY ACTIVITY BREAKDOWN)");
         sIntel.addRow(["Hour", "Activity Count", "Percentage", "Visualization"]);
         const totalCalls = hourlyActivity.reduce((a, b) => a + b, 0);
         const maxActivity = Math.max(...hourlyActivity);
-        
         hourlyActivity.forEach((count, hour) => {
             const pct = totalCalls > 0 ? ((count / totalCalls) * 100).toFixed(1) : "0";
             const bar = "█".repeat(Math.round(count / (totalCalls || 1) * 50));
             const hStr = `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`;
             const row = sIntel.addRow([hStr, count, pct + "%", bar]);
-            
-            // Highlight peak activity hour in red
             if (count > 0 && count === maxActivity) {
                 row.font = { color: { argb: "FFFF0000" }, bold: true };
             }
         });
         sIntel.addRow([]);
-
-        // 2.5 Day-Hour-Location Correlation (Predictive Presence)
         addHeader("LOCATION-TIME CORRELATION (PREDICTIVE ANALYSIS)", "FF1E3A8A");
         sIntel.addRow(["Where is the suspect most likely to be at a specific time?"]);
         sIntel.addRow(["Day", "Time Window", "Most Frequent Location", "Confidence (Total Hits)"]);
-        
-        // Group by Day-Hour and pick the top location
         const groupMap = new Map<string, { loc: string, count: number }>();
         locationTimeFreq.forEach((count, key) => {
             const [day, hour, ...locArr] = key.split("-");
@@ -753,37 +685,24 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                 groupMap.set(groupKey, { loc, count });
             }
         });
-
-        // Filter and show top 15 most consistent patterns
-        const sortedGroups = Array.from(groupMap.entries())
-            .sort((a, b) => b[1].count - a[1].count)
-            .slice(0, 15);
-
+        const sortedGroups = Array.from(groupMap.entries()).sort((a, b) => b[1].count - a[1].count).slice(0, 15);
         sortedGroups.forEach(([key, val]) => {
             const [dayIdx, hour] = key.split("-");
             const timeStr = `${hour.padStart(2, '0')}:00 - ${(parseInt(hour) + 1).toString().padStart(2, '0')}:00`;
             sIntel.addRow([daysOfWeek[parseInt(dayIdx)], timeStr, val.loc, val.count]);
         });
         sIntel.addRow([]);
-
-        // 3. Night Activity
         addHeader("SUSPICIOUS NIGHT ACTIVITY (12 AM - 5 AM)", "FF991B1B");
         sIntel.addRow(["Number", "Timestamp", "Type", "Location"]);
-        nightActivity.slice(0, 30).forEach(n => {
-            sIntel.addRow([n.number, n.time, n.type, n.location]);
-        });
+        nightActivity.slice(0, 30).forEach(n => { sIntel.addRow([n.number, n.time, n.type, n.location]); });
         if (nightActivity.length === 0) sIntel.addRow(["No suspicious night activity found."]);
         sIntel.addRow([]);
-
-        // 4. Priority Contacts
         addHeader("TOP 5 PRIORITY CONTACTS", "FF065F46");
         sIntel.addRow(["Rank", "Mobile Number", "Total Contact Count", "First Seen", "Last Seen"]);
         mobileSummary.slice(0, 5).forEach((m, i) => {
             sIntel.addRow([i + 1, m["Mobile Number"], m["Count"], m["Starting Date"], m["Ending Date"]]);
         });
         sIntel.addRow([]);
-
-        // 5. Disposable SIM Check
         addHeader("DISPOSABLE SIM ALERT (Single-Use Numbers)", "FF854D0E");
         sIntel.addRow(["Criminals often use a SIM once and discard it."]);
         sIntel.addRow(["S.No", "Number", "Contact Timestamp", "Location (if avail)"]);
@@ -796,8 +715,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             }
         }
         if (discCount === 0) sIntel.addRow(["No single-use numbers detected."]);
-
-        // Global formatting for Intel Sheet
         sIntel.eachRow((row) => {
             row.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
         });
@@ -832,7 +749,6 @@ export async function POST(req: NextRequest) {
 
         const formData = await req.formData();
         
-        // Extract Cloudinary data
         const cloudinaryUrls: string[] = [];
         const cloudinaryPublicIds: string[] = [];
         const fileNames: string[] = [];
@@ -870,7 +786,6 @@ export async function POST(req: NextRequest) {
             const url = cloudinaryUrls[i];
             const fileName = fileNames[i];
             
-            // Download from Cloudinary
             const res = await fetch(url);
             if (!res.ok) throw new Error(`Failed to download ${fileName} from Cloudinary`);
             const buffer = await res.arrayBuffer();
