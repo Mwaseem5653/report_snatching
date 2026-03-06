@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   title: "Sindh Police - Digital Reporting Portal",
   description: "Securely report stolen or lost mobile devices to Sindh Police.",
   icons: {
-    icon: "/logo.png",
+    icon: "/vercel.png",
   },
 };
 
