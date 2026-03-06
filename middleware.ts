@@ -32,18 +32,19 @@ export async function middleware(req: NextRequest) {
   // Dashboard protection
   if (url.pathname.startsWith("/dashboard")) {
     const token = req.cookies.get("sessionToken")?.value;
-
-    if (!token) {
-      return NextResponse.redirect(new URL("/authentication/login", req.nextUrl.origin));
-    }
+    if (!token) return NextResponse.redirect(new URL("/authentication/login", req.nextUrl.origin));
 
     try {
       const { payload }: any = await jwtVerify(token, SECRET);
-
       const roleKey = (payload.role || "").toLowerCase();
-      // Ensure we redirect to a path that actually exists in our app folder
       const expectedPath = ROLE_PATHS[roleKey] ?? "/dashboard/normal-user";
 
+      // Special handling for the base /dashboard path
+      if (url.pathname === "/dashboard") {
+        return NextResponse.redirect(new URL(expectedPath, req.nextUrl.origin));
+      }
+
+      // If user tries to access a path that doesn't match their role, redirect them
       if (!url.pathname.startsWith(expectedPath)) {
         return NextResponse.redirect(new URL(expectedPath, req.nextUrl.origin));
       }
