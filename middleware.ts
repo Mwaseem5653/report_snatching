@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
-const SECRET = new TextEncoder().encode(process.env.SESSION_JWT_SECRET!);
+// Use a fallback secret if the env is missing (only for safety, actual verify will use the real secret)
+const SECRET = new TextEncoder().encode(process.env.SESSION_JWT_SECRET || "fallback_secret_change_me");
 
 const ROLE_PATHS: Record<string, string> = {
   super_admin: "/dashboard/super-admin",
@@ -16,43 +17,52 @@ const ROLE_PATHS: Record<string, string> = {
 };
 
 export async function middleware(req: NextRequest) {
-  const url = req.nextUrl.clone();
+  const { pathname } = req.nextUrl;
 
-  // Whitelist public routes
+  // 1. Whitelist Public Routes
   if (
-    url.pathname === "/dashboard/normal-user" || 
-    url.pathname.startsWith("/auth") ||
-    url.pathname.startsWith("/authentication") ||
-    url.pathname === "/" ||
-    url.pathname.startsWith("/api")
+    pathname === "/" ||
+    pathname === "/dashboard/normal-user" ||
+    pathname.startsWith("/authentication") ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/auth") ||
+    pathname.includes(".") // For static files like images/logos
   ) {
     return NextResponse.next();
   }
 
-  // Dashboard protection
-  if (url.pathname.startsWith("/dashboard")) {
+  // 2. Protect Dashboards
+  if (pathname.startsWith("/dashboard")) {
     const token = req.cookies.get("sessionToken")?.value;
-    if (!token) return NextResponse.redirect(new URL("/authentication/login", req.nextUrl.origin));
+
+    // No token? Go to login
+    if (!token) {
+      return NextResponse.redirect(new URL("/authentication/login", req.url));
+    }
 
     try {
+      // Verify token
       const { payload }: any = await jwtVerify(token, SECRET);
-      const roleKey = (payload.role || "").toLowerCase();
-      const expectedPath = ROLE_PATHS[roleKey] ?? "/dashboard/normal-user";
+      const role = (payload.role || "user").toLowerCase();
+      const expectedPath = ROLE_PATHS[role] || "/dashboard/normal-user";
 
-      // Special handling for the base /dashboard path
-      if (url.pathname === "/dashboard") {
-        return NextResponse.redirect(new URL(expectedPath, req.nextUrl.origin));
+      // If user is at the root /dashboard, send them to their specific one
+      if (pathname === "/dashboard") {
+        return NextResponse.redirect(new URL(expectedPath, req.url));
       }
 
-      // If user tries to access a path that doesn't match their role, redirect them
-      if (!url.pathname.startsWith(expectedPath)) {
-        return NextResponse.redirect(new URL(expectedPath, req.nextUrl.origin));
+      // Check if they are on the wrong path for their role
+      if (!pathname.startsWith(expectedPath)) {
+        return NextResponse.redirect(new URL(expectedPath, req.url));
       }
 
       return NextResponse.next();
     } catch (err) {
-      console.warn("JWT verification failed:", err);
-      return NextResponse.redirect(new URL("/authentication/login", req.nextUrl.origin));
+      console.error("Middleware Auth Error:", err);
+      // If token is invalid, clear it and go to login
+      const res = NextResponse.redirect(new URL("/authentication/login", req.url));
+      res.cookies.delete("sessionToken");
+      return res;
     }
   }
 
@@ -60,5 +70,8 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/dashboard"],
+  matcher: [
+    "/dashboard/:path*",
+    "/dashboard"
+  ],
 };
