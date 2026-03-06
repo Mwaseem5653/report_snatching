@@ -18,6 +18,8 @@ export const metadata: Metadata = {
   description: "Securely report stolen or lost mobile devices to Sindh Police.",
   icons: {
     icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
   },
 };
 
