@@ -441,8 +441,9 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                 if (stats.start.getTime() === 0 || dateObj < stats.start) stats.start = dateObj;
                 if (dateObj > stats.end) stats.end = dateObj;
             }
-            if (!stats.lat && latCol) stats.lat = row[latCol];
-            if (!stats.lon && lonCol) stats.lon = row[lonCol];
+            // If the current row has a valid lat/lon, prioritize it.
+            if (latCol && (row[latCol] !== null && row[latCol] !== '')) stats.lat = row[latCol];
+            if (lonCol && (row[lonCol] !== null && row[lonCol] !== '')) stats.lon = row[lonCol];
             if (!stats.lac && lacCol) stats.lac = row[lacCol];
             if (!stats.cell && cellCol) stats.cell = row[cellCol];
 
