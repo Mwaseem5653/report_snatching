@@ -12,6 +12,7 @@ const ROLE_PATHS: Record<string, string> = {
   market_user: "/dashboard/market-user",
   ps_user: "/dashboard/ps-user",
   advanced_tool: "/dashboard/advanced-tool",
+  user: "/dashboard/normal-user",
 };
 
 export async function middleware(req: NextRequest) {
@@ -19,7 +20,7 @@ export async function middleware(req: NextRequest) {
 
   // Whitelist public routes
   if (
-    url.pathname === ("/dashboard/normal-user") || 
+    url.pathname === "/dashboard/normal-user" || 
     url.pathname.startsWith("/auth") ||
     url.pathname.startsWith("/authentication") ||
     url.pathname === "/" ||
@@ -40,7 +41,8 @@ export async function middleware(req: NextRequest) {
       const { payload }: any = await jwtVerify(token, SECRET);
 
       const roleKey = (payload.role || "").toLowerCase();
-      const expectedPath = ROLE_PATHS[roleKey] ?? "/dashboard/user";
+      // Ensure we redirect to a path that actually exists in our app folder
+      const expectedPath = ROLE_PATHS[roleKey] ?? "/dashboard/normal-user";
 
       if (!url.pathname.startsWith(expectedPath)) {
         return NextResponse.redirect(new URL(expectedPath, req.nextUrl.origin));
