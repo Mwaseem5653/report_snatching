@@ -20,6 +20,12 @@ import {
   Cpu,
   Eye
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export default function AdvancedToolClient({ initialSession }: { initialSession: any }) {
@@ -44,7 +50,7 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
             { id: "extractor", key: "ai_extractor" },
             { id: "utilities", key: "info_tools" },
             { id: "cdr", key: "cdr_generator" },
-          ].filter(t => isSuper || perms[t.key]);
+          ].filter(t => t && (isSuper || perms[t.key]));
           
           if (currentTools.length > 0 && !currentTools.some(t => t.id === activeTab)) {
             setActiveTab(currentTools[0].id);
@@ -66,39 +72,46 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
     { id: "extractor", label: "AI Extractor", icon: ScanText, key: "ai_extractor" },
     { id: "utilities", label: "Info Lookup", icon: LayoutGrid, key: "info_tools" },
     { id: "cdr", label: "CDR Generator", icon: FileCode, key: "cdr_generator" },
-  ].filter(t => isSuper || perms[t.key]);
+  ].filter(t => t && (isSuper || perms[t.key]));
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
     <SessionHeader initialSession={session}>        
-        <nav className="flex items-center gap-1 p-1 bg-slate-100/50 rounded-xl border border-slate-200/50">
-        {/* Render permitted tools directly */}
-        {TOOLS_MENU.map((tool) => {
-            const Icon = tool.icon;
-            const isActive = activeTab === tool.id;
-            return (
-            <button
-                key={tool.id}
-                onClick={() => setActiveTab(tool.id)}
-                className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200",
-                isActive 
-                    ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200" 
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/50"
-                )}
-            >
-                <Icon size={16} />
-                <span className="hidden lg:inline">{tool.label}</span>
-            </button>
-            );
-        })}
+        <TooltipProvider>
+            <nav className="flex items-center gap-1.5 p-1.5 bg-slate-100/50 rounded-2xl border border-slate-200/50 overflow-x-auto no-scrollbar max-w-full">
+            {/* Render permitted tools directly */}
+            {TOOLS_MENU.map((tool) => {
+                const Icon = tool.icon;
+                const isActive = activeTab === tool.id;
+                return (
+                <Tooltip key={tool.id} delayDuration={0}>
+                    <TooltipTrigger asChild>
+                        <button
+                            onClick={() => setActiveTab(tool.id)}
+                            className={cn(
+                            "flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-xl transition-all duration-200 shrink-0",
+                            isActive 
+                                ? "bg-white text-blue-700 shadow-md ring-1 ring-slate-200 scale-105" 
+                                : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/50"
+                            )}
+                        >
+                            <Icon size={isActive ? 22 : 20} strokeWidth={isActive ? 2.5 : 2} />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="font-bold text-[10px] uppercase tracking-widest bg-[#0a2c4e] text-white border-none py-2 px-3">
+                        {tool.label}
+                    </TooltipContent>
+                </Tooltip>
+                );
+            })}
 
-        {TOOLS_MENU.length === 0 && (
-            <div className="px-4 py-2 text-slate-400 text-xs italic">
-                No tools assigned to your account.
-            </div>
-        )}
-        </nav>
+            {TOOLS_MENU.length === 0 && (
+                <div className="px-4 py-2 text-slate-400 text-xs italic">
+                    No tools assigned to your account.
+                </div>
+            )}
+            </nav>
+        </TooltipProvider>
     </SessionHeader>
 
     <main className="flex-1 container mx-auto px-4 pt-4 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">

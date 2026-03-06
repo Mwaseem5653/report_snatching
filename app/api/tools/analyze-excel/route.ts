@@ -285,6 +285,30 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const cellCol = findColumn(headers, ["CELL_ID", "CELL", "CellID", "SITE_ID", "Site ID", "CELL_CODE"]);
     const cellidSpecialCol = findColumn(headers, ["cellid"]);
 
+    // 🚀 Pre-process rows for combined SiteLocation format
+    if (addressCol && addressCol.toLowerCase() === 'sitelocation') {
+        const addrIdx = headers.indexOf(addressCol);
+        const latIdx = latCol ? headers.indexOf(latCol) : -1;
+        const lonIdx = lonCol ? headers.indexOf(lonCol) : -1;
+
+        dataRows.forEach(row => {
+            const cellValue = String(row[addrIdx] || "").trim();
+            if (cellValue.includes('|')) {
+                const parts = cellValue.split('|');
+                if (parts.length === 3) {
+                    const potentialLat = parseFloat(parts[1]);
+                    const potentialLon = parseFloat(parts[2]);
+                    
+                    if (!isNaN(potentialLat) && !isNaN(potentialLon)) {
+                        row[addrIdx] = parts[0].trim(); // Clean the address
+                        if (latIdx !== -1) row[latIdx] = potentialLat;
+                        if (lonIdx !== -1) row[lonIdx] = potentialLon;
+                    }
+                }
+            }
+        });
+    }
+
     // 🚀 SPECIAL FORMAT DETECTION: MSISDN + call_org_num + CALL_DIALED_NUM
     const orgNumCol = findColumn(headers, ["call_org_num", "ORG_NUM", "Originating Number"]);
     const dialedNumCol = findColumn(headers, ["CALL_DIALED_NUM", "DIALED_NUM", "Dialed Number"]);
