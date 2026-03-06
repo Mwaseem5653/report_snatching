@@ -185,7 +185,7 @@ function findTableHeaders(rows: any[][]) {
 }
 
 // --- Helper: Parse Date ---
-function parseExcelDate(val: any): Date {
+function parseExcelDate(val: any, formatHint: "DMY" | "MDY" = "DMY"): Date {
     if (val instanceof Date) return val;
     if (!val) return new Date(0);
     if (typeof val === 'number') {
@@ -199,6 +199,39 @@ function parseExcelDate(val: any): Date {
         const hours   = Math.floor(total_seconds / 3600);
         return new Date(date_info.getFullYear(), date_info.getMonth(), date_info.getDate(), hours, minutes, seconds);
     }
+    
+    // Robust String Parsing for DD/MM/YYYY HH:mm:ss
+    let s = String(val).trim();
+    const match = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(\s+\d{1,2}:\d{1,2}(:\d{1,2})?)?/);
+    if (match) {
+        const p1 = parseInt(match[1]);
+        const p2 = parseInt(match[2]);
+        const year = parseInt(match[3]);
+        
+        let day, month;
+        if (p1 > 12) {
+            day = p1; month = p2 - 1;
+        } else if (p2 > 12) {
+            day = p2; month = p1 - 1;
+        } else {
+            if (formatHint === "MDY") {
+                day = p2; month = p1 - 1;
+            } else {
+                day = p1; month = p2 - 1;
+            }
+        }
+
+        let hour = 0, min = 0, sec = 0;
+        if (match[4]) {
+            const timeParts = match[4].trim().split(':');
+            hour = parseInt(timeParts[0]);
+            min = parseInt(timeParts[1]);
+            sec = timeParts[2] ? parseInt(timeParts[2]) : 0;
+        }
+        const d = new Date(year, month, day, hour, min, sec);
+        if (!isNaN(d.getTime())) return d;
+    }
+
     const d = new Date(val);
     return isNaN(d.getTime()) ? new Date(0) : d;
 }
@@ -215,7 +248,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const { index: headerIndex, headers } = findTableHeaders(rawRows);
     const dataRows = rawRows.slice(headerIndex + 1);
     
-    // Identify columns first to avoid ReferenceError
     const bCol = findColumn(headers, [
         "B Number", "BNUMBER", "b number", "b party", "b_party", "BParty", 
         "CALL_DIALED_NUM", "DIALED_NUMBER", "Dialled Number", "CONNECTED_NUMBER",
@@ -225,19 +257,44 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     const aCol = findColumn(headers, ["MSISDN", "A Number", "ANUMBER", "a party", "a_party", "AParty", "Subscriber Number", "ORIGINATING_NUMBER", "OWNER_NUMBER"]);
     const dateCol = findColumn(headers, ["CALL_START_DT_TM", "Start Date", "Datetime", "Date", "STRT_TM", "Start Time", "Time"]);
+    
+    // 🚀 Detect Date Format Hint
+    let formatHint: "DMY" | "MDY" = "DMY";
+    if (dateCol) {
+        const dateIdx = headers.indexOf(dateCol);
+        for (const row of dataRows.slice(0, 100)) {
+            const val = row[dateIdx];
+            if (!val || val instanceof Date) continue;
+            const m = String(val).match(/^(\d{1,2})[\/\-](\d{1,2})/);
+            if (m) {
+                const p1 = parseInt(m[1]);
+                const p2 = parseInt(m[2]);
+                if (p1 > 12) { formatHint = "DMY"; break; }
+                if (p2 > 12) { formatHint = "MDY"; break; }
+            }
+        }
+    }
+
     const typeCol = findColumn(headers, ["CallType", "CALL_TYPE", "Type", "Usage Type", "Service Type"]);
     const directionCol = findColumn(headers, ["INBOUND_OUTBOUND_IND", "Direction", "Call Direction", "Direct"]);
     const addressCol = findColumn(headers, ["Address", "Location", "Addr", "SITE_ADDRESS", "SiteLocation", "Cell ID Address", "CellAddress", "Cell Name", "Tower", "Site Name"]);
     const imeiCol = findColumn(headers, ["IMEI", "imei", "Imei number", "Device IMEI"]);
-    const latCol = findColumn(headers, ["Latitude", "Lat", "LATITUDE", "CELL_LAT", "SITE_LAT", "X_COORD", "GPS_LAT"]);
-    const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON"]);
+    const latCol = findColumn(headers, ["Latitude", "Lat", "LATITUDE", "CELL_LAT", "SITE_LAT", "X_COORD", "GPS_LAT", "LATITUTDE", "LATITUD", "LATITIDE"]);
+    const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LNG", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON", "LONGITUTDE", "LONGITUD", "LONGITIDE", "LANGUTIDE", "LANGITUDE"]);
+    const lacCol = findColumn(headers, ["LAC_ID", "LAC", "Location Area Code", "LAC_CODE"]);
+    const cellCol = findColumn(headers, ["CELL_ID", "CELL", "CellID", "SITE_ID", "Site ID", "CELL_CODE"]);
+    const cellidSpecialCol = findColumn(headers, ["cellid"]);
+
+    // 🚀 SPECIAL FORMAT DETECTION: MSISDN + call_org_num + CALL_DIALED_NUM
+    const orgNumCol = findColumn(headers, ["call_org_num", "ORG_NUM", "Originating Number"]);
+    const dialedNumCol = findColumn(headers, ["CALL_DIALED_NUM", "DIALED_NUM", "Dialed Number"]);
 
     // Sort rows chronologically for movement tracking
     const jsonData = dataRows.map(row => {
         const obj: any = {};
         headers.forEach((h, i) => { obj[h] = row[i]; });
         const rawDate = dateCol ? obj[dateCol] : null;
-        obj._dateObj = rawDate ? parseExcelDate(rawDate) : new Date(0);
+        obj._dateObj = rawDate ? parseExcelDate(rawDate, formatHint) : new Date(0);
         return obj;
     }).sort((a, b) => a._dateObj.getTime() - b._dateObj.getTime());
 
@@ -258,10 +315,26 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const dailyMovementMap = new Map<string, any[]>(); // Key: "Date", Value: Array of sequential unique points
 
     jsonData.forEach((row) => {
-        const rawB = row[bCol];
         const rawA = aCol ? row[aCol] : null;
-        const cleanB = normalizeNumber(rawB);
         const cleanA = normalizeNumber(rawA);
+        
+        // 🚀 SPECIAL LOGIC: Cross-check MSISDN against Org/Dialed numbers
+        let finalB: string | null = null;
+
+        if (orgNumCol && dialedNumCol) {
+            const cleanOrg = normalizeNumber(row[orgNumCol]);
+            const cleanDialed = normalizeNumber(row[dialedNumCol]);
+
+            // Strictly collect only numeric values that are NOT the subscriber's number
+            if (cleanOrg && cleanOrg !== cleanA) {
+                finalB = cleanOrg;
+            } else if (cleanDialed && cleanDialed !== cleanA) {
+                finalB = cleanDialed;
+            }
+        } else if (bCol) {
+            finalB = normalizeNumber(row[bCol]);
+        }
+
         const rawAddr = addressCol ? String(row[addressCol] || "").trim() : "";
         const rawImei = imeiCol ? String(row[imeiCol] || "").trim() : null;
         const dateObj = row._dateObj;
@@ -305,40 +378,40 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             }
         }
 
-        if (cleanB) {
+        if (finalB) {
             // Disposable Check
-            disposableCheck.set(cleanB, (disposableCheck.get(cleanB) || 0) + 1);
+            disposableCheck.set(finalB, (disposableCheck.get(finalB) || 0) + 1);
 
             // Night Activity Check (12 AM to 5 AM)
             const hour = dateObj.getHours();
             if (dateObj.getTime() > 0 && (hour >= 0 && hour <= 5)) {
                 nightActivity.push({
-                    number: cleanB,
+                    number: finalB,
                     time: dateObj.toISOString().replace("T", " ").substring(0, 19),
                     type: directionCol ? (row[directionCol] || "N/A") : "N/A",
                     location: rawAddr || "N/A"
                 });
             }
 
-            const stats = mobileSummaryMap.get(cleanB) || { count: 0, start: dateObj, end: dateObj };
+            const stats = mobileSummaryMap.get(finalB) || { count: 0, start: dateObj, end: dateObj };
             stats.count++;
             if (dateObj.getTime() > 0) {
                 if (stats.start.getTime() === 0 || dateObj < stats.start) stats.start = dateObj;
                 if (dateObj > stats.end) stats.end = dateObj;
             }
-            mobileSummaryMap.set(cleanB, stats);
+            mobileSummaryMap.set(finalB, stats);
 
-            const log = callLogMap.get(cleanB) || { inSms: 0, outSms: 0, inCall: 0, outCall: 0 };
+            const log = callLogMap.get(finalB) || { inSms: 0, outSms: 0, inCall: 0, outCall: 0 };
             const dirVal = directionCol ? row[directionCol] : "";
             const typeVal = typeCol ? row[typeCol] : "";
             let typeStr = `${dirVal || ""} ${typeVal || ""}`;
             const category = getCallCategory(typeStr);
             if (category) log[category]++;
-            callLogMap.set(cleanB, log);
+            callLogMap.set(finalB, log);
         }
 
         if (rawAddr && rawAddr !== "None" && rawAddr !== "") {
-            const stats = addressSummaryMap.get(rawAddr) || { count: 0, start: dateObj, end: dateObj, lat: null, lon: null };
+            const stats = addressSummaryMap.get(rawAddr) || { count: 0, start: dateObj, end: dateObj, lat: null, lon: null, lac: null, cell: null };
             stats.count++;
             if (dateObj.getTime() > 0) {
                 if (stats.start.getTime() === 0 || dateObj < stats.start) stats.start = dateObj;
@@ -346,6 +419,29 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             }
             if (!stats.lat && latCol) stats.lat = row[latCol];
             if (!stats.lon && lonCol) stats.lon = row[lonCol];
+            if (!stats.lac && lacCol) stats.lac = row[lacCol];
+            if (!stats.cell && cellCol) stats.cell = row[cellCol];
+
+            // 🚀 SPECIAL HEX LOGIC: Extract LAC/CELL from 'cellid' column
+            if (cellidSpecialCol) {
+                const hexVal = String(row[cellidSpecialCol] || "").trim();
+                if (hexVal && hexVal.length >= 4) {
+                    try {
+                        // LAC: First 4 chars reversed
+                        const lacHex = hexVal.substring(0, 4).split('').reverse().join('');
+                        const lacDec = parseInt(lacHex, 16);
+                        if (!isNaN(lacDec)) stats.lac = lacDec;
+
+                        // CELL: Chars 5-8 reversed (if exists)
+                        const cellPart = hexVal.substring(4, 8);
+                        if (cellPart) {
+                            const cellHex = cellPart.split('').reverse().join('');
+                            const cellDec = parseInt(cellHex, 16);
+                            if (!isNaN(cellDec)) stats.cell = cellDec;
+                        }
+                    } catch (e) {}
+                }
+            }
             addressSummaryMap.set(rawAddr, stats);
         }
 
@@ -533,6 +629,8 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         s3.columns = [
             { header: "Site Address", key: "addr", width: 60 }, 
             { header: "Count", key: "count", width: 10 }, 
+            { header: "LAC_ID", key: "lac", width: 12 }, 
+            { header: "CELL_ID", key: "cell", width: 12 }, 
             { header: "Latitude", key: "lat", width: 15 }, 
             { header: "Longitude", key: "lon", width: 15 }, 
             { header: "Start", key: "start", width: 20 }, 
@@ -541,6 +639,8 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         s3.addRows(Array.from(addressSummaryMap.entries()).map(([a, s]) => ({ 
             addr: a, 
             count: s.count, 
+            lac: s.lac,
+            cell: s.cell,
             lat: s.lat, 
             lon: s.lon, 
             start: s.start.getTime() > 0 ? s.start.toISOString().replace("T", " ").substring(0, 19) : "N/A", 
@@ -671,39 +771,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             }
         }
         if (discCount === 0) sIntel.addRow(["No single-use numbers detected."]);
-
-        // --- Movement Tracker Sheet (New Visualization Feature) ---
-        const sMove = outWb.addWorksheet("Movement Tracker");
-        addHeader.apply(null, ["DAILY MOVEMENT & TRAVEL PATHS", "FF1E3A8A"] as any);
-        sMove.addRow(["Investigator Note: Use the 'Map Path' links to visualize travel route on Google Maps."]);
-        sMove.addRow(["Date", "Movement Sequence (Time - Location)", "Map Path (Google Maps Link)"]);
-        
-        Array.from(dailyMovementMap.entries())
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .forEach(([date, moves]) => {
-                const seq = moves.map(m => `[${m.time}] ${m.addr}`).join(" → ");
-                
-                // Build Google Maps Dir Link (Limit to 10 points for reliable link)
-                const points = moves.filter(m => m.lat && m.lon).slice(0, 10);
-                let mapLink: any = "";
-                if (points.length > 1) {
-                    const origin = `${points[0].lat},${points[0].lon}`;
-                    const dest = `${points[points.length-1].lat},${points[points.length-1].lon}`;
-                    const waypoints = points.slice(1, -1).map(p => `${p.lat},${p.lon}`).join("|");
-                    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=driving`;
-                    mapLink = { text: "Open Route in Maps", hyperlink: url };
-                } else if (points.length === 1) {
-                    const url = `https://www.google.com/maps/search/?api=1&query=${points[0].lat},${points[0].lon}`;
-                    mapLink = { text: "Open Location in Maps", hyperlink: url };
-                }
-
-                const row = sMove.addRow([date, seq, mapLink]);
-                row.getCell(2).alignment = { wrapText: true };
-            });
-        
-        sMove.getColumn(1).width = 15;
-        sMove.getColumn(2).width = 100;
-        sMove.getColumn(3).width = 25;
 
         // Global formatting for Intel Sheet
         sIntel.eachRow((row) => {

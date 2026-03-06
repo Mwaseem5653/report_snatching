@@ -6,7 +6,7 @@ import { checkAndDeductTokens } from "@/lib/tokenHelper";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
-function parseExcelDate(val: any): Date {
+function parseExcelDate(val: any, formatHint: "DMY" | "MDY" = "DMY"): Date {
     if (val instanceof Date) return val;
     if (!val) return new Date(0);
     if (typeof val === 'number') {
@@ -21,20 +21,38 @@ function parseExcelDate(val: any): Date {
         return new Date(date_info.getFullYear(), date_info.getMonth(), date_info.getDate(), hours, minutes, seconds);
     }
     
-    // 🚀 SMART FIX: Handle DD/MM/YYYY HH:MM:SS string format
-    const s = String(val).trim();
-    const ddmmyyyy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(.*)$/);
-    if (ddmmyyyy) {
-        const day = parseInt(ddmmyyyy[1]);
-        const month = parseInt(ddmmyyyy[2]) - 1; // JS months are 0-indexed
-        const year = parseInt(ddmmyyyy[3]);
-        const timePart = ddmmyyyy[4].trim();
+    let s = String(val).trim();
+    const match = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(\s+\d{1,2}:\d{1,2}(:\d{1,2})?)?/);
+    
+    if (match) {
+        const p1 = parseInt(match[1]);
+        const p2 = parseInt(match[2]);
+        const year = parseInt(match[3]);
         
-        if (timePart) {
-            const t = timePart.split(":");
-            return new Date(year, month, day, parseInt(t[0]) || 0, parseInt(t[1]) || 0, parseInt(t[2]) || 0);
+        let day, month;
+        // 🚀 Smart Detection: If part 2 > 12, it MUST be MM/DD/YYYY. If part 1 > 12, it MUST be DD/MM/YYYY.
+        if (p1 > 12) {
+            day = p1; month = p2 - 1;
+        } else if (p2 > 12) {
+            day = p2; month = p1 - 1;
+        } else {
+            // Ambiguous (both <= 12), use hint or default
+            if (formatHint === "MDY") {
+                day = p2; month = p1 - 1;
+            } else {
+                day = p1; month = p2 - 1;
+            }
         }
-        return new Date(year, month, day);
+        
+        let hour = 0, min = 0, sec = 0;
+        if (match[4]) {
+            const timeParts = match[4].trim().split(':');
+            hour = parseInt(timeParts[0]);
+            min = parseInt(timeParts[1]);
+            sec = timeParts[2] ? parseInt(timeParts[2]) : 0;
+        }
+        const d = new Date(year, month, day, hour, min, sec);
+        if (!isNaN(d.getTime())) return d;
     }
 
     const d = new Date(val);
@@ -54,6 +72,18 @@ function findTableHeaders(rows: any[][]) {
         if (matchCount >= 2) return { index: i, headers: rows[i].map(String) };
     }
     return { index: 0, headers: rows[0].map(String) };
+}
+
+// --- Helper: Format Date consistently ---
+function formatDate(d: Date): string {
+    if (!d || isNaN(d.getTime()) || d.getTime() === 0) return "N/A";
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const seconds = String(d.getSeconds()).padStart(2, '0');
+    return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -85,18 +115,24 @@ export async function POST(req: NextRequest) {
         const { index: headerIndex, headers } = findTableHeaders(rawRows);
         const dateCol = findColumn(headers, ["CALL_START_DT_TM", "Start Date", "Datetime", "Date", "STRT_TM", "Start Time", "Time"]);
         const addressCol = findColumn(headers, ["Address", "Location", "Addr", "SITE_ADDRESS", "SITE_ADDR", "SiteLocation", "Cell ID Address", "CellAddress", "Cell Name", "Tower", "Site Name"]);
-        const latCol = findColumn(headers, ["Latitude", "Lat", "LATITUDE", "CELL_LAT", "SITE_LAT", "X_COORD", "GPS_LAT"]);
-        const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LNG", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON"]);
+        const latCol = findColumn(headers, ["Latitude", "Lat", "LATITUDE", "CELL_LAT", "SITE_LAT", "X_COORD", "GPS_LAT", "LATITUTDE", "LATITUD", "LATITIDE"]);
+        const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LNG", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON", "LONGITUTDE", "LONGITUD", "LONGITIDE", "LANGUTIDE", "LANGITUDE"]);
 
         const dataRows = rawRows.slice(headerIndex + 1);
-        const allMovements: any[] = [];
 
+        // 🚀 Specific Fix for STRT_TM column as requested
+        let formatHint: "DMY" | "MDY" = "DMY";
+        if (dateCol === "STRT_TM") {
+            formatHint = "MDY";
+        }
+
+        const allMovements: any[] = [];
         dataRows.forEach((row) => {
             const rowObj: any = {};
             headers.forEach((h, i) => { rowObj[h] = row[i]; });
 
             const rawDate = dateCol ? rowObj[dateCol] : null;
-            const dateObj = rawDate ? parseExcelDate(rawDate) : new Date(0);
+            const dateObj = rawDate ? parseExcelDate(rawDate, formatHint) : new Date(0);
             
             let lat = (latCol && rowObj[latCol]) ? parseFloat(rowObj[latCol]) : null;
             let lon = (lonCol && rowObj[lonCol]) ? parseFloat(rowObj[lonCol]) : null;

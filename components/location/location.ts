@@ -13,6 +13,7 @@ export type LocationData = {
 export const locationData: LocationData = {
   karachi: {
     districts: {
+      /*
       karachi_central: {
         ps: [
           "Civil Lines",
@@ -67,6 +68,7 @@ export const locationData: LocationData = {
         ],
         markets: ["Surjani Town Mobile Shops", "Orangi Mobile Market"],
       },
+      */
       korangi: {
         ps: [
           "Korangi",
@@ -81,6 +83,7 @@ export const locationData: LocationData = {
         ],
         markets: ["Korangi Mobile Market", "Landhi Phone Shops"],
       },
+      /*
       malir: {
         ps: [
           "Steel Town",
@@ -92,9 +95,11 @@ export const locationData: LocationData = {
         ],
         markets: ["Malir Mobile Market", "Memon Goth Phone Shops"],
       },
+      */
     },
   },
 
+  /*
   hyderabad: {
     districts: {
       hyderabad_city: {
@@ -303,4 +308,5 @@ export const locationData: LocationData = {
       },
     },
   },
+  */
 };

@@ -4,9 +4,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Car, Smartphone, Search, Loader2, Download, AlertCircle } from "lucide-react";
+import { User, Car, Smartphone, Search, Loader2, Download, AlertCircle, Copy, RotateCcw } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import AlertModal from "@/components/ui/alert-modal";
@@ -24,18 +25,32 @@ export default function InfoToolsClient() {
   const [alert, setAlert] = useState({ isOpen: false, title: "", description: "", type: "info" as any });
 
   const handleSimSearch = async () => {
-    if (!phoneInput) return;
+    // Split input by newlines, commas, or spaces and clean up
+    const targets = phoneInput
+      .split(/[\n, ]/)
+      .map(n => n.trim())
+      .filter(n => n.length >= 5); // Basic check for number or CNIC length
+
+    if (targets.length === 0) {
+      toast.error("Please enter at least one phone number or CNIC");
+      return;
+    }
+
+    if (targets.length > 50) {
+      toast.error("Maximum 50 lookups allowed at once.");
+      return;
+    }
 
     // 🚀 PROACTIVE CHECK
     try {
         const sRes = await fetch("/api/auth/create-session");
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
-            if ((sData.tokens || 0) < 1) {
+            if ((sData.tokens || 0) < targets.length) {
                 setAlert({
                     isOpen: true,
                     title: "Insufficient Credits",
-                    description: `You need at least 1 credit for SIM lookup. Balance: ${sData.tokens || 0}`,
+                    description: `You need ${targets.length} credits for this bulk lookup. Balance: ${sData.tokens || 0}`,
                     type: "warning"
                 });
                 return;
@@ -49,7 +64,7 @@ export default function InfoToolsClient() {
       const res = await fetch("/api/tools/sim-info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: phoneInput }),
+        body: JSON.stringify({ phone_numbers: targets }),
       });
       const data = await res.json();
 
@@ -66,6 +81,7 @@ export default function InfoToolsClient() {
       if (Array.isArray(data)) {
           setSimResults(data);
           window.dispatchEvent(new Event("refresh-session"));
+          toast.success(`Search complete. Found ${data.length} records.`);
       }
       else if (data.error) toast.error(data.error);
     } catch (e) {
@@ -127,6 +143,14 @@ export default function InfoToolsClient() {
     }
   };
 
+  const handleCopyTable = () => {
+    if (simResults.length === 0) return;
+    const header = "Name\tNumber\tCNIC\tAddress\n";
+    const rows = simResults.map(r => `${r.name}\t${r.number}\t${r.cnic}\t${r.address}`).join("\n");
+    navigator.clipboard.writeText(header + rows);
+    toast.success("Table data copied to clipboard");
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       <AlertModal 
@@ -154,48 +178,70 @@ export default function InfoToolsClient() {
 
         <TabsContent value="sim" className="mt-6 space-y-6">
           <Card className="shadow-sm border-blue-100">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2 text-blue-700">
-                <Smartphone size={20} /> SIM Owner Details
-              </CardTitle>
-              <CardDescription>Enter a phone number or CNIC to fetch registration data.</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2 text-blue-700">
+                  <Smartphone size={20} /> SIM Owner Details (Bulk Support)
+                </CardTitle>
+                <CardDescription>Enter multiple numbers or CNICs (one per line) to fetch data.</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                 {simResults.length > 0 && (
+                   <Button variant="outline" size="sm" onClick={handleCopyTable} className="text-emerald-600 border-emerald-100 hover:bg-emerald-50 h-8 font-bold">
+                     <Copy size={14} className="mr-2" /> Copy All
+                   </Button>
+                 )}
+                 <Button variant="ghost" size="sm" onClick={() => { setPhoneInput(""); setSimResults([]); }} className="text-slate-400 h-8">
+                   <RotateCcw size={14} />
+                 </Button>
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="flex gap-3">
-                <Input 
-                  placeholder="e.g. 03001234567 or CNIC..." 
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400">Target Inputs</Label>
+                <Textarea 
+                  placeholder="03001234567&#10;3120212345671&#10;03129876543" 
                   value={phoneInput}
                   onChange={(e) => setPhoneInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSimSearch()}
-                  className="h-12 text-lg font-medium border-slate-200 focus:ring-blue-500"
+                  className="min-h-[120px] text-base font-medium border-slate-200 focus:ring-blue-500 custom-scrollbar"
                 />
-                <Button onClick={handleSimSearch} disabled={loadingSim} className="h-12 px-8 bg-blue-600 hover:bg-blue-700 font-bold">
-                  {loadingSim ? <Loader2 className="animate-spin" /> : <Search size={20} />}
-                </Button>
               </div>
+              <Button onClick={handleSimSearch} disabled={loadingSim} className="w-full h-12 bg-blue-600 hover:bg-blue-700 font-bold shadow-lg shadow-blue-200">
+                {loadingSim ? (
+                  <><Loader2 className="animate-spin mr-2" /> Processing {phoneInput.split(/[\n, ]/).filter(n => n.trim().length >= 5).length} Targets...</>
+                ) : (
+                  <><Search size={20} className="mr-2" /> Start Bulk Search</>
+                )}
+              </Button>
 
               {simResults.length > 0 && (
-                <div className="mt-8 overflow-hidden rounded-2xl border border-slate-100 shadow-lg">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="font-bold">Name</TableHead>
-                        <TableHead className="font-bold">Number</TableHead>
-                        <TableHead className="font-bold">CNIC</TableHead>
-                        <TableHead className="font-bold">Address</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {simResults.map((r, i) => (
-                        <TableRow key={i} className="hover:bg-blue-50/30 transition-colors">
-                          <TableCell className="font-bold text-slate-800">{r.name}</TableCell>
-                          <TableCell className="font-mono text-blue-600">{r.number}</TableCell>
-                          <TableCell className="font-medium">{r.cnic}</TableCell>
-                          <TableCell className="text-slate-500 text-xs max-w-xs">{r.address}</TableCell>
+                <div className="mt-8 overflow-hidden rounded-2xl border border-slate-100 shadow-xl bg-white">
+                  <div className="max-h-[500px] overflow-auto custom-scrollbar">
+                    <Table>
+                      <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                        <TableRow>
+                          <TableHead className="font-bold">#</TableHead>
+                          <TableHead className="font-bold">Search Term</TableHead>
+                          <TableHead className="font-bold">Name</TableHead>
+                          <TableHead className="font-bold">Number</TableHead>
+                          <TableHead className="font-bold">CNIC</TableHead>
+                          <TableHead className="font-bold">Address</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {simResults.map((r, i) => (
+                          <TableRow key={i} className="hover:bg-blue-50/30 transition-colors">
+                            <TableCell className="text-[10px] text-slate-300 font-mono">{i + 1}</TableCell>
+                            <TableCell className="text-[10px] font-bold text-slate-400">{r.search_term || "-"}</TableCell>
+                            <TableCell className="font-bold text-slate-800">{r.name}</TableCell>
+                            <TableCell className="font-mono text-blue-600">{r.number}</TableCell>
+                            <TableCell className="font-medium whitespace-nowrap">{r.cnic}</TableCell>
+                            <TableCell className="text-slate-500 text-[10px] leading-relaxed max-w-xs">{r.address}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               )}
             </CardContent>

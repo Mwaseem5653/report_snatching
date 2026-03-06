@@ -20,7 +20,6 @@ import { locationData } from "@/components/location/location";
 import { 
     Loader2, 
     CheckCircle2, 
-    UploadCloud, 
     MapPin, 
     Smartphone, 
     User, 
@@ -28,20 +27,10 @@ import {
     ArrowRight, 
     ArrowLeft,
     ShieldAlert,
-    Info,
     Camera,
-    Sparkles,
-    FileUp,
-    ScanSearch,
-    PhoneForwarded
+    PhoneForwarded,
+    X
 } from "lucide-react";
-import { 
-    Dialog, 
-    DialogContent, 
-    DialogHeader, 
-    DialogTitle, 
-    DialogDescription 
-} from "@/components/ui/dialog";
 import AlertModal from "@/components/ui/alert-modal";
 import { cn } from "@/lib/utils";
 
@@ -50,15 +39,6 @@ export default function AddApplicationFormNormalUser() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [step, setStep] = useState(1);
-  const [showAiModal, setShowAiModal] = useState(false);
-  const [extracting, setExtracting] = useState(false);
-
-  // Listen for sidebar trigger
-  React.useEffect(() => {
-    const handleOpen = () => setShowAiModal(true);
-    window.addEventListener('openAiModal', handleOpen);
-    return () => window.removeEventListener('openAiModal', handleOpen);
-  }, []);
 
   // Alert State
   const [alertConfig, setAlertConfig] = useState({
@@ -80,139 +60,17 @@ export default function AddApplicationFormNormalUser() {
     district: "",
     psName: "",
     incidentNote: "",
-    mobileModel: "",
-    imei1: "",
-    imei2: "",
-    lastNumUsed: "",
     crimeHead: "",
     otherLostProperty: "",
     dateOfOffence: "",
     timeOfOffence: "",
     addressOfOffence: "",
+    devices: [
+      { mobileModel: "", imei1: "", imei2: "", lastNumUsed: "", lastNumUsed2: "" }
+    ],
     boxPicture: null as File | null,
     attestedApplication: null as File | null,
   });
-
-  const formatDateForInput = (dateStr: string) => {
-    if (!dateStr || dateStr === "None") return "";
-    const parts = dateStr.split(".");
-    if (parts.length === 3) {
-        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    }
-    const partsDash = dateStr.split("-");
-    if (partsDash.length === 3) {
-        return `${partsDash[2]}-${partsDash[1].padStart(2, '0')}-${partsDash[0].padStart(2, '0')}`;
-    }
-    return "";
-  };
-
-  const formatTimeForInput = (timeStr: string) => {
-    if (!timeStr || timeStr === "None") return "";
-    const cleanTime = timeStr.replace(/[^\d:apm\s]/gi, "").trim();
-    const match = cleanTime.match(/(\d{1,2})[:\s](\d{2})\s*([APap][Mm])?/);
-    if (!match) return "";
-    let hours = parseInt(match[1]);
-    const minutes = match[2];
-    const ampm = match[3]?.toUpperCase();
-    if (ampm === "PM" && hours < 12) hours += 12;
-    if (ampm === "AM" && hours === 12) hours = 0;
-    return `${hours.toString().padStart(2, '0')}:${minutes}`;
-  };
-
-  const handleAiExtraction = async (file: File) => {
-    setExtracting(true);
-    const fd = new FormData();
-    fd.append("files", file);
-
-    try {
-        const res = await fetch("/api/tools/extract-application", {
-            method: "POST",
-            body: fd,
-        }).catch(err => {
-            throw new Error("NETWORK_ERROR");
-        });
-
-        const data = await res.json();
-
-        if (data.success && data.results?.[0]) {
-            const result = data.results[0];
-            
-            if (result.error === "INVALID_DOCUMENT") {
-                showAlert("Invalid Document", "The uploaded image does not appear to be a valid police application. Please upload a clear picture.", "warning");
-                setExtracting(false);
-                return;
-            }
-
-            if (result.error === "SERVICE_UNAVAILABLE") {
-                showAlert("AI Unavailable", "LLM not available now, please fill manually.", "warning");
-                setShowAiModal(false);
-                setExtracting(false);
-                return;
-            }
-
-            const imeis = (result["IMEI Number"] || "").split(" ").filter((i: string) => i.length >= 14);
-
-            let matchedCity = "";
-            let matchedDistrict = "";
-            let matchedPs = "";
-
-            const normalizeForMatch = (s: string) => 
-                s.toLowerCase().replace(/ps-|than[aa]|police station/g, "").replace(/[^a-z0-9]/g, "").trim();
-
-            const aiPsRaw = result["Police Station"] || "";
-            const cleanAiPs = normalizeForMatch(aiPsRaw);
-            
-            if (cleanAiPs && cleanAiPs !== "none") {
-                for (const city in locationData) {
-                    for (const district in locationData[city].districts) {
-                        const psList = locationData[city].districts[district].ps;
-                        const match = psList.find(ps => {
-                            const dbPsNormalized = normalizeForMatch(ps);
-                            return dbPsNormalized === cleanAiPs || dbPsNormalized.includes(cleanAiPs) || cleanAiPs.includes(dbPsNormalized);
-                        });
-                        if (match) {
-                            matchedCity = city; matchedDistrict = district; matchedPs = match;
-                            break;
-                        }
-                    }
-                    if (matchedCity) break;
-                }
-            }
-
-            setFormData(prev => ({
-                ...prev,
-                applicantName: result["Name"] !== "None" ? result["Name"] : prev.applicantName,
-                mobileNumber: result["Phone Number"] !== "None" ? result["Phone Number"] : prev.mobileNumber,
-                lastNumUsed: result["last Num Used"] !== "None" ? result["last Num Used"] : prev.lastNumUsed,
-                otherLostProperty: result["Other Property"] !== "None" ? result["Other Property"] : prev.otherLostProperty,
-                mobileModel: result["Mobile Model"] !== "None" ? result["Mobile Model"] : prev.mobileModel,
-                imei1: imeis[0] || prev.imei1,
-                imei2: imeis[1] || prev.imei2,
-                crimeHead: (result["Type"] || "").toLowerCase().includes("snatch") ? "snatched" : 
-                           (result["Type"] || "").toLowerCase().includes("theft") ? "theft" : 
-                           (result["Type"] || "").toLowerCase().includes("lost") ? "lost" : prev.crimeHead,
-                dateOfOffence: result["Date Of Offence"] !== "None" ? formatDateForInput(result["Date Of Offence"]) : prev.dateOfOffence,
-                timeOfOffence: result["Time Of Offence"] !== "None" ? formatTimeForInput(result["Time Of Offence"]) : prev.timeOfOffence,
-                city: matchedCity || prev.city,
-                district: matchedDistrict || prev.district,
-                psName: matchedPs || prev.psName,
-                attestedApplication: file
-            }));
-            
-            showAlert("Success!", "AI has successfully extracted details. Please verify all information.", "success");
-            setShowAiModal(false);
-        } else {
-            showAlert("AI Unavailable", "LLM not available now, please fill manually.", "warning");
-            setShowAiModal(false);
-        }
-    } catch (err) {
-        console.error("AI Error:", err);
-        showAlert("Service Error", "LLM not available now, please fill manually.", "error");
-        setShowAiModal(false);
-    } finally {
-        setExtracting(false);
-    }
-  };
 
   const validateStep = () => {
     if (step === 1) {
@@ -231,9 +89,15 @@ export default function AddApplicationFormNormalUser() {
             return false;
         }
     } else if (step === 4) {
-        if (!formData.crimeHead || !formData.mobileModel || !formData.imei1 || !formData.lastNumUsed) {
-            showAlert("Missing Info", "Crime category, mobile model, IMEI 1 and Last Number Used are required.", "warning");
+        if (!formData.crimeHead) {
+            showAlert("Missing Info", "Crime category is required.", "warning");
             return false;
+        }
+        for (const device of formData.devices) {
+            if (!device.mobileModel || !device.imei1 || !device.lastNumUsed) {
+                showAlert("Missing Info", "Mobile model, IMEI 1 and Last Number Used are required for all devices.", "warning");
+                return false;
+            }
         }
     }
     return true;
@@ -245,8 +109,50 @@ export default function AddApplicationFormNormalUser() {
   const prevStep = () => setStep(s => s - 1);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+    let { name, value } = e.target;
+
+    if (name === "cnic") {
+        value = value.replace(/\D/g, "").slice(0, 13);
+    }
+
+    if (name === "mobileNumber") {
+        let digits = value.replace(/\D/g, "").slice(0, 11);
+        if (digits.length > 4) value = digits.slice(0, 4) + "-" + digits.slice(4);
+        else value = digits;
+    }
+
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleDeviceChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    let { name, value } = e.target;
+    const newDevices = [...formData.devices];
+
+    if (name === "imei1" || name === "imei2") {
+        value = value.replace(/\D/g, "").slice(0, 15);
+    }
+
+    if (name === "lastNumUsed" || name === "lastNumUsed2") {
+        let digits = value.replace(/\D/g, "").slice(0, 11);
+        if (digits.length > 4) value = digits.slice(0, 4) + "-" + digits.slice(4);
+        else value = digits;
+    }
+
+    newDevices[index] = { ...newDevices[index], [name]: value };
+    setFormData((prev) => ({ ...prev, devices: newDevices }));
+  };
+
+  const addDevice = () => {
+    setFormData((prev) => ({
+        ...prev,
+        devices: [...prev.devices, { mobileModel: "", imei1: "", imei2: "", lastNumUsed: "", lastNumUsed2: "" }]
+    }));
+  };
+
+  const removeDevice = (index: number) => {
+    if (formData.devices.length === 1) return;
+    const newDevices = formData.devices.filter((_, i) => i !== index);
+    setFormData((prev) => ({ ...prev, devices: newDevices }));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
@@ -279,10 +185,6 @@ export default function AddApplicationFormNormalUser() {
         city: formData.city,
         district: formData.district,
         ps: formData.psName,
-        mobileModel: formData.mobileModel,
-        imei1: formData.imei1,
-        imei2: formData.imei2,
-        lastNumUsed: formData.lastNumUsed,
         crimeHead: formData.crimeHead,
         offenceDate: formData.dateOfOffence,
         offenceTime: formData.timeOfOffence,
@@ -291,6 +193,7 @@ export default function AddApplicationFormNormalUser() {
         pictureUrl: boxPicUrl,
         attachmentUrl: attestedUrl,
         otherLostProperty: formData.otherLostProperty,
+        devices: formData.devices, // Sending array of devices
         role: "user",
       };
 
@@ -330,52 +233,53 @@ export default function AddApplicationFormNormalUser() {
   ];
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6 md:space-y-8 -mt-4 md:-mt-6">
+    <div className="w-full max-w-4xl mx-auto flex flex-col h-full max-h-[calc(100vh-120px)] md:max-h-[calc(100vh-160px)]">
       
-      {/* 🔹 Progress Stepper */}
-      <div className="flex justify-between relative px-2 md:px-4 pt-4">
-        <div className="absolute top-[34px] left-0 w-full h-0.5 bg-slate-200 -translate-y-1/2 z-0"></div>
+      {/* 🔹 Progress Stepper - More Compact */}
+      <div className="flex justify-between relative px-4 py-2 shrink-0">
+        <div className="absolute top-[26px] left-0 w-full h-0.5 bg-slate-200 -translate-y-1/2 z-0"></div>
         {steps.map((s) => (
             <div key={s.id} className="relative z-10 flex flex-col items-center">
                 <div className={cn(
-                    "w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center transition-all duration-300 border-2",
+                    "w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center transition-all duration-300 border-2",
                     step >= s.id ? "bg-[#0a2c4e] border-[#0a2c4e] text-white" : "bg-white border-slate-200 text-slate-400"
                 )}>
-                    {step > s.id ? <CheckCircle2 size={16} className="md:w-[18px] md:h-[18px]" /> : <s.icon size={16} className="md:w-[18px] md:h-[18px]" />}
+                    {step > s.id ? <CheckCircle2 size={14} className="md:w-[18px] md:h-[18px]" /> : <s.icon size={14} className="md:w-[18px] md:h-[18px]" />}
                 </div>
                 <span className={cn(
-                    "hidden sm:block mt-2 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-center",
+                    "hidden sm:block mt-1.5 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-center",
                     step >= s.id ? "text-[#0a2c4e]" : "text-slate-400"
                 )}>{s.label}</span>
             </div>
         ))}
       </div>
 
-      <Card className="border-0 shadow-2xl rounded-[1.5rem] md:rounded-3xl overflow-hidden bg-white/95 backdrop-blur-sm mx-auto">
-        <CardContent className="p-0">
-            <form onSubmit={(e) => e.preventDefault()}>
+      <Card className="flex-1 border-0 shadow-2xl rounded-2xl md:rounded-3xl overflow-hidden bg-white/95 backdrop-blur-sm mx-auto flex flex-col w-full">
+        <CardContent className="p-0 flex flex-col h-full overflow-hidden">
+            <form onSubmit={(e) => e.preventDefault()} className="flex flex-col h-full">
                 
-                <div className="p-6 md:p-10 space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* Scrollable Content Area */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 md:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 custom-scrollbar">
                     
                     {/* Step 1: Personal Info */}
                     {step === 1 && (
-                        <div className="space-y-6">
-                            <div className="space-y-1">
-                                <h3 className="text-xl md:text-2xl font-black text-[#0a2c4e] uppercase tracking-tight">Applicant Details</h3>
-                                <p className="text-xs md:text-sm text-slate-500 font-medium">Please provide your official identification details.</p>
+                        <div className="space-y-4 md:space-y-6">
+                            <div className="space-y-0.5">
+                                <h3 className="text-lg md:text-2xl font-black text-[#0a2c4e] uppercase tracking-tight">Applicant Details</h3>
+                                <p className="text-[10px] md:text-sm text-slate-500 font-medium">Please provide your official identification details.</p>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 pt-2">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Full Name <span className="text-red-500">*</span></Label>
-                                    <Input placeholder="Enter your full name" name="applicantName" value={formData.applicantName} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12 focus:ring-2 ring-blue-500/20" />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6 pt-1">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Full Name <span className="text-red-500">*</span></Label>
+                                    <Input placeholder="Enter your full name" name="applicantName" value={formData.applicantName} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14 focus:ring-2 ring-blue-500/20" />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Mobile Number <span className="text-red-500">*</span></Label>
-                                    <Input placeholder="03XXXXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12" />
+                                <div className="space-y-1.5">
+                                    <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Mobile Number <span className="text-red-500">*</span></Label>
+                                    <Input placeholder="0300-XXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14" />
                                 </div>
-                                <div className="md:col-span-2 space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">CNIC Number <span className="text-slate-400">(Optional)</span></Label>
-                                    <Input placeholder="42101-XXXXXXX-X" name="cnic" value={formData.cnic} onChange={handleChange} className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12" />
+                                <div className="md:col-span-2 space-y-1.5">
+                                    <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">CNIC Number <span className="text-slate-400">(Optional)</span></Label>
+                                    <Input placeholder="42101XXXXXXX" name="cnic" value={formData.cnic} onChange={handleChange} className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14" />
                                 </div>
                             </div>
                         </div>
@@ -383,35 +287,35 @@ export default function AddApplicationFormNormalUser() {
 
                     {/* Step 2: Location */}
                     {step === 2 && (
-                        <div className="space-y-6">
-                            <div className="space-y-1">
-                                <h3 className="text-xl md:text-2xl font-black text-[#0a2c4e] uppercase tracking-tight">Jurisdiction</h3>
-                                <p className="text-xs md:text-sm text-slate-500 font-medium">Select the area where the incident occurred.</p>
+                        <div className="space-y-4 md:space-y-6">
+                            <div className="space-y-0.5">
+                                <h3 className="text-lg md:text-2xl font-black text-[#0a2c4e] uppercase tracking-tight">Jurisdiction</h3>
+                                <p className="text-[10px] md:text-sm text-slate-500 font-medium">Select the area where the incident occurred.</p>
                             </div>
-                            <div className="grid grid-cols-1 gap-4 md:gap-6 pt-2">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">City <span className="text-red-500">*</span></Label>
+                            <div className="grid grid-cols-1 gap-3 md:gap-6 pt-1">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">City <span className="text-red-500">*</span></Label>
                                     <Select value={formData.city} onValueChange={(val) => setFormData((prev) => ({ ...prev, city: val, district: "", psName: "" }))}>
-                                        <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12 font-bold"><SelectValue placeholder="Select City" /></SelectTrigger>
+                                        <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14 font-bold"><SelectValue placeholder="Select City" /></SelectTrigger>
                                         <SelectContent className="rounded-xl border-slate-100">
                                             {Object.keys(locationData).map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">District <span className="text-red-500">*</span></Label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">District <span className="text-red-500">*</span></Label>
                                         <Select value={formData.district} onValueChange={(val) => setFormData((prev) => ({ ...prev, district: val, psName: "" }))} disabled={!formData.city}>
-                                            <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12 font-bold"><SelectValue placeholder="Select District" /></SelectTrigger>
+                                            <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14 font-bold"><SelectValue placeholder="Select District" /></SelectTrigger>
                                             <SelectContent className="rounded-xl">
                                                 {formData.city && Object.keys(locationData[formData.city].districts).map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Police Station <span className="text-red-500">*</span></Label>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Police Station <span className="text-red-500">*</span></Label>
                                         <Select value={formData.psName} onValueChange={(val) => setFormData((prev) => ({ ...prev, psName: val }))} disabled={!formData.city || !formData.district}>
-                                            <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12 font-bold"><SelectValue placeholder="Select Police Station" /></SelectTrigger>
+                                            <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14 font-bold"><SelectValue placeholder="Select Police Station" /></SelectTrigger>
                                             <SelectContent className="rounded-xl">
                                                 {formData.city && formData.district && locationData[formData.city].districts[formData.district].ps.map((ps) => (<SelectItem key={ps} value={ps}>{ps}</SelectItem>))}
                                             </SelectContent>
@@ -424,44 +328,50 @@ export default function AddApplicationFormNormalUser() {
 
                     {/* Step 3: Incident Details */}
                     {step === 3 && (
-                        <div className="space-y-6">
-                            <div className="space-y-1">
-                                <h3 className="text-xl md:text-2xl font-black text-[#0a2c4e] uppercase tracking-tight">Incident Details</h3>
-                                <p className="text-xs md:text-sm text-slate-500 font-medium">Describe the timeline and location of the offence.</p>
+                        <div className="space-y-4 md:space-y-6">
+                            <div className="space-y-0.5">
+                                <h3 className="text-lg md:text-2xl font-black text-[#0a2c4e] uppercase tracking-tight">Incident Details</h3>
+                                <p className="text-[10px] md:text-sm text-slate-500 font-medium">Describe the timeline and location of the offence.</p>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 pt-2">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Date of Offence <span className="text-red-500">*</span></Label>
-                                    <Input type="date" name="dateOfOffence" value={formData.dateOfOffence} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12" />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6 pt-1">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Date of Offence <span className="text-red-500">*</span></Label>
+                                    <Input type="date" name="dateOfOffence" value={formData.dateOfOffence} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14" />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Time of Offence <span className="text-red-500">*</span></Label>
-                                    <Input type="time" name="timeOfOffence" value={formData.timeOfOffence} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12" />
+                                <div className="space-y-1.5">
+                                    <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Time of Offence <span className="text-red-500">*</span></Label>
+                                    <Input type="time" name="timeOfOffence" value={formData.timeOfOffence} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14" />
                                 </div>
-                                <div className="md:col-span-2 space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Specific Location / Address <span className="text-red-500">*</span></Label>
-                                    <Input placeholder="e.g. Near LuckyOne Mall" name="addressOfOffence" value={formData.addressOfOffence} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12" />
+                                <div className="md:col-span-2 space-y-1.5">
+                                    <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Incident Location / Address <span className="text-red-500">*</span></Label>
+                                    <Input placeholder="e.g. Near LuckyOne Mall" name="addressOfOffence" value={formData.addressOfOffence} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14" />
                                 </div>
-                                <div className="md:col-span-2 space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Incident Description (Note) <span className="text-red-500">*</span></Label>
-                                    <Textarea placeholder="Explain briefly what happened..." name="incidentNote" value={formData.incidentNote} onChange={handleChange} required className="rounded-2xl border-slate-200 bg-slate-50/50 min-h-[100px] md:min-h-[120px]" />
+                                <div className="md:col-span-2 space-y-1.5">
+                                    <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Incident Description (Note) <span className="text-slate-400">(Optional)</span></Label>
+                                    <Textarea placeholder="Explain briefly what happened..." name="incidentNote" value={formData.incidentNote} onChange={handleChange} className="rounded-2xl border-slate-200 bg-slate-50/50 min-h-[80px] md:min-h-[100px]" />
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Step 4: Device Info */}
+                    {/* Step 4: Device Info (Multiple Support) */}
                     {step === 4 && (
                         <div className="space-y-6">
-                            <div className="space-y-1">
-                                <h3 className="text-xl md:text-2xl font-black text-[#0a2c4e] uppercase tracking-tight">Mobile Device</h3>
-                                <p className="text-xs md:text-sm text-slate-500 font-medium">Identify the mobile phone that was stolen or lost.</p>
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <h3 className="text-lg md:text-2xl font-black text-[#0a2c4e] uppercase tracking-tight">Mobile Device(s)</h3>
+                                    <p className="text-[10px] md:text-sm text-slate-500 font-medium">Identify the mobile phone(s) that were stolen or lost.</p>
+                                </div>
+                                <Button type="button" size="sm" onClick={addDevice} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg h-9 md:h-10 text-[10px] font-bold uppercase tracking-wider">
+                                    + Add Device
+                                </Button>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 pt-2">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Crime Category <span className="text-red-500">*</span></Label>
+
+                            <div className="space-y-4 pt-1">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Crime Category <span className="text-red-500">*</span></Label>
                                     <Select value={formData.crimeHead} onValueChange={(val) => setFormData((prev) => ({ ...prev, crimeHead: val }))} required>
-                                        <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12 font-bold"><SelectValue placeholder="Select Category" /></SelectTrigger>
+                                        <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14 font-bold"><SelectValue placeholder="Select Category" /></SelectTrigger>
                                         <SelectContent className="rounded-xl">
                                             <SelectItem value="snatched">Snatched</SelectItem>
                                             <SelectItem value="theft">Theft</SelectItem>
@@ -469,28 +379,55 @@ export default function AddApplicationFormNormalUser() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Mobile Model & Color <span className="text-red-500">*</span></Label>
-                                    <Input placeholder="e.g. iPhone 15 Pro" name="mobileModel" value={formData.mobileModel} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">IMEI 1 <span className="text-red-500">*</span></Label>
-                                    <Input placeholder="15 Digit Number" name="imei1" value={formData.imei1} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12 font-mono tracking-widest" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">IMEI 2 <span className="text-slate-400">(Optional)</span></Label>
-                                    <Input placeholder="15 Digit Number" name="imei2" value={formData.imei2} onChange={handleChange} className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12 font-mono tracking-widest" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Last Number Used <span className="text-red-500">*</span></Label>
-                                    <div className="relative">
-                                        <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                        <Input placeholder="03XXXXXXXXX" name="lastNumUsed" value={formData.lastNumUsed} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12 pl-10" />
+
+                                {formData.devices.map((device, index) => (
+                                    <div key={index} className="p-4 md:p-6 rounded-2xl border border-slate-200 bg-slate-50/30 relative space-y-3 md:space-y-4 animate-in fade-in zoom-in duration-300">
+                                        {formData.devices.length > 1 && (
+                                            <button type="button" onClick={() => removeDevice(index)} className="absolute top-4 right-4 text-red-400 hover:text-red-600 transition-colors">
+                                                <X size={18} />
+                                            </button>
+                                        )}
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <div className="w-6 h-6 rounded-full bg-[#0a2c4e] text-white flex items-center justify-center text-[10px] font-bold">
+                                                {index + 1}
+                                            </div>
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-[#0a2c4e]">Device {index + 1}</span>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Mobile Model & Color <span className="text-red-500">*</span></Label>
+                                                <Input placeholder="e.g. iPhone 15 Pro" name="mobileModel" value={device.mobileModel} onChange={(e) => handleDeviceChange(index, e)} required className="rounded-xl border-slate-200 bg-white h-12 md:h-14" />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">IMEI 1 <span className="text-red-500">*</span></Label>
+                                                <Input placeholder="15 Digit Number" name="imei1" value={device.imei1} onChange={(e) => handleDeviceChange(index, e)} required className="rounded-xl border-slate-200 bg-white h-12 md:h-14 font-mono tracking-widest" />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">IMEI 2 <span className="text-slate-400">(Optional)</span></Label>
+                                                <Input placeholder="15 Digit Number" name="imei2" value={device.imei2} onChange={(e) => handleDeviceChange(index, e)} className="rounded-xl border-slate-200 bg-white h-12 md:h-14 font-mono tracking-widest" />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Last Number Used 1 <span className="text-red-500">*</span></Label>
+                                                <div className="relative">
+                                                    <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                                    <Input placeholder="0300-XXXXXXX" name="lastNumUsed" value={device.lastNumUsed} onChange={(e) => handleDeviceChange(index, e)} required className="rounded-xl border-slate-200 bg-white h-12 md:h-14 pl-10" />
+                                                </div>
+                                            </div>
+                                            <div className="md:col-span-2 space-y-1.5">
+                                                <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Last Number Used 2 <span className="text-slate-400">(Optional)</span></Label>
+                                                <div className="relative">
+                                                    <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                                    <Input placeholder="0300-XXXXXXX" name="lastNumUsed2" value={device.lastNumUsed2} onChange={(e) => handleDeviceChange(index, e)} className="rounded-xl border-slate-200 bg-white h-12 md:h-14 pl-10" />
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Other Lost Property</Label>
-                                    <Input placeholder="e.g. Wallet, Cash" name="otherLostProperty" value={formData.otherLostProperty} onChange={handleChange} className="rounded-xl border-slate-200 bg-slate-50/50 h-11 md:h-12" />
+                                ))}
+
+                                <div className="md:col-span-2 space-y-1.5">
+                                    <Label className="text-[9px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Other Lost Property</Label>
+                                    <Input placeholder="e.g. Wallet, Cash" name="otherLostProperty" value={formData.otherLostProperty} onChange={handleChange} className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14" />
                                 </div>
                             </div>
                         </div>
@@ -498,30 +435,30 @@ export default function AddApplicationFormNormalUser() {
 
                     {/* Step 5: Evidence */}
                     {step === 5 && (
-                        <div className="space-y-6">
-                            <div className="space-y-1">
-                                <h3 className="text-xl md:text-2xl font-black text-[#0a2c4e] uppercase tracking-tight">Attachments</h3>
-                                <p className="text-xs md:text-sm text-slate-500 font-medium">Upload necessary proofs for verification.</p>
+                        <div className="space-y-4 md:space-y-6">
+                            <div className="space-y-0.5">
+                                <h3 className="text-lg md:text-2xl font-black text-[#0a2c4e] uppercase tracking-tight">Attachments</h3>
+                                <p className="text-[10px] md:text-sm text-slate-500 font-medium">Upload necessary proofs for verification.</p>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 pt-2">
-                                <div className="group relative p-6 md:p-8 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50 hover:bg-blue-50/50 hover:border-blue-400 transition-all text-center cursor-pointer">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6 pt-1">
+                                <div className="group relative p-4 md:p-8 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50 hover:bg-blue-50/50 hover:border-blue-400 transition-all text-center cursor-pointer">
                                     <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, "boxPicture")} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                                    <div className="space-y-4">
-                                        <div className={cn("mx-auto w-12 h-12 md:w-16 md:h-16 rounded-2xl shadow-sm flex items-center justify-center transition-transform group-hover:scale-110", formData.boxPicture ? "bg-emerald-50 text-emerald-600" : "bg-white text-blue-600")}>
-                                            {formData.boxPicture ? <CheckCircle2 size={28} /> : <Smartphone size={28} />}
+                                    <div className="space-y-2 md:space-y-4">
+                                        <div className={cn("mx-auto w-10 h-10 md:w-16 md:h-16 rounded-2xl shadow-sm flex items-center justify-center transition-transform group-hover:scale-110", formData.boxPicture ? "bg-emerald-50 text-emerald-600" : "bg-white text-blue-600")}>
+                                            {formData.boxPicture ? <CheckCircle2 size={24} /> : <Smartphone size={24} />}
                                         </div>
-                                        <div><p className="font-bold text-slate-800 text-sm md:text-base">{formData.boxPicture ? "Box Picture Selected" : "Box Picture"}</p></div>
-                                        {formData.boxPicture && <div className="px-4 py-2 bg-emerald-50 text-emerald-700 text-[9px] font-bold rounded-full inline-flex items-center gap-2 border border-emerald-100 max-w-full truncate">Selected: {formData.boxPicture.name.substring(0, 15)}...</div>}
+                                        <div><p className="font-bold text-slate-800 text-xs md:text-base">{formData.boxPicture ? "Box Picture Selected" : "Box Picture"}</p></div>
+                                        {formData.boxPicture && <div className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[8px] md:text-[9px] font-bold rounded-full inline-flex items-center gap-2 border border-emerald-100 max-w-full truncate">Selected: {formData.boxPicture.name.substring(0, 15)}...</div>}
                                     </div>
                                 </div>
-                                <div className="group relative p-6 md:p-8 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50 hover:bg-blue-50/50 hover:border-blue-400 transition-all text-center cursor-pointer">
+                                <div className="group relative p-4 md:p-8 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50 hover:bg-blue-50/50 hover:border-blue-400 transition-all text-center cursor-pointer">
                                     <input type="file" accept="image/*,application/pdf" onChange={(e) => handleFileChange(e, "attestedApplication")} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                                    <div className="space-y-4">
-                                        <div className={cn("mx-auto w-12 h-12 md:w-16 md:h-16 rounded-2xl shadow-sm flex items-center justify-center transition-transform group-hover:scale-110", formData.attestedApplication ? "bg-emerald-50 text-emerald-600" : "bg-white text-blue-600")}>
-                                            {formData.attestedApplication ? <CheckCircle2 size={28} /> : <FileText size={28} />}
+                                    <div className="space-y-2 md:space-y-4">
+                                        <div className={cn("mx-auto w-10 h-10 md:w-16 md:h-16 rounded-2xl shadow-sm flex items-center justify-center transition-transform group-hover:scale-110", formData.attestedApplication ? "bg-emerald-50 text-emerald-600" : "bg-white text-blue-600")}>
+                                            {formData.attestedApplication ? <CheckCircle2 size={24} /> : <FileText size={24} />}
                                         </div>
-                                        <div><p className="font-bold text-slate-800 text-sm md:text-base">{formData.attestedApplication ? "Application Uploaded" : "Attested Form"}</p></div>
-                                        {formData.attestedApplication && <div className="px-4 py-2 bg-emerald-50 text-emerald-700 text-[9px] font-bold rounded-full inline-flex items-center gap-2 border border-emerald-100 max-w-full truncate">Selected: {formData.attestedApplication.name.substring(0, 15)}...</div>}
+                                        <div><p className="font-bold text-slate-800 text-xs md:text-base">{formData.attestedApplication ? "Application Uploaded" : "Attested Form"}</p></div>
+                                        {formData.attestedApplication && <div className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[8px] md:text-[9px] font-bold rounded-full inline-flex items-center gap-2 border border-emerald-100 max-w-full truncate">Selected: {formData.attestedApplication.name.substring(0, 15)}...</div>}
                                     </div>
                                 </div>
                             </div>
@@ -529,7 +466,8 @@ export default function AddApplicationFormNormalUser() {
                     )}
                 </div>
 
-                <div className="bg-slate-50 border-t border-slate-100 p-6 flex items-center justify-between">
+                {/* Fixed Footer Buttons */}
+                <div className="bg-slate-50 border-t border-slate-100 p-4 md:p-6 shrink-0 flex items-center justify-between">
                     <div>
                         {step > 1 && (
                             <Button 
@@ -537,9 +475,9 @@ export default function AddApplicationFormNormalUser() {
                                 variant="ghost" 
                                 onClick={prevStep} 
                                 disabled={submitting}
-                                className="rounded-xl font-bold text-slate-500 hover:text-[#0a2c4e]"
+                                className="rounded-xl font-bold text-slate-500 hover:text-[#0a2c4e] h-10 md:h-12"
                             >
-                                <ArrowLeft className="mr-2" size={18} /> <span className="hidden sm:inline">Previous</span>
+                                <ArrowLeft className="mr-1 md:mr-2" size={16} /> <span className="text-xs md:text-sm">Back</span>
                             </Button>
                         )}
                     </div>
@@ -549,18 +487,18 @@ export default function AddApplicationFormNormalUser() {
                             <Button 
                                 type="button" 
                                 onClick={nextStep}
-                                className="bg-[#0a2c4e] text-white px-10 rounded-xl font-black uppercase tracking-widest text-[11px] h-12 group shadow-xl"
+                                className="bg-[#0a2c4e] text-white px-6 md:px-10 rounded-xl font-black uppercase tracking-widest text-[10px] md:text-[11px] h-10 md:h-12 group shadow-xl"
                             >
-                                Next Step <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" size={18} />
+                                Next <ArrowRight className="ml-1 md:ml-2 group-hover:translate-x-1 transition-transform" size={16} />
                             </Button>
                         ) : (
                             <Button 
                                 type="button"
                                 onClick={handleSubmit}
                                 disabled={submitting}
-                                className="bg-red-600 hover:bg-red-700 text-white px-12 rounded-xl font-black uppercase tracking-widest text-[11px] h-12 shadow-xl shadow-red-600/20"
+                                className="bg-red-600 hover:bg-red-700 text-white px-8 md:px-12 rounded-xl font-black uppercase tracking-widest text-[10px] md:text-[11px] h-10 md:h-12 shadow-xl shadow-red-600/20"
                             >
-                                {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...</> : "Submit Application"}
+                                {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> ...</> : "Submit Application"}
                             </Button>
                         )}
                     </div>
@@ -568,32 +506,6 @@ export default function AddApplicationFormNormalUser() {
             </form>
         </CardContent>
       </Card>
-
-      {/* AI EXTRACTION MODAL */}
-      <Dialog open={showAiModal} onOpenChange={setShowAiModal}>
-        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden border-none rounded-[1.5rem] md:rounded-[2rem] shadow-2xl mx-4">
-            <div className="bg-gradient-to-br from-[#0a2c4e] via-[#154b8c] to-[#0a2c4e] p-6 md:p-8 text-center relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10"><Sparkles size={80} className="md:w-[120px] md:h-[120px]" /></div>
-                <div className="mx-auto w-16 h-16 md:w-20 md:h-20 bg-white/10 backdrop-blur-md rounded-2xl md:rounded-3xl flex items-center justify-center text-white mb-4 md:mb-6 animate-pulse"><ScanSearch size={32} className="md:w-[40px] md:h-[40px]" /></div>
-                <DialogTitle className="text-xl md:text-2xl font-black text-white uppercase tracking-tight mb-2">AI Auto-Fill</DialogTitle>
-                <DialogDescription className="text-blue-100 font-medium text-xs md:text-sm">Upload your verified police station application and our AI will automatically fill the form for you.</DialogDescription>
-            </div>
-            <div className="p-6 md:p-8 space-y-4 md:space-y-6">
-                <div className="group relative">
-                    <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && handleAiExtraction(e.target.files[0])} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" disabled={extracting} />
-                    <div className={cn("p-6 md:p-10 border-2 border-dashed rounded-[1.5rem] text-center transition-all duration-300", extracting ? "bg-slate-50 border-slate-200" : "bg-blue-50/50 border-blue-200 group-hover:border-blue-400 group-hover:bg-blue-50")}>
-                        {extracting ? (
-                            <div className="flex flex-col items-center gap-4"><Loader2 className="h-8 w-8 md:h-10 md:w-10 text-blue-600 animate-spin" /><p className="font-bold text-slate-800 text-sm">Reading Application...</p></div>
-                        ) : (
-                            <div className="flex flex-col items-center gap-4"><div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl shadow-sm flex items-center justify-center text-blue-600"><FileUp size={20} className="md:w-[24px] md:h-[24px]" /></div><p className="font-bold text-slate-800 uppercase tracking-tight text-xs md:text-sm">Upload Document</p></div>
-                        )}
-                    </div>
-                </div>
-                <div className="relative"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-100"></span></div><div className="relative flex justify-center text-[9px] font-black uppercase tracking-[0.2em]"><span className="bg-white px-4 text-slate-300">Or</span></div></div>
-                <Button variant="ghost" onClick={() => setShowAiModal(false)} className="w-full h-12 md:h-14 rounded-2xl font-black uppercase tracking-widest text-[9px] md:text-[11px] text-slate-500 hover:bg-slate-50 border border-slate-100">Fill Form Manually</Button>
-            </div>
-        </DialogContent>
-      </Dialog>
 
       <AlertModal 
         isOpen={alertConfig.isOpen}

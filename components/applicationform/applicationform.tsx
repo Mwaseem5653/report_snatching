@@ -38,7 +38,8 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
     mobileModel: "",
     imei1: "",
     imei2: "",
-    lastNumUsed: "", // Added
+    lastNumUsed: "",
+    lastNumUsed2: "",
     crimeHead: "",
     otherLostProperty: "",
     dateOfOffence: "",
@@ -49,7 +50,25 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+    let { name, value } = e.target;
+
+    if (name === "cnic") {
+        value = value.replace(/\D/g, "").slice(0, 13);
+    }
+
+    if (name === "mobileNumber" || name === "lastNumUsed" || name === "lastNumUsed2") {
+        let digits = value.replace(/\D/g, "").slice(0, 11);
+        if (digits.length > 4) {
+            value = digits.slice(0, 4) + "-" + digits.slice(4);
+        } else {
+            value = digits;
+        }
+    }
+
+    if (name === "imei1" || name === "imei2") {
+        value = value.replace(/\D/g, "").slice(0, 15);
+    }
+
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -87,8 +106,9 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
         imei1: formData.imei1,
         imei2: formData.imei2,
         lastNumUsed: formData.lastNumUsed,
+        lastNumUsed2: formData.lastNumUsed2,
         crimeHead: formData.crimeHead,
-        offenceDate: formData.dateOfOffence, // Backend POST will handle conversion
+        offenceDate: formData.dateOfOffence,
         offenceTime: formData.timeOfOffence,
         offenceAddress: formData.addressOfOffence,
         note: formData.incidentNote,
@@ -147,11 +167,11 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">Mobile Number *</Label>
-                    <Input name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                    <Input placeholder="0300-XXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50" />
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">CNIC Number (Optional)</Label>
-                    <Input name="cnic" value={formData.cnic} onChange={handleChange} className="rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                    <Input placeholder="42101XXXXXXX" name="cnic" value={formData.cnic} onChange={handleChange} className="rounded-xl border-slate-200 h-11 bg-slate-50/50" />
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">City *</Label>
@@ -173,17 +193,24 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">IMEI 1 *</Label>
-                    <Input name="imei1" value={formData.imei1} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-mono" />
+                    <Input placeholder="15 Digit Number" name="imei1" value={formData.imei1} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-mono" />
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">IMEI 2 (Optional)</Label>
-                    <Input name="imei2" value={formData.imei2} onChange={handleChange} className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-mono" />
+                    <Input placeholder="15 Digit Number" name="imei2" value={formData.imei2} onChange={handleChange} className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-mono" />
                 </div>
                 <div className="space-y-2">
-                    <Label className="text-[11px] font-bold uppercase text-slate-500">Last Number Used *</Label>
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Last Number Used 1 *</Label>
                     <div className="relative">
                         <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <Input name="lastNumUsed" value={formData.lastNumUsed} onChange={handleChange} required className="pl-10 rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                        <Input placeholder="0300-XXXXXXX" name="lastNumUsed" value={formData.lastNumUsed} onChange={handleChange} required className="pl-10 rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Last Number Used 2 (Optional)</Label>
+                    <div className="relative">
+                        <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <Input placeholder="0300-XXXXXXX" name="lastNumUsed2" value={formData.lastNumUsed2} onChange={handleChange} className="pl-10 rounded-xl border-slate-200 h-11 bg-slate-50/50" />
                     </div>
                 </div>
                 <div className="space-y-2">

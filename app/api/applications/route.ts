@@ -76,8 +76,9 @@ export async function GET(req: NextRequest) {
     if (search) {
       applications = applications.filter((app: any) => 
         app.applicantName?.toLowerCase().includes(search) ||
-        app.imei1?.includes(search) ||
-        app.cnic?.includes(search)
+        app.cnic?.includes(search) ||
+        app.allImeis?.some((imei: string) => imei.includes(search)) ||
+        app.imei1?.includes(search) // Backward compatibility
       );
     }
 
@@ -94,8 +95,26 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const appsRef = adminDb.collection("applications");
-    const snapshot = await appsRef.where("imei1", "==", body.imei1).get();
-    if (!snapshot.empty) return NextResponse.json({ success: false, message: "IMEI already exists" }, { status: 400 });
+
+    // Extract all IMEIs for duplicate check and indexing
+    let allImeis: string[] = [];
+    if (body.devices && Array.isArray(body.devices)) {
+        body.devices.forEach((d: any) => {
+            if (d.imei1) allImeis.push(d.imei1);
+            if (d.imei2) allImeis.push(d.imei2);
+        });
+    } else if (body.imei1) {
+        allImeis.push(body.imei1);
+        if (body.imei2) allImeis.push(body.imei2);
+    }
+
+    if (allImeis.length > 0) {
+        // Check if any of these IMEIs already exist (Note: 'array-contains-any' is useful here)
+        const duplicateCheck = await appsRef.where("allImeis", "array-contains-any", allImeis).limit(1).get();
+        if (!duplicateCheck.empty) {
+            return NextResponse.json({ success: false, message: "One or more IMEI numbers already exist in the system." }, { status: 400 });
+        }
+    }
 
     // 🕒 CONVERT DATE STRING TO TIMESTAMP FOR DATABASE CONSISTENCY
     let finalOffenceDate: any = body.offenceDate || null;
@@ -108,6 +127,7 @@ export async function POST(req: NextRequest) {
 
     const newApp = { 
         ...body, 
+        allImeis: allImeis, // For easy indexing/searching
         offenceDate: finalOffenceDate,
         status: "pending", 
         createdAt: admin.firestore.Timestamp.now() 
@@ -115,6 +135,7 @@ export async function POST(req: NextRequest) {
     const docRef = await appsRef.add(newApp);
     return NextResponse.json({ success: true, id: docRef.id });
   } catch (err: any) {
+    console.error("POST /api/applications error:", err);
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
 }

@@ -141,12 +141,12 @@ export default function LandingPage() {
               transition={{ duration: 1 }}
               className="flex-1 w-full"
             >
-               <div className="relative w-full max-w-lg mx-auto lg:mr-0 aspect-[4/3] bg-white p-4 shadow-2xl border-t-8 border-[#0a2c4e] rounded-b-xl overflow-hidden">
+               <div className="relative w-full max-w-lg mx-auto lg:mr-0 aspect-[4/3] bg-white shadow-2xl border-t-8 border-[#0a2c4e] rounded-b-xl overflow-hidden flex items-center justify-center">
                   <Image 
-                    src="/logo1.png" 
+                    src="/logo 1.jpeg" 
                     alt="Sindh Police Operations" 
                     fill 
-                    className="object-contain p-8 grayscale hover:grayscale-0 transition-all duration-700"
+                    className="object-cover transition-all duration-700"
                     priority
                   />
                </div>

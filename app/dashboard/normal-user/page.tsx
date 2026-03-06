@@ -2,6 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import AddApplicationFormNormalUser from "@/components/normaluser/normaluserform";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ export default function UserAddApplication() {
       {/* ---------- NAVBAR ---------- */}
       <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <Link href="/" className="flex items-center gap-4 hover:opacity-80 transition-opacity cursor-pointer">
             <div className="relative w-12 h-12">
                <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
             </div>
@@ -26,7 +27,7 @@ export default function UserAddApplication() {
               <h1 className="text-xl font-black text-[#0a2c4e] tracking-tight uppercase">SINDH POLICE</h1>
               <p className="text-[9px] font-bold text-red-600 tracking-[0.2em] uppercase">Digital Reporting Portal</p>
             </div>
-          </div>
+          </Link>
           
           <div className="hidden sm:flex items-center gap-4">
             <div className="flex flex-col items-end text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -47,18 +48,6 @@ export default function UserAddApplication() {
           
           {/* Left: Instructions & Help (Hidden on mobile) */}
           <div className="hidden lg:block lg:col-span-3 space-y-8">
-            <Button 
-                type="button"
-                onClick={() => {
-                    const event = new CustomEvent('openAiModal');
-                    window.dispatchEvent(event);
-                }}
-                className="w-full bg-gradient-to-r from-[#0a2c4e] to-blue-700 hover:from-blue-800 hover:to-blue-600 text-white rounded-2xl h-16 font-black uppercase tracking-widest text-[10px] shadow-xl shadow-blue-900/20 group transition-all"
-            >
-                <Sparkles size={18} className="mr-2 text-yellow-400 group-hover:scale-110 transition-transform" />
-                AI Auto-Fill Form
-            </Button>
-
             <div className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 sticky top-32">
                 <h2 className="text-sm font-black text-[#0a2c4e] uppercase tracking-[0.15em] mb-6 flex items-center gap-2">
                     <Info size={16} className="text-blue-600" /> Instructions

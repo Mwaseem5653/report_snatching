@@ -418,6 +418,8 @@ export default function UserManagement() {
                                     { key: 'excel_analyzer', label: 'Excel Analyzer' },
                                     { key: 'geo_fencing', label: 'Geo Fencing' },
                                     { key: 'movement_visualizer', label: 'Movement Visualizer' },
+                                    { key: 'lac_cell_converter', label: 'LAC/Cell Converter' },
+                                    { key: 'eyecon_lookup', label: 'Eyecon Lookup' },
                                     { key: 'ai_extractor', label: 'AI Extractor' },
                                     { key: 'info_tools', label: 'Info Tools' },
                                     { key: 'cdr_generator', label: 'CDR Generator' },
