@@ -82,7 +82,10 @@ export async function POST(req: Request) {
       maxAge: MAX_AGE,
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true, 
+      role: payload.role // Returning role for frontend redirection
+    });
   } catch (err: any) {
     console.error("create-session POST error:", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

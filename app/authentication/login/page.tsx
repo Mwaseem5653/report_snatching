@@ -29,14 +29,25 @@ export default function SignInPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        // ✅ Professional Error Handling: Instead of throwing, we just set state
         setError(data.error || "Authentication failed. Please check your credentials.");
         setLoading(false);
-        return; // Stop execution
+        return;
       }
 
-      // Success: Redirect
-      window.location.href = "/dashboard";
+      // ✅ Immediate Role-Based Redirection
+      const role = (data.role || "").toLowerCase();
+      const ROLE_PATHS: Record<string, string> = {
+        super_admin: "/dashboard/super-admin",
+        admin: "/dashboard/admin",
+        officer: "/dashboard/officer-user",
+        market_user: "/dashboard/market-user",
+        ps_user: "/dashboard/ps-user",
+        advanced_tool: "/dashboard/advanced-tool",
+        user: "/dashboard/normal-user",
+      };
+
+      const destination = ROLE_PATHS[role] || "/dashboard/normal-user";
+      window.location.href = destination;
     } catch (err: any) {
       console.error("Login Error:", err);
       setError("Unable to connect to the authentication server. Please try again later.");
