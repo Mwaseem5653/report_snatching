@@ -1,16 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { 
   Copy, 
   RotateCcw, 
   Cpu, 
   Plus, 
   ArrowDownCircle,
-  Zap,
   ClipboardCheck
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,9 +34,12 @@ export default function LacCellConverterClient() {
     return hex.split('').reverse().join('');
   };
 
-  const handleAddRows = (count: number = 10) => {
-    setRows([...rows, ...Array.from({ length: count }, () => ({ lac: "", cell: "", output: "" }))]);
-    toast.info(`Added ${count} more rows`);
+  const reverseConvertValue = (hex: string) => {
+    if (!hex || hex.length !== 4) return "";
+    // Reverse characters back and parse as hex
+    const originalHex = hex.split('').reverse().join('');
+    const num = parseInt(originalHex, 16);
+    return isNaN(num) ? "" : num.toString();
   };
 
   const calculateOutput = (lac: string, cell: string) => {
@@ -52,50 +53,76 @@ export default function LacCellConverterClient() {
     return "";
   };
 
+  const reverseCalculate = (output: string) => {
+    const clean = output.trim().replace(/^0x/i, "");
+    if (clean.length === 8) {
+      const hexLac = clean.substring(0, 4);
+      const hexCell = clean.substring(4, 8);
+      return {
+        lac: reverseConvertValue(hexLac),
+        cell: reverseConvertValue(hexCell)
+      };
+    }
+    return null;
+  };
+
   const updateRow = (index: number, field: keyof RowData, value: string) => {
     const newRows = [...rows];
     newRows[index][field] = value;
-    newRows[index].output = calculateOutput(
-      field === 'lac' ? value : newRows[index].lac,
-      field === 'cell' ? value : newRows[index].cell
-    );
+
+    if (field === 'output') {
+      const reversed = reverseCalculate(value);
+      if (reversed) {
+        newRows[index].lac = reversed.lac;
+        newRows[index].cell = reversed.cell;
+      }
+    } else {
+      newRows[index].output = calculateOutput(
+        field === 'lac' ? value : newRows[index].lac,
+        field === 'cell' ? value : newRows[index].cell
+      );
+    }
     setRows(newRows);
   };
 
-  // 🚀 SMART PASTE LOGIC: Handles Excel copy-paste across rows
-  const handlePaste = (e: React.ClipboardEvent, startIndex: number, field: 'lac' | 'cell') => {
+  const handleAddRows = (count: number = 10) => {
+    setRows([...rows, ...Array.from({ length: count }, () => ({ lac: "", cell: "", output: "" }))]);
+    toast.info(`Added ${count} more rows`);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent, startIndex: number, field: 'lac' | 'cell' | 'output') => {
     e.preventDefault();
     const clipboardData = e.clipboardData.getData('text');
-    
-    // Split by newlines then by tabs/spaces
     const pastedRows = clipboardData.split(/\r?\n/).filter(line => line.trim() !== "");
-    
     const newRows = [...rows];
     
     pastedRows.forEach((rowText, i) => {
       const targetIndex = startIndex + i;
       if (targetIndex >= newRows.length) {
-        // Auto-add row if pasting beyond current capacity
         newRows.push({ lac: "", cell: "", output: "" });
       }
 
-      const columns = rowText.split(/\t/); // Split by Tab (Excel standard)
+      const columns = rowText.split(/\t/);
       
-      if (columns.length >= 2) {
-        // Case: Pasting both columns at once
+      if (field === 'output') {
+          newRows[targetIndex].output = columns[0].trim();
+          const reversed = reverseCalculate(newRows[targetIndex].output);
+          if (reversed) {
+              newRows[targetIndex].lac = reversed.lac;
+              newRows[targetIndex].cell = reversed.cell;
+          }
+      } else if (columns.length >= 2) {
         newRows[targetIndex].lac = columns[0].trim();
         newRows[targetIndex].cell = columns[1].trim();
+        newRows[targetIndex].output = calculateOutput(newRows[targetIndex].lac, newRows[targetIndex].cell);
       } else {
-        // Case: Pasting into a single column
         newRows[targetIndex][field] = columns[0].trim();
+        newRows[targetIndex].output = calculateOutput(newRows[targetIndex].lac, newRows[targetIndex].cell);
       }
-
-      // Recalculate output for updated row
-      newRows[targetIndex].output = calculateOutput(newRows[targetIndex].lac, newRows[targetIndex].cell);
     });
 
     setRows(newRows);
-    toast.success(`Successfully pasted ${pastedRows.length} records`);
+    toast.success(`Successfully processed ${pastedRows.length} records`);
   };
 
   const handleFillDownLac = (index: number) => {
@@ -129,7 +156,6 @@ export default function LacCellConverterClient() {
 
   return (
     <div className="h-[calc(100vh-140px)] flex flex-col space-y-4 overflow-hidden max-w-5xl mx-auto">
-      {/* 🔹 HEADER AREA (Fixed height) */}
       <div className="shrink-0 flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-3">
             <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-lg">
@@ -150,7 +176,6 @@ export default function LacCellConverterClient() {
         </div>
       </div>
 
-      {/* 🔹 INTEGRATED TABLE SECTION (Fills remaining height) */}
       <Card className="flex-1 rounded-2xl border-slate-200 shadow-sm overflow-hidden bg-white flex flex-col min-h-0">
         <CardHeader className="bg-slate-50 border-b p-3 flex flex-row items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
@@ -207,12 +232,17 @@ export default function LacCellConverterClient() {
                     </td>
                     <td className="px-4 py-0 bg-indigo-50/20">
                         <div className="flex items-center justify-between">
-                            <span className={cn(
-                                "font-mono text-xs font-black tracking-widest tabular-nums",
-                                row.output ? "text-indigo-600" : "text-slate-200"
-                            )}>
-                                {row.output || "00000000"}
-                            </span>
+                            <input 
+                                type="text"
+                                value={row.output}
+                                onChange={(e) => updateRow(idx, 'output', e.target.value)}
+                                onPaste={(e) => handlePaste(e, idx, 'output')}
+                                placeholder="00000000"
+                                className={cn(
+                                    "w-full h-7 bg-transparent border-none focus:ring-0 text-[11px] font-black tracking-widest tabular-nums outline-none",
+                                    row.output ? "text-indigo-600" : "text-slate-300"
+                                )}
+                            />
                             {row.output && (
                                 <button 
                                     onClick={() => {
@@ -234,7 +264,6 @@ export default function LacCellConverterClient() {
         </CardContent>
       </Card>
 
-      {/* Helper Note */}
       <p className="shrink-0 text-center text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
         Pro-Tip: You can copy multiple rows from Excel and paste them here directly. 
         Use the Arrow button to drag LAC ID to all rows below.

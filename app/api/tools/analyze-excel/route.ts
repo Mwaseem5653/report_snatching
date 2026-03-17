@@ -281,19 +281,53 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const imeiCol = findColumn(headers, ["IMEI", "imei", "Imei number", "Device IMEI"]);
     const latCol = findColumn(headers, ["Latitude", "Lat", "LATITUDE", "CELL_LAT", "SITE_LAT", "X_COORD", "GPS_LAT", "LATITUTDE", "LATITUD", "LATITIDE"]);
     const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LNG", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON", "LONGITUTDE", "LONGITUD", "LONGITIDE", "LANGUTIDE", "LANGITUDE"]);
-    const lacCol = findColumn(headers, ["LAC_ID", "LAC", "Location Area Code", "LAC_CODE"]);
-    const cellCol = findColumn(headers, ["CELL_ID", "CELL", "CellID", "SITE_ID", "Site ID", "CELL_CODE"]);
-    const cellidSpecialCol = findColumn(headers, ["cellid"]);
+    const lacCol = findColumn(headers, ["LAC_ID", "LAC", "Lac_Id", "lac"]);
+    const cellCol = findColumn(headers, ["Cell_Id", "CELL_ID", "Cell id", "Cell_SITE_ID"]);
+    const cellidSpecialCol = findColumn(headers, ["cellid", "cell_id_special", "cellidspecial"]);
 
     const orgNumCol = findColumn(headers, ["call_org_num", "ORG_NUM", "Originating Number"]);
-    const dialedNumCol = findColumn(headers, ["CALL_DIALED_NUM", "DIALED_NUM", "Dialed Number"]);
+    const dialedNumCol = findColumn(headers, ["CALL_DIALED_NUM", "DIALED_NUM", "Dialled Number"]);
 
     // Sort rows chronologically for movement tracking
     const jsonData = dataRows.map(row => {
         const obj: any = {};
         headers.forEach((h, i) => { obj[h] = row[i]; });
         const rawDate = dateCol ? obj[dateCol] : null;
+        obj._rawDateValue = rawDate; // Preserve original value for the formatted sheet
         obj._dateObj = rawDate ? parseExcelDate(rawDate, formatHint) : new Date(0);
+        
+        // 🚀 Pre-extract LAC/CELL from special hex column if it exists
+        if (cellidSpecialCol) {
+            let hexVal = String(obj[cellidSpecialCol] || "").trim();
+            if (hexVal.toLowerCase().startsWith("0x")) hexVal = hexVal.substring(2);
+            
+            if (hexVal && hexVal.length >= 4) {
+                try {
+                    // Jazz/Huawei Hex Format: Full character reversal (Little Endian nibbles)
+                    // Excel logic: MID(4,3,2,1) for LAC, MID(8,7,6,5) for CELL
+                    
+                    // Extract LAC (First 4 chars)
+                    const lacPart = hexVal.substring(0, 4);
+                    const lacHex = lacPart.split('').reverse().join('');
+                    const lacDec = parseInt(lacHex, 16);
+                    if (!isNaN(lacDec)) obj._extractedLac = lacDec;
+                    
+                    // Extract Cell ID (Remaining chars, usually next 4)
+                    if (hexVal.length >= 8) {
+                        const cellPart = hexVal.substring(4, 8);
+                        const cellHex = cellPart.split('').reverse().join('');
+                        const cellDec = parseInt(cellHex, 16);
+                        if (!isNaN(cellDec)) obj._extractedCell = cellDec;
+                    } else if (hexVal.length > 4) {
+                        // Fallback for non-standard lengths
+                        const cellPart = hexVal.substring(4);
+                        const cellHex = cellPart.split('').reverse().join('');
+                        const cellDec = parseInt(cellHex, 16);
+                        if (!isNaN(cellDec)) obj._extractedCell = cellDec;
+                    }
+                } catch (e) {}
+            }
+        }
         return obj;
     }).sort((a, b) => a._dateObj.getTime() - b._dateObj.getTime());
 
@@ -400,35 +434,30 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             callLogMap.set(finalB, log);
         }
 
-        if (rawAddr && rawAddr !== "None" && rawAddr !== "") {
-            const stats = addressSummaryMap.get(rawAddr) || { count: 0, start: dateObj, end: dateObj, lat: null, lon: null, lac: null, cell: null };
+        // --- Improved Address/Location Summary Logic ---
+        const lacVal = row._extractedLac !== undefined ? row._extractedLac : (lacCol ? row[lacCol] : null);
+        const cellVal = row._extractedCell !== undefined ? row._extractedCell : (cellCol ? row[cellCol] : null);
+        
+        // Grouping key: Strictly Cell ID if available, otherwise fallback to Address
+        const groupKey = cellVal ? `CELL-${cellVal}` : (rawAddr || null);
+
+        if (groupKey && groupKey !== "None" && groupKey !== "") {
+            const stats = addressSummaryMap.get(groupKey) || { count: 0, start: dateObj, end: dateObj, lat: null, lon: null, lac: lacVal, cell: cellVal, addr: rawAddr };
             stats.count++;
+            
             if (dateObj.getTime() > 0) {
                 if (stats.start.getTime() === 0 || dateObj < stats.start) stats.start = dateObj;
                 if (dateObj > stats.end) stats.end = dateObj;
             }
-            if (rawLat !== null && rawLat !== '') stats.lat = rawLat;
-            if (rawLon !== null && rawLon !== '') stats.lon = rawLon;
-            if (!stats.lac && lacCol) stats.lac = row[lacCol];
-            if (!stats.cell && cellCol) stats.cell = row[cellCol];
+            
+            // For a single Cell ID, preserve the first valid LAC, Lat, Lon, and Address encountered
+            if (stats.lat === null && rawLat !== null && rawLat !== '') stats.lat = rawLat;
+            if (stats.lon === null && rawLon !== null && rawLon !== '') stats.lon = rawLon;
+            if (!stats.addr && rawAddr && rawAddr !== "None") stats.addr = rawAddr;
+            if (!stats.lac && lacVal) stats.lac = lacVal;
+            if (!stats.cell && cellVal) stats.cell = cellVal;
 
-            if (cellidSpecialCol) {
-                const hexVal = String(row[cellidSpecialCol] || "").trim();
-                if (hexVal && hexVal.length >= 4) {
-                    try {
-                        const lacHex = hexVal.substring(0, 4).split('').reverse().join('');
-                        const lacDec = parseInt(lacHex, 16);
-                        if (!isNaN(lacDec)) stats.lac = lacDec;
-                        const cellPart = hexVal.substring(4, 8);
-                        if (cellPart) {
-                            const cellHex = cellPart.split('').reverse().join('');
-                            const cellDec = parseInt(cellHex, 16);
-                            if (!isNaN(cellDec)) stats.cell = cellDec;
-                        }
-                    } catch (e) {}
-                }
-            }
-            addressSummaryMap.set(rawAddr, stats);
+            addressSummaryMap.set(groupKey, stats);
         }
 
         if (rawImei && rawImei !== "None" && rawImei !== "") {
@@ -446,8 +475,8 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     const mobileSummary = Array.from(mobileSummaryMap.entries()).map(([num, s]) => ({
         "Mobile Number": num, "Count": s.count, 
-        "Starting Date": s.start.getTime() > 0 ? s.start.toISOString().replace("T", " ").substring(0, 19) : "N/A",
-        "Ending Date": s.end.getTime() > 0 ? s.end.toISOString().replace("T", " ").substring(0, 19) : "N/A",
+        "Starting Date": s.start.getTime() > 0 ? s.start : "N/A",
+        "Ending Date": s.end.getTime() > 0 ? s.end : "N/A",
         "Eyecon Name": "", "Name": "", "CNIC": "", "Address": ""
     })).sort((a, b) => b.Count - a.Count);
 
@@ -490,16 +519,44 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     const outWb = new ExcelJS.Workbook();
     const sRaw = outWb.addWorksheet("Formatted Data");
-    sRaw.columns = headers.map(h => ({ header: h, key: h, width: 15 }));
+    
+    // Create formatted headers by inserting LAC/CELL after cellidSpecialCol
+    const formattedHeaders = [...headers];
+    if (cellidSpecialCol) {
+        const cellidIdx = formattedHeaders.indexOf(cellidSpecialCol);
+        if (cellidIdx !== -1) {
+            // Insert after cellidSpecialCol (order: cellid, LAC_ID, CELL_ID)
+            const toInsert = [];
+            if (!headers.includes("LAC_ID")) toInsert.push("LAC_ID");
+            if (!headers.includes("CELL_ID")) toInsert.push("CELL_ID");
+            
+            if (toInsert.length > 0) {
+                formattedHeaders.splice(cellidIdx + 1, 0, ...toInsert);
+            }
+        }
+    }
+    sRaw.columns = formattedHeaders.map(h => ({ header: h, key: h, width: 15 }));
+
     jsonData.forEach(row => {
         const cleanRow: any = {};
-        headers.forEach(h => {
-            const val = row[h];
-            if (val instanceof Date) cleanRow[h] = val.toISOString().replace("T", " ").substring(0, 19);
-            else {
-                const strVal = String(val);
-                if (/^\d{10,}$/.test(strVal)) cleanRow[h] = " " + strVal;
-                else cleanRow[h] = val;
+        formattedHeaders.forEach(h => {
+            if (h === "LAC_ID" && row._extractedLac !== undefined) {
+                cleanRow[h] = row._extractedLac;
+            } else if (h === "CELL_ID" && row._extractedCell !== undefined) {
+                cleanRow[h] = row._extractedCell;
+            } else {
+                // If it's the original date column, use the raw value preserved from the source
+                if (h === dateCol && row._rawDateValue !== undefined) {
+                    cleanRow[h] = row._rawDateValue;
+                } else {
+                    const val = row[h];
+                    if (val instanceof Date) cleanRow[h] = val; // Preserve original Date object
+                    else {
+                        const strVal = String(val);
+                        if (/^\d{10,}$/.test(strVal)) cleanRow[h] = " " + strVal;
+                        else cleanRow[h] = val;
+                    }
+                }
             }
         });
         sRaw.addRow(cleanRow);
@@ -530,6 +587,8 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         { header: "Count", key: "Count", width: 10 }
     );
     s1.columns = s1Cols;
+    s1.getColumn("Starting Date").numFmt = "yyyy-mm-dd hh:mm:ss";
+    s1.getColumn("Ending Date").numFmt = "yyyy-mm-dd hh:mm:ss";
 
     const safeLink = (url: string) => {
         if (!url) return "";
@@ -560,8 +619,8 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         const ms = mobileSummaryMap.get(num);
         const logEntry: any = { 
             num, 
-            start: ms.start.getTime() > 0 ? ms.start.toISOString().substring(0, 10) : "N/A", 
-            end: ms.end.getTime() > 0 ? ms.end.toISOString().substring(0, 10) : "N/A", 
+            start: ms.start.getTime() > 0 ? ms.start : "N/A", 
+            end: ms.end.getTime() > 0 ? ms.end : "N/A", 
             name: c ? (c.name || " ") : "", 
             eye: c ? (c.eye || " ") : "", 
             cnic: c ? (c.cnic ? " " + c.cnic : " ") : "", 
@@ -592,8 +651,8 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         s2Cols.push({ header: "Address", key: "addr", width: 45 });
     }
 
-    s2Cols.push({ header: "Start Date", key: "start", width: 15 });
-    s2Cols.push({ header: "End Date", key: "end", width: 15 });
+    s2Cols.push({ header: "Start Date", key: "start", width: 20 });
+    s2Cols.push({ header: "End Date", key: "end", width: 20 });
 
     s2Cols.push(
         { header: "In-SMS", key: "inS", width: 10 },
@@ -603,35 +662,46 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         { header: "Total", key: "total", width: 10 }
     );
     s2.columns = s2Cols;
+    s2.getColumn("start").numFmt = "yyyy-mm-dd hh:mm:ss";
+    s2.getColumn("end").numFmt = "yyyy-mm-dd hh:mm:ss";
     s2.addRows(logs);
 
     if (addressSummaryMap.size > 0) {
         const s3 = outWb.addWorksheet("Addresses");
         s3.columns = [
-            { header: "Site Address", key: "addr", width: 60 }, 
-            { header: "Count", key: "count", width: 10 }, 
-            { header: "LAC_ID", key: "lac", width: 12 }, 
             { header: "CELL_ID", key: "cell", width: 12 }, 
+            { header: "LAC_ID", key: "lac", width: 12 }, 
+            { header: "Count", key: "count", width: 10 }, 
+            { header: "Site Address", key: "addr", width: 60 }, 
             { header: "Latitude", key: "lat", width: 15 }, 
             { header: "Longitude", key: "lon", width: 15 }, 
-            { header: "Start", key: "start", width: 20 }, 
-            { header: "End", key: "end", width: 20 }
+            { header: "Date From", key: "start", width: 20 }, 
+            { header: "Date To", key: "end", width: 20 }
         ];
-        s3.addRows(Array.from(addressSummaryMap.entries()).map(([a, s]) => ({ 
-            addr: a, 
+        s3.getColumn("start").numFmt = "yyyy-mm-dd hh:mm:ss";
+        s3.getColumn("end").numFmt = "yyyy-mm-dd hh:mm:ss";
+        s3.addRows(Array.from(addressSummaryMap.entries()).map(([k, s]) => ({ 
+            addr: s.addr || "N/A", 
             count: s.count, 
             lac: s.lac,
             cell: s.cell,
             lat: s.lat, 
             lon: s.lon, 
-            start: s.start.getTime() > 0 ? s.start.toISOString().replace("T", " ").substring(0, 19) : "N/A", 
-            end: s.end.getTime() > 0 ? s.end.toISOString().replace("T", " ").substring(0, 19) : "N/A" 
+            start: s.start.getTime() > 0 ? s.start : "N/A", 
+            end: s.end.getTime() > 0 ? s.end : "N/A" 
         })).sort((a, b) => b.count - a.count));
     }
     if (imeiSummaryMap.size > 0) {
         const s4 = outWb.addWorksheet("IMEI Numbers");
         s4.columns = [{ header: "IMEI Number", key: "imei", width: 25 }, { header: "Count", key: "count", width: 10 }, { header: "Start", key: "start", width: 20 }, { header: "End", key: "end", width: 20 }];
-        s4.addRows(Array.from(imeiSummaryMap.entries()).map(([i, s]) => ({ imei: " " + i, count: s.count, start: s.start.getTime() > 0 ? s.start.toISOString().replace("T", " ").substring(0, 19) : "N/A", end: s.end.getTime() > 0 ? s.end.toISOString().replace("T", " ").substring(0, 19) : "N/A" })).sort((a, b) => b.count - a.count));
+        s4.getColumn("start").numFmt = "yyyy-mm-dd hh:mm:ss";
+        s4.getColumn("end").numFmt = "yyyy-mm-dd hh:mm:ss";
+        s4.addRows(Array.from(imeiSummaryMap.entries()).map(([i, s]) => ({ 
+            imei: " " + i, 
+            count: s.count, 
+            start: s.start.getTime() > 0 ? s.start : "N/A", 
+            end: s.end.getTime() > 0 ? s.end : "N/A" 
+        })).sort((a, b) => b.count - a.count));
     }
 
     if (enableIntel) {

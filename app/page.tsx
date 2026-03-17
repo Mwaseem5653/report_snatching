@@ -1,20 +1,16 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import Footer from "@/components/Footer";
 import Image from "next/image";
 import { 
   ShieldCheck, 
   Siren, 
-  Smartphone, 
-  Clock, 
   Search, 
-  CheckCircle2, 
   ArrowRight,
-  Shield,
   FileText,
   PhoneCall,
   Info,
@@ -22,6 +18,24 @@ import {
 } from "lucide-react";
 
 export default function LandingPage() {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const heroImages = ["/disimage1.jpg", "/disimage2.jpg", "/disimage3.jpg"];
+  
+  // 🔹 Cycle through different modern animations
+  const transitionTypes = ["block", "slide", "scale"];
+  const currentTransition = transitionTypes[currentImageIndex % transitionTypes.length];
+
+  // 🔹 Modernized Block Reveal Animation Configuration
+  const blockSize = 8; // 8x8 grid
+  const blocks = Array.from({ length: blockSize * blockSize });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentImageIndex((prev) => (prev + 1) % heroImages.length);
+    }, 30000); // 30-second gap for modern feel
+    return () => clearInterval(timer);
+  }, []);
+
   const publicServices = [
     { 
       icon: <FileText className="h-8 w-8" />,
@@ -35,7 +49,7 @@ export default function LandingPage() {
       title: "Verify IMEI", 
       titleUr: "آئی ایم ای آئی تصدیق",
       desc: "Check if a mobile device is reported stolen in the Sindh Police database.",
-      link: "/authentication/login" // Or a public search if we enable it
+      link: "/authentication/login"
     },
     { 
       icon: <ShieldCheck className="h-8 w-8" />,
@@ -93,7 +107,7 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* 🔹 Hero Section: Formal & Authoritative */}
+      {/* 🔹 Hero Section */}
       <section className="relative bg-slate-50 overflow-hidden border-b border-slate-200">
         <div className="absolute inset-0 z-0 opacity-5">
            <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
@@ -103,9 +117,9 @@ export default function LandingPage() {
           <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-24">
             
             <motion.div 
-              initial={{ opacity: 0, x: -30 }}
+              initial={{ opacity: 0, x: -50 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8 }}
+              transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
               className="flex-1 space-y-8 text-center lg:text-left"
             >
               <div className="inline-flex items-center gap-2 px-4 py-1 bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-sm shadow-lg shadow-red-600/20">
@@ -136,32 +150,94 @@ export default function LandingPage() {
             </motion.div>
 
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 1 }}
+              transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
               className="flex-1 w-full"
             >
-               <div className="relative w-full max-w-lg mx-auto lg:mr-0 aspect-[4/3] bg-white shadow-2xl border-t-8 border-[#0a2c4e] rounded-b-xl overflow-hidden flex items-center justify-center">
-                  <Image 
-                    src="/logo 1.jpeg" 
-                    alt="Sindh Police Operations" 
-                    fill 
-                    className="object-cover transition-all duration-700"
-                    priority
-                  />
+               <div className="relative w-full max-w-lg mx-auto lg:mr-0 aspect-[4/3] bg-slate-50 shadow-2xl border-t-8 border-[#0a2c4e] rounded-b-xl overflow-hidden flex items-center justify-center">
+                  
+                  {/* 🔹 Permanent Background Logo (Visible during transitions) */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+                    <div className="relative w-48 h-48">
+                      <Image src="/logo.png" alt="Sindh Police Background" fill className="object-contain grayscale" />
+                    </div>
+                  </div>
+
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={currentImageIndex}
+                      initial={
+                        currentTransition === "slide" ? { x: "100%", opacity: 0 } :
+                        currentTransition === "scale" ? { scale: 1.2, opacity: 0 } :
+                        { opacity: 0 }
+                      }
+                      animate={{ x: 0, scale: 1, opacity: 1 }}
+                      exit={
+                        currentTransition === "slide" ? { x: "-100%", opacity: 0 } :
+                        currentTransition === "scale" ? { scale: 0.8, opacity: 0 } :
+                        { opacity: 0 }
+                      }
+                      transition={{ duration: 0.8, ease: "easeInOut" }}
+                      className="absolute inset-0 z-10"
+                    >
+                      <Image 
+                        src={heroImages[currentImageIndex]} 
+                        alt={`Sindh Police Operations ${currentImageIndex + 1}`} 
+                        fill 
+                        className="object-cover"
+                        priority
+                      />
+                      
+                      {/* 🔹 Conditional Block Reveal Overlay */}
+                      {currentTransition === "block" && (
+                        <div className="absolute inset-0 grid grid-cols-8 grid-rows-8 z-20 pointer-events-none">
+                          {blocks.map((_, i) => (
+                            <motion.div
+                              key={i}
+                              initial={{ opacity: 1 }}
+                              animate={{ opacity: 0 }}
+                              exit={{ opacity: 1 }}
+                              transition={{
+                                duration: 0.6,
+                                delay: Math.random() * 0.5,
+                                ease: "easeInOut"
+                              }}
+                              className="bg-slate-50"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
                </div>
             </motion.div>
-
           </div>
         </div>
       </section>
 
       {/* 🔹 Public Services Grid */}
-      <section className="py-24 bg-white">
-        <div className="container mx-auto px-6">
+      <section className="py-24 bg-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50 rounded-full -mr-48 -mt-48 opacity-50 blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-red-50 rounded-full -ml-48 -mb-48 opacity-50 blur-3xl" />
+
+        <div className="container mx-auto px-6 relative z-10">
           <div className="text-center mb-16 space-y-2">
-             <h2 className="text-3xl font-black text-[#0a2c4e] tracking-tight uppercase">Public Services</h2>
-             <div className="w-20 h-1 bg-red-600 mx-auto"></div>
+             <motion.h2 
+               initial={{ opacity: 0, y: 20 }}
+               whileInView={{ opacity: 1, y: 0 }}
+               viewport={{ once: true }}
+               className="text-3xl font-black text-[#0a2c4e] tracking-tight uppercase"
+             >
+               Public Services
+             </motion.h2>
+             <motion.div 
+               initial={{ width: 0 }}
+               whileInView={{ width: 80 }}
+               viewport={{ once: true }}
+               transition={{ duration: 0.8, delay: 0.2 }}
+               className="h-1 bg-red-600 mx-auto"
+             />
              <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] mt-4">Safe & Accessible Citizen Support</p>
           </div>
 
@@ -169,20 +245,26 @@ export default function LandingPage() {
             {publicServices.map((service, i) => (
               <motion.div
                 key={i}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="group p-8 border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-2xl hover:border-blue-100 transition-all duration-500 relative"
+                whileHover={{ y: -10, scale: 1.02 }}
+                transition={{ 
+                  opacity: { duration: 0.5, delay: i * 0.15 },
+                  y: { duration: 0.5, delay: i * 0.15 },
+                  scale: { duration: 0.2 }
+                }}
+                className="group p-8 border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-2xl hover:border-blue-100 transition-all duration-500 relative rounded-2xl overflow-hidden"
               >
-                <div className="mb-6 text-[#0a2c4e] group-hover:text-red-600 transition-colors">
+                <div className="absolute top-0 left-0 w-1 h-0 bg-red-600 group-hover:h-full transition-all duration-500" />
+                <div className="mb-6 text-[#0a2c4e] group-hover:text-red-600 transition-colors transform group-hover:scale-110 duration-300">
                   {service.icon}
                 </div>
                 <h3 className="text-xl font-bold text-slate-800 mb-1">{service.title}</h3>
                 <p className="text-blue-600 font-urdu font-bold text-sm mb-4 leading-none">{service.titleUr}</p>
                 <p className="text-slate-500 text-sm leading-relaxed mb-6">{service.desc}</p>
                 <Link href={service.link} className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-[#0a2c4e] group-hover:text-red-600 transition-colors">
-                   Access Service <ExternalLink size={12} className="ml-2" />
+                   Access Service <ExternalLink size={12} className="ml-2 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                 </Link>
               </motion.div>
             ))}
@@ -191,25 +273,53 @@ export default function LandingPage() {
       </section>
 
       {/* 🔹 Official Message Bar */}
-      <section className="bg-[#0a2c4e] text-white py-16 overflow-hidden relative">
-        <div className="container mx-auto px-6 text-center max-w-4xl space-y-8">
-           <h2 className="text-3xl md:text-5xl font-black tracking-tight leading-none uppercase">Empowering Citizens Through Digital Justice</h2>
+      <section className="bg-[#0a2c4e] text-white py-20 overflow-hidden relative">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10" />
+        
+        <div className="container mx-auto px-6 text-center max-w-4xl space-y-8 relative z-10">
+           <motion.h2 
+             initial={{ opacity: 0, scale: 0.9 }}
+             whileInView={{ opacity: 1, scale: 1 }}
+             viewport={{ once: true }}
+             className="text-3xl md:text-5xl font-black tracking-tight leading-none uppercase"
+           >
+             Empowering Citizens Through Digital Justice
+           </motion.h2>
            <p className="text-blue-100 text-lg opacity-80 leading-relaxed font-medium">
               The Sindh Police is dedicated to modernizing law enforcement. Our goal is to bridge the gap between police and public through technology, ensuring accountability and swift response.
            </p>
-           <div className="pt-4 flex flex-wrap justify-center gap-12 text-slate-300">
-              <div className="text-center">
-                 <p className="text-3xl font-black text-white">15</p>
-                 <p className="text-[9px] font-bold uppercase tracking-[0.2em]">Police Helpline</p>
-              </div>
-              <div className="text-center">
-                 <p className="text-3xl font-black text-white">9110</p>
-                 <p className="text-[9px] font-bold uppercase tracking-[0.2em]">IGP Complaint Cell</p>
-              </div>
-              <div className="text-center">
-                 <p className="text-3xl font-black text-white">88.6</p>
-                 <p className="text-[9px] font-bold uppercase tracking-[0.2em]">Sindh Police FM</p>
-              </div>
+           
+           <div className="pt-8 flex flex-wrap justify-center gap-12 text-slate-300">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.1 }}
+                className="text-center group"
+              >
+                 <p className="text-4xl font-black text-white group-hover:text-red-500 transition-colors duration-500">15</p>
+                 <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-300">Police Helpline</p>
+              </motion.div>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.2 }}
+                className="text-center group"
+              >
+                 <p className="text-4xl font-black text-white group-hover:text-red-500 transition-colors duration-500">9110</p>
+                 <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-300">IGP Complaint Cell</p>
+              </motion.div>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.3 }}
+                className="text-center group"
+              >
+                 <p className="text-4xl font-black text-white group-hover:text-red-500 transition-colors duration-500">88.6</p>
+                 <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-300">Sindh Police FM</p>
+              </motion.div>
            </div>
         </div>
       </section>
