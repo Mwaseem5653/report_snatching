@@ -333,6 +333,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     const mobileSummaryMap = new Map<string, any>();
     const addressSummaryMap = new Map<string, any>();
+    const onlyAddressSummaryMap = new Map<string, any>();
     const imeiSummaryMap = new Map<string, any>();
     const callLogMap = new Map<string, any>();
     
@@ -458,6 +459,21 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             if (!stats.cell && cellVal) stats.cell = cellVal;
 
             addressSummaryMap.set(groupKey, stats);
+        }
+
+        // --- Strictly Address-Based Summary (For OnlyAddresses Sheet) ---
+        if (rawAddr && rawAddr !== "None" && rawAddr !== "") {
+            const stats = onlyAddressSummaryMap.get(rawAddr) || { count: 0, start: dateObj, end: dateObj, lat: null, lon: null, lac: lacVal, cell: cellVal };
+            stats.count++;
+            if (dateObj.getTime() > 0) {
+                if (stats.start.getTime() === 0 || dateObj < stats.start) stats.start = dateObj;
+                if (dateObj > stats.end) stats.end = dateObj;
+            }
+            if (rawLat !== null && rawLat !== '' && stats.lat === null) stats.lat = rawLat;
+            if (rawLon !== null && rawLon !== '' && stats.lon === null) stats.lon = rawLon;
+            if (!stats.lac && lacVal) stats.lac = lacVal;
+            if (!stats.cell && cellVal) stats.cell = cellVal;
+            onlyAddressSummaryMap.set(rawAddr, stats);
         }
 
         if (rawImei && rawImei !== "None" && rawImei !== "") {
@@ -682,6 +698,32 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         s3.getColumn("end").numFmt = "yyyy-mm-dd hh:mm:ss";
         s3.addRows(Array.from(addressSummaryMap.entries()).map(([k, s]) => ({ 
             addr: s.addr || "N/A", 
+            count: s.count, 
+            lac: s.lac,
+            cell: s.cell,
+            lat: s.lat, 
+            lon: s.lon, 
+            start: s.start.getTime() > 0 ? s.start : "N/A", 
+            end: s.end.getTime() > 0 ? s.end : "N/A" 
+        })).sort((a, b) => b.count - a.count));
+    }
+
+    if (onlyAddressSummaryMap.size > 0) {
+        const s3b = outWb.addWorksheet("OnlyAddresses");
+        s3b.columns = [
+            { header: "Site Address", key: "addr", width: 60 }, 
+            { header: "Count", key: "count", width: 10 }, 
+            { header: "LAC_ID", key: "lac", width: 12 }, 
+            { header: "CELL_ID", key: "cell", width: 12 }, 
+            { header: "Latitude", key: "lat", width: 15 }, 
+            { header: "Longitude", key: "lon", width: 15 }, 
+            { header: "Start", key: "start", width: 20 }, 
+            { header: "End", key: "end", width: 20 }
+        ];
+        s3b.getColumn("start").numFmt = "yyyy-mm-dd hh:mm:ss";
+        s3b.getColumn("end").numFmt = "yyyy-mm-dd hh:mm:ss";
+        s3b.addRows(Array.from(onlyAddressSummaryMap.entries()).map(([addr, s]) => ({ 
+            addr: addr, 
             count: s.count, 
             lac: s.lac,
             cell: s.cell,

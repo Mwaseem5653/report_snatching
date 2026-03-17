@@ -32,7 +32,7 @@ export default function LandingPage() {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentImageIndex((prev) => (prev + 1) % heroImages.length);
-    }, 30000); // 30-second gap for modern feel
+    }, 5000); // 5-second interval as requested
     return () => clearInterval(timer);
   }, []);
 
@@ -178,7 +178,7 @@ export default function LandingPage() {
                         currentTransition === "scale" ? { scale: 0.8, opacity: 0 } :
                         { opacity: 0 }
                       }
-                      transition={{ duration: 0.8, ease: "easeInOut" }}
+                      transition={{ duration: 2.0, ease: [0.22, 1, 0.36, 1] }} // Slower, premium transition
                       className="absolute inset-0 z-10"
                     >
                       <Image 
@@ -199,8 +199,8 @@ export default function LandingPage() {
                               animate={{ opacity: 0 }}
                               exit={{ opacity: 1 }}
                               transition={{
-                                duration: 0.6,
-                                delay: Math.random() * 0.5,
+                                duration: 1.5, // Slower block fade
+                                delay: Math.random() * 1.2, // Increased random delay
                                 ease: "easeInOut"
                               }}
                               className="bg-slate-50"
