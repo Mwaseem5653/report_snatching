@@ -259,7 +259,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const dateCol = findColumn(headers, ["CALL_START_DT_TM", "Start Date", "Datetime", "Date", "STRT_TM", "Start Time", "Time"]);
     
     // 🚀 Detect Date Format Hint
-    let formatHint: "DMY" | "MDY" = "DMY";
+    let formatHint: "DMY" | "MDY" = (dateCol?.toLowerCase().trim() === "strt_tm") ? "MDY" : "DMY";
     if (dateCol) {
         const dateIdx = headers.indexOf(dateCol);
         for (const row of dataRows.slice(0, 100)) {
