@@ -15,6 +15,7 @@ import GeoFencingClient from "@/components/tools/GeoFencingClient";
 import MovementVisualizerClient from "@/components/tools/MovementVisualizerClient";
 import LacCellConverterClient from "@/components/tools/LacCellConverterClient";
 import EyeconLookupClient from "@/components/tools/EyeconLookupClient";
+import ApplicationToExcelClient from "@/components/tools/ApplicationToExcelClient";
 import TokenManagement from "@/components/dashboard/TokenManagement";
 import { 
   DropdownMenu, 
@@ -38,7 +39,8 @@ import {
   MapPin,
   Navigation,
   Cpu,
-  Eye
+  Eye,
+  FileDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +76,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
 
   // 🚀 Filter Tools Menu: Super Admin sees everything, others need permissions
   const TOOLS_MENU = [
+    { id: "app-excel", label: "Application To Excel", icon: FileDown, key: "super_only" },
     { id: "analyzer", label: "Excel Analyzer", icon: FileSpreadsheet, key: "excel_analyzer" },
     { id: "geo", label: "Geo Fencing", icon: MapPin, key: "geo_fencing" },
     { id: "visualizer", label: "Movement Visualizer", icon: Navigation, key: "movement_visualizer" },
@@ -82,7 +85,10 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
     { id: "extractor", label: "AI Extractor", icon: ScanText, key: "ai_extractor" },
     { id: "utilities", label: "Info Lookup", icon: LayoutGrid, key: "info_tools" },
     { id: "cdr", label: "CDR Generator", icon: FileCode, key: "cdr_generator" },
-  ].filter(t => isSuper || perms[t.key]);
+  ].filter(t => {
+      if (t.key === "super_only") return isSuper;
+      return isSuper || perms[t.key];
+  });
 
   const isToolActive = TOOLS_MENU.some(t => t.id === activeTab);
 
@@ -148,6 +154,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
         {activeTab === "reports" && <ReportsView />}
         {activeTab === "matched" && <MatchedIMEIsView />}
         
+        {activeTab === "app-excel" && isSuper && <ApplicationToExcelClient />}
         {(activeTab === "analyzer" && (isSuper || perms.excel_analyzer)) && <ExcelAnalyzerClient />}
         {(activeTab === "geo" && (isSuper || perms.geo_fencing)) && <GeoFencingClient />}
         {(activeTab === "visualizer" && (isSuper || perms.movement_visualizer)) && <MovementVisualizerClient />}

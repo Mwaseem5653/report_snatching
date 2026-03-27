@@ -173,49 +173,49 @@ export default function Psusersapplication() {
       </div>
 
       {/* APPLICATION LIST */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="flex flex-col gap-3">
         {loading && applications.length === 0 ? (
             Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-32 bg-white rounded-2xl animate-pulse border border-slate-100"></div>
+                <div key={i} className="h-20 bg-white rounded-2xl animate-pulse border border-slate-100"></div>
             ))
         ) : applications.length > 0 ? (
           applications.map((app) => (
             <div
               key={app.id}
               onClick={() => setSelectedApp(app)}
-              className="group bg-white border border-slate-200 p-5 rounded-2xl cursor-pointer hover:shadow-xl hover:border-blue-300 transition-all duration-300 relative overflow-hidden"
+              className="group bg-white border border-slate-200 p-4 px-6 rounded-2xl cursor-pointer hover:shadow-xl hover:border-blue-300 transition-all duration-300 relative overflow-hidden flex items-center justify-between"
             >
-              <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               
-              <div className="flex justify-between items-start mb-4">
-                <div className="h-10 w-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
-                    <FileText size={20} />
-                </div>
-                <div className="text-right">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                        {app.offenceDate ? new Date(app.offenceDate).toLocaleDateString("en-GB", { day: '2-digit', month: 'short' }) : "No Date"}
+              <div className="flex flex-col">
+                <p className="font-black text-[#0a2c4e] text-lg uppercase tracking-tight group-hover:text-blue-700 transition-colors leading-tight">
+                  {app.applicantName}
+                </p>
+                <div className="flex items-center gap-3 mt-0.5">
+                    <p className="text-xs text-slate-500 font-bold tracking-wider">
+                        {app.applicantMobile || app.applicantPhone || "No Contact"}
                     </p>
-                    <span className={cn(
-                        "px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider",
+                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                    <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md">Type: {app.crimeHead || "N/A"}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-8">
+                <div className="text-right hidden sm:block">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Police Station</p>
+                    <p className="font-bold text-slate-700 text-sm uppercase tracking-tight">{app.ps || "N/A"}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                   <span className={cn(
+                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
                         app.status === "pending" ? "bg-amber-100 text-amber-700" :
                         app.status === "processed" ? "bg-blue-100 text-blue-700" :
                         "bg-emerald-100 text-emerald-700"
                     )}>
                         {app.status}
                     </span>
+                   <ChevronRight size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <p className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors truncate">
-                  {app.applicantName}
-                </p>
-                <p className="text-xs text-slate-500 font-medium truncate">{app.applicantEmail || app.applicantMobile}</p>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between text-[11px] text-slate-400 font-bold uppercase">
-                 <span className="flex items-center gap-1"><MapPin size={10} /> {app.district}</span>
-                 <ChevronRight size={14} />
               </div>
             </div>
           ))

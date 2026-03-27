@@ -245,19 +245,19 @@ export default function MatchedIMEIsView() {
         </div>
       </div>
 
-      {loading && matches.length === 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-40 bg-white rounded-3xl animate-pulse border border-slate-100"></div>)}
-        </div>
-      ) : matches.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {matches.map((match) => (
+      <div className="flex flex-col gap-3">
+        {loading && matches.length === 0 ? (
+            Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-24 bg-white rounded-2xl animate-pulse border border-slate-100"></div>
+            ))
+        ) : matches.length > 0 ? (
+          matches.map((match) => (
             <motion.div
               key={match.id}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               onClick={() => handleView(match)}
-              className="group bg-white border border-slate-200 p-6 rounded-3xl hover:shadow-xl hover:border-red-200 transition-all duration-300 relative overflow-hidden cursor-pointer"
+              className="group bg-white border border-slate-200 p-4 px-6 rounded-2xl hover:shadow-xl hover:border-red-300 transition-all duration-300 relative overflow-hidden cursor-pointer flex items-center justify-between"
             >
               <div className={cn(
                   "absolute top-0 left-0 w-1.5 h-full",
@@ -265,69 +265,45 @@ export default function MatchedIMEIsView() {
                   match.status === "processed" ? "bg-amber-500" : "bg-red-500"
               )}></div>
               
-              <div className="flex justify-between items-start mb-4">
-                <div className={cn(
-                    "h-12 w-12 rounded-2xl flex items-center justify-center",
-                    match.status === "cleared" ? "bg-emerald-50 text-emerald-500" : 
-                    match.status === "processed" ? "bg-amber-50 text-amber-500" :
-                    "bg-red-50 text-red-500"
-                )}>
-                    {match.status === "cleared" ? <CheckCircle size={24} /> : <ShieldAlert size={24} />}
-                </div>
-                <div className="text-right">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Status</p>
-                    <p className={cn(
-                        "text-xs font-black uppercase",
-                        match.status === "cleared" ? "text-emerald-600" : 
-                        match.status === "processed" ? "text-amber-600" : "text-red-600"
-                    )}>
-                        {match.status || "NEW"}
+              <div className="flex flex-col">
+                <p className="font-black text-[#0a2c4e] text-lg uppercase tracking-tight group-hover:text-red-600 transition-colors leading-tight">
+                  {match.applicantName}
+                </p>
+                <div className="flex items-center gap-3 mt-0.5">
+                    <p className="text-xs text-slate-500 font-bold tracking-wider">
+                        {match.applicantMobile || match.applicantPhone || "No Contact"}
                     </p>
+                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                    <p className="text-[10px] text-red-600 font-mono font-bold uppercase">IMEI: {match.imei}</p>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <div>
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-tighter">Reported Device</p>
-                    <p className="font-bold text-slate-800 flex items-center gap-2">
-                        <Smartphone size={14} className="text-slate-400" />
-                        IMEI: {match.imei}
-                    </p>
+              <div className="flex items-center gap-8">
+                <div className="text-right hidden sm:block">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Police Station</p>
+                    <p className="font-bold text-slate-700 text-sm uppercase tracking-tight">{match.originalPs || "N/A"}</p>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4 py-3 border-y border-slate-50">
-                    <div>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase">Applicant</p>
-                        <p className="text-xs font-bold text-slate-700 truncate">{match.applicantName}</p>
-                    </div>
-                    <div>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase">Origin</p>
-                        <p className="text-xs font-bold text-slate-700 truncate">{match.originalPs}</p>
-                    </div>
-                </div>
-
-                <div className="pt-1">
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-tighter mb-2">Identified By</p>
-                    <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                        <div className="h-7 w-7 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                            {match.foundBy?.name?.charAt(0) || "U"}
-                        </div>
-                        <div className="leading-tight flex-1 min-w-0">
-                            <p className="text-[11px] font-bold text-slate-700 truncate">{match.foundBy?.name}</p>
-                            <p className="text-[9px] text-slate-400 capitalize truncate">{match.foundBy?.role?.replace("_", " ")} • {match.foundBy?.ps || match.foundBy?.district}</p>
-                        </div>
-                    </div>
+                <div className="flex items-center gap-3">
+                   <span className={cn(
+                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest", 
+                        match.status === "cleared" ? "bg-emerald-100 text-emerald-700" : 
+                        match.status === "processed" ? "bg-amber-100 text-amber-700" : 
+                        "bg-red-100 text-red-700"
+                    )}>
+                        {match.status || "NEW"}
+                    </span>
+                   <ChevronRight size={20} className="text-slate-300 group-hover:text-red-500 group-hover:translate-x-1 transition-all" />
                 </div>
               </div>
             </motion.div>
-          ))}
-        </div>
-      ) : (
-        <div className="py-20 text-center bg-white rounded-3xl border border-dashed border-slate-300">
-           <ShieldAlert className="mx-auto h-12 w-12 text-slate-200 mb-4" />
-           <p className="text-slate-500 font-medium">No records found. Try changing your filters.</p>
-        </div>
-      )}
+          ))
+        ) : (
+          <div className="py-20 text-center bg-white rounded-3xl border border-dashed border-slate-300">
+             <ShieldAlert className="mx-auto h-12 w-12 text-slate-200 mb-4" />
+             <p className="text-slate-500 font-medium">No records found. Try changing your filters.</p>
+          </div>
+        )}
+      </div>
 
       {/* 🔹 DETAIL POPUP */}
       {selectedMatch && (

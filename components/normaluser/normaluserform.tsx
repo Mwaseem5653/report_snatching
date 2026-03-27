@@ -165,19 +165,22 @@ export default function AddApplicationFormNormalUser() {
     e.preventDefault();
     if (step !== 5) return;
     if (!validateStep()) return;
-    if (!formData.boxPicture || !formData.attestedApplication) {
-        showAlert("Missing Documents", "Both Box Picture and Attested Form are mandatory.", "warning");
+    if (!formData.attestedApplication) {
+        showAlert("Missing Documents", "Attested Form is mandatory.", "warning");
         return;
     }
 
     setSubmitting(true);
     try {
-      const boxPicRes = await uploadFileToStorage(formData.boxPicture, "applications");
-      const attestedRes = await uploadFileToStorage(formData.attestedApplication, "applications");
-      
-      const boxPicUrl = boxPicRes.secure_url;
-      const attestedUrl = attestedRes.secure_url;
+      let boxPicUrl = "";
+      if (formData.boxPicture) {
+        const boxPicRes = await uploadFileToStorage(formData.boxPicture, "applications");
+        boxPicUrl = boxPicRes.secure_url;
+      }
 
+      const attestedRes = await uploadFileToStorage(formData.attestedApplication, "applications");
+      const attestedUrl = attestedRes.secure_url;
+      
       const payload = {
         applicantName: formData.applicantName,
         applicantMobile: formData.mobileNumber,
@@ -447,7 +450,7 @@ export default function AddApplicationFormNormalUser() {
                                         <div className={cn("mx-auto w-10 h-10 md:w-16 md:h-16 rounded-2xl shadow-sm flex items-center justify-center transition-transform group-hover:scale-110", formData.boxPicture ? "bg-emerald-50 text-emerald-600" : "bg-white text-blue-600")}>
                                             {formData.boxPicture ? <CheckCircle2 size={24} /> : <Smartphone size={24} />}
                                         </div>
-                                        <div><p className="font-bold text-slate-800 text-xs md:text-base">{formData.boxPicture ? "Box Picture Selected" : "Box Picture"}</p></div>
+                                        <div><p className="font-bold text-slate-800 text-xs md:text-base">{formData.boxPicture ? "Box Picture Selected" : "Box Picture (Optional)"}</p></div>
                                         {formData.boxPicture && <div className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[8px] md:text-[9px] font-bold rounded-full inline-flex items-center gap-2 border border-emerald-100 max-w-full truncate">Selected: {formData.boxPicture.name.substring(0, 15)}...</div>}
                                     </div>
                                 </div>

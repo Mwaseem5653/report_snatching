@@ -46,3 +46,16 @@ export async function updateApplication(payload: any) {
     return { success: false, message: "Network error" };
   }
 }
+
+// DELETE APPLICATION
+export async function deleteApplication(id: string) {
+    try {
+        const res = await fetch(`/api/applications?id=${id}`, {
+            method: "DELETE",
+        });
+        return await res.json();
+    } catch (err) {
+        console.error("API error (deleteApplication):", err);
+        return { success: false, message: "Network error" };
+    }
+}

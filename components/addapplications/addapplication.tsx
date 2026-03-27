@@ -20,8 +20,8 @@ import {
   DialogTitle,
   DialogDescription
 } from "@/components/ui/dialog";
-import { updateApplication } from "@/lib/applicationApi";
-import { Search, Plus, Filter, RotateCcw, FileText, ChevronRight, CheckCircle2, ClipboardList, History, X, Smartphone, MapPin, User, ShieldCheck, Activity } from "lucide-react";
+import { updateApplication, deleteApplication } from "@/lib/applicationApi";
+import { Search, Plus, Filter, RotateCcw, FileText, ChevronRight, CheckCircle2, ClipboardList, History, X, Smartphone, MapPin, User, ShieldCheck, Activity, Trash2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function DetailRow({ label, value, icon: Icon }: { label: string; value: any; icon?: any }) {
@@ -48,6 +48,11 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
 
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
   const [completionData, setCompletionData] = useState({ finalNote: "", processDetails: "" });
+
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [appToDelete, setAppToDelete] = useState<any>(null);
+  const [deleteInput, setDeleteInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     async function fetchSession() {
@@ -122,6 +127,27 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
     } catch { alert("Update failed!"); }
   };
 
+  const handleDeleteApplication = async () => {
+    if (deleteInput !== "super admin delete") {
+        return;
+    }
+    setDeleting(true);
+    try {
+        const res = await deleteApplication(appToDelete.id);
+        if (res.success) {
+            setShowDeleteDialog(false);
+            setAppToDelete(null);
+            handleSearch();
+        } else {
+            alert(res.error || "Delete failed");
+        }
+    } catch (err) {
+        alert("Error deleting application");
+    } finally {
+        setDeleting(false);
+    }
+  }
+
   const formatAppDate = (dateVal: any) => {
     if (!dateVal) return "N/A";
     try {
@@ -192,21 +218,60 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
           </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="flex flex-col gap-3">
         {loading && applications.length === 0 ? (
-            Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-32 bg-white rounded-2xl animate-pulse border border-slate-100"></div>)
+            Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-20 bg-white rounded-2xl animate-pulse border border-slate-100"></div>)
         ) : applications.length > 0 ? (
           applications.map((app) => (
-            <div key={app.id} onClick={() => setSelectedApp(app)} className="group bg-white border border-slate-200 p-5 rounded-2xl cursor-pointer hover:shadow-xl transition-all relative overflow-hidden">
-              <div className="flex justify-between items-start mb-4">
-                <div className="h-10 w-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors"><FileText size={20} /></div>
-                <span className={cn("px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider", app.status === "pending" ? "bg-amber-100 text-amber-700" : app.status === "processed" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700")}>{app.status}</span>
+            <div 
+              key={app.id} 
+              onClick={() => setSelectedApp(app)} 
+              className="group bg-white border border-slate-200 p-4 px-6 rounded-2xl cursor-pointer hover:shadow-xl hover:border-blue-300 transition-all duration-300 relative overflow-hidden flex items-center justify-between"
+            >
+              <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              
+              <div className="flex flex-col">
+                <p className="font-black text-[#0a2c4e] text-lg uppercase tracking-tight group-hover:text-blue-700 transition-colors leading-tight">
+                  {app.applicantName}
+                </p>
+                <div className="flex items-center gap-3 mt-0.5">
+                    <p className="text-xs text-slate-500 font-bold tracking-wider">
+                        {app.applicantMobile || app.applicantPhone || "No Contact"}
+                    </p>
+                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                    <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md">Type: {app.crimeHead || "N/A"}</p>
+                </div>
               </div>
-              <p className="font-bold text-slate-800 truncate uppercase tracking-tight">{app.applicantName}</p>
-              <p className="text-[10px] text-blue-600 font-mono mt-1 font-bold">IMEI: {app.imei1}</p>
-              <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center text-[11px] text-slate-400 font-bold uppercase tracking-tighter">
-                 <span>{app.ps || "Sindh Police"}</span>
-                 <ChevronRight size={14} />
+
+              <div className="flex items-center gap-8">
+                <div className="text-right hidden sm:block">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Police Station</p>
+                    <p className="font-bold text-slate-700 text-sm uppercase tracking-tight">{app.ps || "SINDH POLICE"}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                   <span className={cn(
+                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest", 
+                        app.status === "pending" ? "bg-amber-100 text-amber-700" : 
+                        app.status === "processed" ? "bg-blue-100 text-blue-700" : 
+                        "bg-emerald-100 text-emerald-700"
+                    )}>
+                        {app.status}
+                    </span>
+                   {currentUser?.role === "super_admin" && (
+                       <button 
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           setAppToDelete(app);
+                           setShowDeleteDialog(true);
+                           setDeleteInput("");
+                         }}
+                         className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                       >
+                         <Trash2 size={18} />
+                       </button>
+                   )}
+                   <ChevronRight size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                </div>
               </div>
             </div>
           ))
@@ -362,6 +427,42 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                 <div className="grid grid-cols-2 gap-3">
                     <Button variant="ghost" onClick={() => setShowCompleteDialog(false)} className="rounded-xl h-12 font-bold text-slate-500">Cancel</Button>
                     <Button onClick={() => handleUpdateStatus(selectedApp, "complete", completionData.finalNote, completionData.processDetails)} className="bg-emerald-600 hover:bg-emerald-700 text-white h-12 rounded-xl font-bold shadow-lg shadow-emerald-600/20">Submit & Close</Button>
+                </div>
+            </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="sm:max-w-[450px] rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl">
+            <div className="bg-red-600 p-8 text-center text-white relative">
+                <div className="absolute top-0 right-0 p-4 opacity-10"><AlertTriangle size={100} /></div>
+                <div className="mx-auto w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-4"><Trash2 size={32} /></div>
+                <DialogTitle className="text-xl font-black uppercase tracking-tight">Confirm Deletion</DialogTitle>
+                <DialogDescription className="text-red-100 text-xs">This action is irreversible. The application will be permanently removed.</DialogDescription>
+            </div>
+            <div className="p-8 space-y-6">
+                <div className="p-4 bg-red-50 border border-red-100 rounded-2xl">
+                    <p className="text-xs text-red-700 font-bold leading-relaxed">
+                        To confirm deletion, please type <span className="underline decoration-2 underline-offset-4 font-black">super admin delete</span> below:
+                    </p>
+                </div>
+                <div className="space-y-2">
+                    <Input 
+                      value={deleteInput} 
+                      onChange={(e) => setDeleteInput(e.target.value.toLowerCase())} 
+                      placeholder="Type here..." 
+                      className="rounded-xl border-slate-200 h-12 font-bold text-center" 
+                    />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <Button variant="ghost" onClick={() => setShowDeleteDialog(false)} className="rounded-xl h-12 font-bold text-slate-500">Cancel</Button>
+                    <Button 
+                      disabled={deleteInput !== "super admin delete" || deleting}
+                      onClick={handleDeleteApplication} 
+                      className="bg-red-600 hover:bg-red-700 text-white h-12 rounded-xl font-bold shadow-lg shadow-red-600/20"
+                    >
+                        {deleting ? "Deleting..." : "Confirm Delete"}
+                    </Button>
                 </div>
             </div>
         </DialogContent>

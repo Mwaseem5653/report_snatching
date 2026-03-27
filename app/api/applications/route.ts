@@ -20,6 +20,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const requestedDistrict = searchParams.get("district");
+    const fromDate = searchParams.get("fromDate");
+    const toDate = searchParams.get("toDate");
+
     let period = searchParams.get("period");
     if (!period && role === "ps_user") period = "15days";
     else if (!period) period = "all";
@@ -27,6 +30,13 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search")?.toLowerCase();
 
     let queryRef: any = adminDb.collection("applications");
+
+    // 0. Date Range Filter (via Timestamp)
+    if (fromDate && toDate) {
+        const start = admin.firestore.Timestamp.fromDate(new Date(`${fromDate}T00:00:00`));
+        const end = admin.firestore.Timestamp.fromDate(new Date(`${toDate}T23:59:59`));
+        queryRef = queryRef.where("createdAt", ">=", start).where("createdAt", "<=", end);
+    }
 
     // 1. Security: District Boundaries
     if (role === "admin" || role === "officer") {
@@ -51,7 +61,14 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Status Filter
-    if (status && status !== "none" && status !== "all") queryRef = queryRef.where("status", "==", status);
+    if (status && status !== "none" && status !== "all") {
+        if (status.includes(",")) {
+            const statusArray = status.split(",");
+            queryRef = queryRef.where("status", "in", statusArray);
+        } else {
+            queryRef = queryRef.where("status", "==", status);
+        }
+    }
 
     const snap = await queryRef.get();
     let applications = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
@@ -216,6 +233,43 @@ export async function PUT(req: NextRequest) {
 
   } catch (err: any) {
     console.error("PUT /api/applications error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("sessionToken")?.value;
+    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    let decoded: any;
+    try { 
+      decoded = jwt.verify(token, SECRET); 
+    } catch (err) { 
+      return NextResponse.json({ error: "Invalid session" }, { status: 401 }); 
+    }
+
+    if (decoded.role !== "super_admin") {
+      return NextResponse.json({ error: "Only Super Admin can delete applications." }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (!id) return NextResponse.json({ error: "Application ID required" }, { status: 400 });
+
+    const appRef = adminDb.collection("applications").doc(id);
+    const appDoc = await appRef.get();
+
+    if (!appDoc.exists) return NextResponse.json({ error: "Application not found" }, { status: 404 });
+
+    await appRef.delete();
+
+    return NextResponse.json({ success: true, message: "Application deleted successfully" });
+
+  } catch (err: any) {
+    console.error("DELETE /api/applications error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
