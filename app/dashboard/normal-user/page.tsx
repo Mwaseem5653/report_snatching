@@ -5,8 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import AddApplicationFormNormalUser from "@/components/normaluser/normaluserform";
 import Footer from "@/components/Footer";
-import { Button } from "@/components/ui/button";
-import { ShieldCheck, Info, PhoneCall, ArrowRight, FileText, CheckCircle2, Sparkles } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 export default function UserAddApplication() {
   return (
@@ -35,66 +34,18 @@ export default function UserAddApplication() {
                 <span className="text-red-600">Dial 15</span>
             </div>
             <div className="w-px h-8 bg-slate-100"></div>
-            <span className="bg-blue-900 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-900/20">
-              Public Access
-            </span>
+            <div className="flex items-center gap-2 text-emerald-600 px-4 py-1.5 bg-emerald-50 rounded-full">
+                <ShieldCheck size={14} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Secure Portal</span>
+            </div>
           </div>
         </div>
       </header>
 
       {/* ---------- MAIN CONTENT ---------- */}
-      <main className="flex-grow py-12 px-6 relative z-10">
-        <div className="container mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12">
-          
-          {/* Left: Instructions & Help (Hidden on mobile) */}
-          <div className="hidden lg:block lg:col-span-3 space-y-8">
-            <div className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 sticky top-32">
-                <h2 className="text-sm font-black text-[#0a2c4e] uppercase tracking-[0.15em] mb-6 flex items-center gap-2">
-                    <Info size={16} className="text-blue-600" /> Instructions
-                </h2>
-                
-                <div className="space-y-6">
-                    <div className="flex gap-4">
-                        <div className="h-6 w-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-bold shrink-0">1</div>
-                        <p className="text-xs text-slate-500 font-medium leading-relaxed">Fill in your personal details as per CNIC.</p>
-                    </div>
-                    <div className="flex gap-4">
-                        <div className="h-6 w-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-bold shrink-0">2</div>
-                        <p className="text-xs text-slate-500 font-medium leading-relaxed">Provide accurate IMEI number for device tracking.</p>
-                    </div>
-                    <div className="flex gap-4">
-                        <div className="h-6 w-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-bold shrink-0">3</div>
-                        <p className="text-xs text-slate-500 font-medium leading-relaxed">Upload clear photos of the mobile box and signed form.</p>
-                    </div>
-                </div>
-
-                <div className="mt-8 pt-8 border-t border-slate-50">
-                    <div className="p-4 bg-slate-50 rounded-2xl space-y-3">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Need Assistance?</p>
-                        <a href="tel:15" className="flex items-center gap-2 text-red-600 font-bold hover:underline">
-                            <PhoneCall size={14} /> Helpline 15
-                        </a>
-                        <p className="text-[10px] text-slate-500 leading-snug">Available 24/7 for emergency reporting across Sindh.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="px-6">
-                <div className="flex items-center gap-2 text-emerald-600 mb-2">
-                    <ShieldCheck size={18} />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Verified Portal</span>
-                </div>
-                <p className="text-[10px] text-slate-400 leading-relaxed font-medium">
-                    This portal is end-to-end encrypted. Your data is stored securely in the Sindh Police Central Database.
-                </p>
-            </div>
-          </div>
-
-          {/* Center: Form */}
-          <div className="lg:col-span-9">
-            <AddApplicationFormNormalUser />
-          </div>
-
+      <main className="flex-grow py-8 md:py-12 px-4 md:px-6 relative z-10">
+        <div className="max-w-7xl mx-auto">
+          <AddApplicationFormNormalUser />
         </div>
       </main>
 

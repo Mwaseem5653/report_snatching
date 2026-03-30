@@ -15,6 +15,8 @@ import GeoFencingClient from "@/components/tools/GeoFencingClient";
 import MovementVisualizerClient from "@/components/tools/MovementVisualizerClient";
 import LacCellConverterClient from "@/components/tools/LacCellConverterClient";
 import EyeconLookupClient from "@/components/tools/EyeconLookupClient";
+import ApplicationToExcelClient from "@/components/tools/ApplicationToExcelClient";
+import AdvancedReportClient from "@/components/tools/AdvancedReportClient";
 import TokenManagement from "@/components/dashboard/TokenManagement";
 import OfficerStats from "./OfficerStats";
 import {
@@ -40,7 +42,8 @@ import {
   MapPin,
   Navigation,
   Cpu,
-  Eye
+  Eye,
+  FileDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -75,6 +78,8 @@ export default function OfficerClient({ initialSession }: { initialSession: any 
   const isSuper = session?.role === "super_admin";
 
   const TOOLS_MENU = [
+    { id: "app-excel", label: "Application To Excel", icon: FileDown, key: "app_to_excel" },
+    { id: "adv-reports", label: "Advanced Reports", icon: BarChart3, key: "advanced_reports" },
     { id: "analyzer", label: "Excel Analyzer", icon: FileSpreadsheet, key: "excel_analyzer" },
     { id: "geo", label: "Geo Fencing", icon: MapPin, key: "geo_fencing" },
     { id: "visualizer", label: "Movement Visualizer", icon: Navigation, key: "movement_visualizer" },
@@ -174,6 +179,8 @@ export default function OfficerClient({ initialSession }: { initialSession: any 
         {activeTab === "reports" && <ReportsView />}
         {activeTab === "matched" && <MatchedIMEIsView />}
         
+        {(activeTab === "app-excel" && (isSuper || perms.app_to_excel)) && <ApplicationToExcelClient />}
+        {(activeTab === "adv-reports" && (isSuper || perms.advanced_reports)) && <AdvancedReportClient />}
         {(activeTab === "analyzer" && (isSuper || perms.excel_analyzer)) && <ExcelAnalyzerClient />}
         {(activeTab === "geo" && (isSuper || perms.geo_fencing)) && <GeoFencingClient />}
         {(activeTab === "visualizer" && (isSuper || perms.movement_visualizer)) && <MovementVisualizerClient />}

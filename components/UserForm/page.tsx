@@ -47,6 +47,9 @@ export default function AddUserForm({
       info_tools: false,
       cdr_generator: false,
       token_pool: false,
+      advanced_reports: false,
+      usage_analytics: false,
+      app_to_excel: false,
       eyecon_access: false, 
       can_delegate: false, 
       delegation_limit: 10, // 🚀 Default limit
@@ -158,6 +161,9 @@ export default function AddUserForm({
     { key: 'lac_cell_converter', label: 'LAC/Cell ID Converter' },
     { key: 'eyecon_lookup', label: 'Eyecon Lookup' },
     { key: 'ai_extractor', label: 'AI Application Extractor' },
+    { key: 'advanced_reports', label: 'Advanced Reports' },
+    { key: 'usage_analytics', label: 'Usage Analytics' },
+    { key: 'app_to_excel', label: 'Application To Excel' },
     { key: 'info_tools', label: 'Info & Lookup Tools' },
     { key: 'cdr_generator', label: 'CDR Generator' },
     { key: 'eyecon_access', label: 'Eyecon Access' },
@@ -224,7 +230,7 @@ export default function AddUserForm({
         {role && (
           <>
             {/* 🚀 Feature Access Control (Advanced Tools) - Super Admin OR Delegators */}
-            {canAssignTools && (
+            {canAssignTools && role !== "ps_user" && role !== "market_user" && (
                 <section className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="flex items-center gap-2 text-slate-800 border-b border-slate-100 pb-2">
                         <Wrench size={20} className="text-orange-600" />

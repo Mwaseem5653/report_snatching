@@ -245,10 +245,10 @@ export default function MatchedIMEIsView() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
         {loading && matches.length === 0 ? (
-            Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-24 bg-white rounded-2xl animate-pulse border border-slate-100"></div>
+            Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="h-12 bg-white rounded-xl animate-pulse border border-slate-100"></div>
             ))
         ) : matches.length > 0 ? (
           matches.map((match) => (
@@ -257,42 +257,42 @@ export default function MatchedIMEIsView() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               onClick={() => handleView(match)}
-              className="group bg-white border border-slate-200 p-4 px-6 rounded-2xl hover:shadow-xl hover:border-red-300 transition-all duration-300 relative overflow-hidden cursor-pointer flex items-center justify-between"
+              className="group bg-white border border-slate-200 py-1.5 px-4 rounded-xl hover:shadow-md hover:border-red-300 transition-all duration-200 relative overflow-hidden cursor-pointer flex items-center justify-between"
             >
               <div className={cn(
-                  "absolute top-0 left-0 w-1.5 h-full",
+                  "absolute top-0 left-0 w-1 h-full",
                   match.status === "cleared" ? "bg-emerald-500" : 
                   match.status === "processed" ? "bg-amber-500" : "bg-red-500"
               )}></div>
               
               <div className="flex flex-col">
-                <p className="font-black text-[#0a2c4e] text-lg uppercase tracking-tight group-hover:text-red-600 transition-colors leading-tight">
+                <p className="font-extrabold text-[#0a2c4e] text-sm uppercase tracking-tight group-hover:text-red-600 transition-colors leading-tight">
                   {match.applicantName}
                 </p>
-                <div className="flex items-center gap-3 mt-0.5">
-                    <p className="text-xs text-slate-500 font-bold tracking-wider">
+                <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-[10px] text-slate-500 font-bold tracking-wider">
                         {match.applicantMobile || match.applicantPhone || "No Contact"}
                     </p>
-                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                    <p className="text-[10px] text-red-600 font-mono font-bold uppercase">IMEI: {match.imei}</p>
+                    <span className="w-0.5 h-0.5 bg-slate-300 rounded-full"></span>
+                    <p className="text-[9px] text-red-600 font-mono font-bold uppercase">IMEI: {match.imei}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-8">
+              <div className="flex items-center gap-6">
                 <div className="text-right hidden sm:block">
-                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Police Station</p>
-                    <p className="font-bold text-slate-700 text-sm uppercase tracking-tight">{match.originalPs || "N/A"}</p>
+                    <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Police Station</p>
+                    <p className="font-bold text-slate-700 text-xs uppercase tracking-tight">{match.originalPs || "N/A"}</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                    <span className={cn(
-                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest", 
-                        match.status === "cleared" ? "bg-emerald-100 text-emerald-700" : 
-                        match.status === "processed" ? "bg-amber-100 text-amber-700" : 
-                        "bg-red-100 text-red-700"
+                        "px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider", 
+                        match.status === "cleared" ? "bg-emerald-50 text-emerald-700" : 
+                        match.status === "processed" ? "bg-amber-50 text-amber-700" : 
+                        "bg-red-50 text-red-700"
                     )}>
                         {match.status || "NEW"}
                     </span>
-                   <ChevronRight size={20} className="text-slate-300 group-hover:text-red-500 group-hover:translate-x-1 transition-all" />
+                   <ChevronRight size={16} className="text-slate-300 group-hover:text-red-500 transition-all" />
                 </div>
               </div>
             </motion.div>

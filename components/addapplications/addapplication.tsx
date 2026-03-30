@@ -23,6 +23,7 @@ import {
 import { updateApplication, deleteApplication } from "@/lib/applicationApi";
 import { Search, Plus, Filter, RotateCcw, FileText, ChevronRight, CheckCircle2, ClipboardList, History, X, Smartphone, MapPin, User, ShieldCheck, Activity, Trash2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { locationData } from "@/components/location/location";
 
 function DetailRow({ label, value, icon: Icon }: { label: string; value: any; icon?: any }) {
   return (
@@ -40,7 +41,8 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
   const [applications, setApplications] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>(officerUid ? "processed" : "pending");
-  const [filterPeriod, setFilterPeriod] = useState<string>("15days");
+  const [filterPeriod, setFilterPeriod] = useState<string>("today");
+  const [filterPs, setFilterPs] = useState<string>("all");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedApp, setSelectedApp] = useState<any>(null);
@@ -72,6 +74,8 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
           period: filterPeriod 
       };
       
+      if (filterPs !== "all") params.ps = filterPs;
+
       if (searchQuery.trim()) {
           params.search = searchQuery.trim();
           params.period = "all";
@@ -95,12 +99,18 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
 
   useEffect(() => {
     if (currentUser) handleSearch();
-  }, [currentUser, filterStatus, filterPeriod, officerUid]);
+  }, [currentUser, filterStatus, filterPeriod, filterPs, officerUid]);
+
+  // Extract all PS names from locationData
+  const allPS = Object.values(locationData).flatMap(city => 
+    Object.values(city.districts).flatMap(district => district.ps)
+  ).sort();
 
   const handleClear = () => {
     setSearchQuery("");
     setFilterStatus(officerUid ? "all" : "pending");
-    setFilterPeriod("15days");
+    setFilterPeriod("today");
+    setFilterPs("all");
   };
 
   const handleUpdateStatus = async (app: any, newStatus: string, comments?: string, processDetails?: string) => {
@@ -201,10 +211,25 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                       </SelectContent>
                   </Select>
 
+                  <Select value={filterPs} onValueChange={setFilterPs}>
+                      <SelectTrigger className="w-[150px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-xs font-bold max-w-[150px] overflow-hidden">
+                          <SelectValue placeholder="All PS" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                          <SelectItem value="all">All PS</SelectItem>
+                          {allPS.map(ps => (
+                              <SelectItem key={ps} value={ps} className="text-xs">{ps}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+
                   <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-                      <SelectTrigger className="w-[130px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-xs font-bold"><SelectValue placeholder="Period" /></SelectTrigger>
+                      <SelectTrigger className="w-[120px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-xs font-bold">
+                          <SelectValue placeholder="Period" />
+                      </SelectTrigger>
                       <SelectContent>
                           <SelectItem value="all">All Time</SelectItem>
+                          <SelectItem value="today">Today</SelectItem>
                           <SelectItem value="15days">15 Days</SelectItem>
                           <SelectItem value="1month">1 Month</SelectItem>
                           <SelectItem value="6months">6 Months</SelectItem>
@@ -218,42 +243,42 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
           </div>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
         {loading && applications.length === 0 ? (
-            Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-20 bg-white rounded-2xl animate-pulse border border-slate-100"></div>)
+            Array.from({ length: 10 }).map((_, i) => <div key={i} className="h-12 bg-white rounded-xl animate-pulse border border-slate-100"></div>)
         ) : applications.length > 0 ? (
           applications.map((app) => (
             <div 
               key={app.id} 
               onClick={() => setSelectedApp(app)} 
-              className="group bg-white border border-slate-200 p-4 px-6 rounded-2xl cursor-pointer hover:shadow-xl hover:border-blue-300 transition-all duration-300 relative overflow-hidden flex items-center justify-between"
+              className="group bg-white border border-slate-200 py-1.5 px-4 rounded-xl cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200 relative overflow-hidden flex items-center justify-between"
             >
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              <div className="absolute top-0 left-0 w-1 h-full bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               
               <div className="flex flex-col">
-                <p className="font-black text-[#0a2c4e] text-lg uppercase tracking-tight group-hover:text-blue-700 transition-colors leading-tight">
+                <p className="font-extrabold text-[#0a2c4e] text-sm uppercase tracking-tight group-hover:text-blue-700 transition-colors leading-tight">
                   {app.applicantName}
                 </p>
-                <div className="flex items-center gap-3 mt-0.5">
-                    <p className="text-xs text-slate-500 font-bold tracking-wider">
+                <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-[10px] text-slate-500 font-bold tracking-wider">
                         {app.applicantMobile || app.applicantPhone || "No Contact"}
                     </p>
-                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                    <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md">Type: {app.crimeHead || "N/A"}</p>
+                    <span className="w-0.5 h-0.5 bg-slate-300 rounded-full"></span>
+                    <p className="text-[9px] text-blue-600 font-black uppercase tracking-widest bg-blue-50/50 px-1.5 py-0.5 rounded">Type: {app.crimeHead || "N/A"}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-8">
+              <div className="flex items-center gap-6">
                 <div className="text-right hidden sm:block">
-                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Police Station</p>
-                    <p className="font-bold text-slate-700 text-sm uppercase tracking-tight">{app.ps || "SINDH POLICE"}</p>
+                    <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Police Station</p>
+                    <p className="font-bold text-slate-700 text-xs uppercase tracking-tight">{app.ps || "SINDH POLICE"}</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                    <span className={cn(
-                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest", 
-                        app.status === "pending" ? "bg-amber-100 text-amber-700" : 
-                        app.status === "processed" ? "bg-blue-100 text-blue-700" : 
-                        "bg-emerald-100 text-emerald-700"
+                        "px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider", 
+                        app.status === "pending" ? "bg-amber-50 text-amber-700" : 
+                        app.status === "processed" ? "bg-blue-50 text-blue-700" : 
+                        "bg-emerald-50 text-emerald-700"
                     )}>
                         {app.status}
                     </span>
@@ -265,12 +290,12 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                            setShowDeleteDialog(true);
                            setDeleteInput("");
                          }}
-                         className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                         className="p-1.5 text-slate-300 hover:text-red-500 transition-all"
                        >
-                         <Trash2 size={18} />
+                         <Trash2 size={16} />
                        </button>
                    )}
-                   <ChevronRight size={20} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                   <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-all" />
                 </div>
               </div>
             </div>

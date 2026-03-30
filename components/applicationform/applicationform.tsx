@@ -225,6 +225,10 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
                     <Input type="date" name="dateOfOffence" value={formData.dateOfOffence} onChange={handleChange} required className="rounded-xl h-11 bg-slate-50/50" />
                 </div>
                 <div className="md:col-span-2 space-y-2">
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Other Lost Property (e.g. Wallet, Cash)</Label>
+                    <Input name="otherLostProperty" value={formData.otherLostProperty} onChange={handleChange} className="rounded-xl border-slate-200 h-11 bg-slate-50/50" />
+                </div>
+                <div className="md:col-span-2 space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">Incident Details *</Label>
                     <Textarea name="incidentNote" value={formData.incidentNote} onChange={handleChange} required className="rounded-2xl border-slate-200 min-h-[100px] bg-slate-50/50" />
                 </div>

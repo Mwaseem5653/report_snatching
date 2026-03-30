@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import JSZip from "jszip";
 import { checkAndDeductTokens, checkAndDeductEyeconTokens } from "@/lib/tokenHelper";
 import { deleteFileFromStorageServer } from "@/lib/storageAdmin";
+import { logToolUsage } from "@/lib/usageLogger";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -860,7 +861,13 @@ export async function POST(req: NextRequest) {
         const decoded: any = jwt.verify(token, SECRET);
 
         const formData = await req.formData();
-        
+
+        // 🚀 LOG USAGE
+        let fCount = 0;
+        let cIdx = 0;
+        while (formData.has(`cloudinaryUrls[${cIdx}]`)) { fCount++; cIdx++; }
+        await logToolUsage(decoded, "Excel Analyzer", { fileCount: fCount });
+
         const cloudinaryUrls: string[] = [];
         const cloudinaryPublicIds: string[] = [];
         const fileNames: string[] = [];

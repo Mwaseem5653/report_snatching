@@ -16,12 +16,21 @@ export async function GET(req: NextRequest) {
     let decoded: any;
     try { decoded = jwt.verify(token, SECRET); } catch (err) { return NextResponse.json({ error: "Invalid session" }, { status: 401 }); }
 
-    const { role, district: requesterDistrict } = decoded;
+    const { role, district: requesterDistrict, ps: requesterPs } = decoded;
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const requestedDistrict = searchParams.get("district");
     const fromDate = searchParams.get("fromDate");
     const toDate = searchParams.get("toDate");
+    
+    // For non-ps users, allow filtering by PS via query param
+    let ps = searchParams.get("ps")?.toLowerCase();
+
+    // 🔒 SECURITY: Strict PS User Loophole Fix
+    if (role === "ps_user") {
+        if (!requesterPs) return NextResponse.json({ success: true, applications: [] });
+        ps = requesterPs.toLowerCase(); // Force their assigned PS, ignore query param
+    }
 
     let period = searchParams.get("period");
     if (!period && role === "ps_user") period = "15days";
@@ -58,6 +67,13 @@ export async function GET(req: NextRequest) {
         }
     } else if (role === "super_admin" && requestedDistrict && requestedDistrict !== "all") {
         queryRef = queryRef.where("district", "==", requestedDistrict);
+    } else if (role === "ps_user") {
+        // 🔒 STRICT DB LEVEL FILTER
+        if (requesterPs) {
+            queryRef = queryRef.where("ps", "==", requesterPs);
+        } else {
+            return NextResponse.json({ success: true, applications: [] });
+        }
     }
 
     // 2. Status Filter
@@ -77,7 +93,10 @@ export async function GET(req: NextRequest) {
     if (period !== "all") {
       const now = new Date();
       let limitDate = new Date();
-      if (period === "15days") limitDate.setDate(now.getDate() - 15);
+      if (period === "today") {
+          limitDate.setHours(0, 0, 0, 0);
+      }
+      else if (period === "15days") limitDate.setDate(now.getDate() - 15);
       else if (period === "1month") limitDate.setMonth(now.getMonth() - 1);
       else if (period === "3months") limitDate.setMonth(now.getMonth() - 3);
       else if (period === "6months") limitDate.setMonth(now.getMonth() - 6);
@@ -96,6 +115,12 @@ export async function GET(req: NextRequest) {
         app.cnic?.includes(search) ||
         app.allImeis?.some((imei: string) => imei.includes(search)) ||
         app.imei1?.includes(search) // Backward compatibility
+      );
+    }
+
+    if (ps) {
+      applications = applications.filter((app: any) => 
+        app.ps?.toLowerCase().includes(ps)
       );
     }
 

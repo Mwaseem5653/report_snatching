@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { checkAndDeductEyeconTokens } from "@/lib/tokenHelper";
+import { logToolUsage } from "@/lib/usageLogger";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -20,6 +21,9 @@ export async function GET(req: NextRequest) {
     const token = cookieStore.get("sessionToken")?.value;
     if (!token) return NextResponse.json({ status: false, message: "Unauthorized" }, { status: 401 });
     const decoded: any = jwt.verify(token, SECRET);
+
+    // 🚀 LOG USAGE
+    await logToolUsage(decoded, "Eyecon/Info Lookup", { number });
 
     const tokenCheck = await checkAndDeductEyeconTokens(decoded.uid, decoded.role, 1);
     if (!tokenCheck.success) {

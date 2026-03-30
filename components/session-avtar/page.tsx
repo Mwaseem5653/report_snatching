@@ -149,7 +149,8 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                 <p className="text-sm font-bold text-slate-800 truncate">{session?.name ?? "Guest"}</p>
                 <p className="text-xs text-slate-500 truncate">{session?.email ?? "No email"}</p>
                 
-                {(session?.role === "super_admin" || 
+                {/* 🔒 Hide Tokens for PS/Market Users */}
+                {!["ps_user", "market_user"].includes(session?.role || "") && (session?.role === "super_admin" || 
                   (["admin", "officer", "advanced_tool"].includes(session?.role || "") && hasTools) ||
                   session?.permissions?.token_pool
                 ) && (
@@ -169,13 +170,14 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
               </div>
 
               <div className="p-2">
+                {/* 🔒 Hide Alerts for PS/Market Users */}
                 {!["ps_user", "market_user"].includes(session?.role || "") && (
                   <>
                     <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex justify-between items-center">
                       <span>Live Alerts</span>
                       {notifCount > 0 && <span className="bg-red-100 text-red-600 px-1.5 py-0.5 rounded text-[10px]">{notifCount} New</span>}
                     </div>
-                    <button onClick={() => setOpen(false)} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-600 rounded-xl hover:bg-slate-50 transition-colors">
+                    <button onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent("switch-tab", { detail: "matched" })); }} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-600 rounded-xl hover:bg-slate-50 transition-colors">
                       <Bell size={16} className={cn(notifCount > 0 ? "text-red-500" : "")} /> 
                       {notifCount > 0 ? "View Recovery Matches" : "No new notifications"}
                     </button>
@@ -187,28 +189,33 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                    <User size={16} /> Profile Information
                 </button>
 
-                {(session?.role === "super_admin" || session?.role === "admin" || session?.role === "officer") && (
-                    <button 
-                        onClick={() => {
-                            setOpen(false);
-                            window.dispatchEvent(new CustomEvent("switch-tab", { detail: "users" }));
-                        }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-blue-600 rounded-xl hover:bg-blue-50 transition-colors font-medium"
-                    >
-                        <User size={16} className="text-blue-500" /> Manage Users
-                    </button>
-                )}
+                {/* 🔒 Hide Management for PS/Market Users */}
+                {!["ps_user", "market_user"].includes(session?.role || "") && (
+                  <>
+                    {(session?.role === "super_admin" || session?.role === "admin" || session?.role === "officer") && (
+                        <button 
+                            onClick={() => {
+                                setOpen(false);
+                                window.dispatchEvent(new CustomEvent("switch-tab", { detail: "users" }));
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-blue-600 rounded-xl hover:bg-blue-50 transition-colors font-medium"
+                        >
+                            <User size={16} className="text-blue-500" /> Manage Users
+                        </button>
+                    )}
 
-                {(session?.role === "super_admin" || session?.permissions?.token_pool) && (
-                    <button 
-                        onClick={() => {
-                            setOpen(false);
-                            window.dispatchEvent(new CustomEvent("switch-tab", { detail: "tokens" }));
-                        }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-indigo-600 rounded-xl hover:bg-indigo-50 transition-colors font-medium"
-                    >
-                        <Coins size={16} /> Manage Token Pool
-                    </button>
+                    {(session?.role === "super_admin" || session?.permissions?.token_pool) && (
+                        <button 
+                            onClick={() => {
+                                setOpen(false);
+                                window.dispatchEvent(new CustomEvent("switch-tab", { detail: "tokens" }));
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-indigo-600 rounded-xl hover:bg-indigo-50 transition-colors font-medium"
+                        >
+                            <Coins size={16} /> Manage Token Pool
+                        </button>
+                    )}
+                  </>
                 )}
 
                 <div className="h-px bg-slate-100 my-1"></div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { adminDb, adminAuth } from "@/firebaseAdmin";
+import * as admin from "firebase-admin";
 import jwt from "jsonwebtoken";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
@@ -54,9 +55,25 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Access denied: Official profile not found." }, { status: 403 });
     }
 
+    // 🚀 STRICT SESSION BLOCKING
+    // Check if session exists AND was active in the last 30 minutes
+    const nowTs = Date.now();
+    const lastActive = userData.lastActive?.toMillis() || 0;
+    const isSessionActive = (nowTs - lastActive) < (30 * 60 * 1000); // 30 minutes
+
+    if (userData.currentSessionId && isSessionActive) {
+        return NextResponse.json({ 
+            error: "This ID is assigned to only one person and is currently active on another device. Kindly contact Admin or wait 30 mins.", 
+            code: "ALREADY_LOGGED_IN" 
+        }, { status: 403 });
+    }
+
+    const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
     const payload = {
       uid: uid,
       email: email,
+      sessionId: sessionId,
       role: decodedToken.role || userData.role || "User",
       name: userData.name || "Official",
       city: userData.city || null,
@@ -66,8 +83,16 @@ export async function POST(req: Request) {
       buckle: userData.buckle || null, 
       tokens: userData.tokens || 0,
       eyeconTokens: userData.eyeconTokens || 0,
-      permissions: userData.permissions || {} // 🚀 Include permissions in JWT
+      permissions: userData.permissions || {} 
     };
+
+    // Update session ID and Activity Timestamp in Firestore
+    // Use userDoc.id because it works for both UID and Email-based lookups
+    await adminDb.collection("users").doc(userDoc.id).update({
+        currentSessionId: sessionId,
+        lastActive: admin.firestore.Timestamp.now(),
+        lastLogin: admin.firestore.Timestamp.now()
+    });
 
     const sessionToken = jwt.sign(payload, SECRET, { expiresIn: `${MAX_AGE}s` });
 
@@ -102,9 +127,17 @@ export async function GET() {
     const decoded: any = jwt.verify(token, SECRET);
     
     const userDoc = await adminDb.collection("users").doc(decoded.uid).get();
+    const liveData = userDoc.data();
     
+    // 🚀 Security Check: Single Session Policy
+    // If JWT sessionId doesn't match currentSessionId in DB, logout user
+    if (!liveData?.currentSessionId || (decoded.sessionId && decoded.sessionId !== liveData.currentSessionId)) {
+        const res = NextResponse.json({ authenticated: false, reason: "duplicate_session" });
+        res.cookies.delete("sessionToken");
+        return res;
+    }
+
     if (userDoc.exists) {
-        const liveData = userDoc.data();
         return NextResponse.json({ 
             authenticated: true, 
             ...decoded,

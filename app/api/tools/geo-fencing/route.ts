@@ -4,6 +4,7 @@ import ExcelJS from "exceljs";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
+import { logToolUsage } from "@/lib/usageLogger";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -143,8 +144,10 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const decoded: any = jwt.verify(token, SECRET);
 
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
+    // 🚀 LOG USAGE
+    await logToolUsage(decoded, "Geo Fencing");
+
+    const formData = await req.formData();    const file = formData.get("file") as File;
     const fromTime = formData.get("fromTime") as string;
     const fromPeriod = formData.get("fromPeriod") as string;
     const toTime = formData.get("toTime") as string;

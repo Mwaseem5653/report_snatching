@@ -1,9 +1,28 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { adminDb } from "@/firebaseAdmin";
+import * as admin from "firebase-admin";
+import jwt from "jsonwebtoken";
+
+const SECRET = process.env.SESSION_JWT_SECRET!;
 
 export async function POST() {
   try {
     const cookieStore = await cookies();
+    const token = cookieStore.get("sessionToken")?.value;
+
+    if (token) {
+        try {
+            const decoded: any = jwt.verify(token, SECRET);
+            if (decoded.uid) {
+                await adminDb.collection("users").doc(decoded.uid).update({
+                    currentSessionId: admin.firestore.FieldValue.delete()
+                });
+            }
+        } catch (e) {
+            console.error("Token verification during logout failed:", e);
+        }
+    }
 
     // 🧹 Delete all relevant cookies properly
     const cookieNames = ["sessionToken", "userRole", "userName", "userEmail"];
