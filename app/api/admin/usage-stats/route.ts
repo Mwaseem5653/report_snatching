@@ -62,7 +62,30 @@ export async function GET(req: NextRequest) {
                 };
             }
             const toolName = log.toolName;
-            aggregation[key].tools[toolName] = (aggregation[key].tools[toolName] || 0) + 1;
+            const details = log.details || {};
+            
+            // Standard Increment: Use fileCount or targets if available, otherwise default to 1
+            const increment = details.fileCount || details.targets || 1;
+            
+            // 🚀 Normalize tool names if they were combined before
+            let finalToolName = toolName;
+            if (toolName === "Eyecon/Info Lookup") {
+                // If it has 'targets' or 'phone_numbers' metadata, it was likely SIM Info
+                if (details.targets || details.phone_numbers) finalToolName = "SIM Info Lookup";
+                else finalToolName = "Eyecon Lookup";
+            }
+
+            aggregation[key].tools[finalToolName] = (aggregation[key].tools[finalToolName] || 0) + increment;
+
+            // 🚀 Special Breakdown for Excel Analyzer: Count Lookups separately if enabled
+            if (toolName === "Excel Analyzer") {
+                if (details.lookupCount > 0) {
+                    aggregation[key].tools["SIM Info Lookup"] = (aggregation[key].tools["SIM Info Lookup"] || 0) + details.lookupCount;
+                }
+                if (details.eyeconCount > 0) {
+                    aggregation[key].tools["Eyecon Lookup"] = (aggregation[key].tools["Eyecon Lookup"] || 0) + details.eyeconCount;
+                }
+            }
         });
 
         const result = Object.values(aggregation);

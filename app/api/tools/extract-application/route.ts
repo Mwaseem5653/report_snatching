@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { deleteFileFromStorageServer } from "@/lib/storageAdmin"; // Import for deletion
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
+import { logToolUsage } from "@/lib/usageLogger";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -155,6 +156,11 @@ Police Station: < Example Ps-Zamatown , Ps-Korangi , Ps-Landhi , Ps-Shahfaisal ,
 
         const rawText = result.response.text();
         const extractedData = extractFieldsFromText(rawText);
+
+        // 🚀 LOG USAGE
+        if (decoded) {
+            await logToolUsage(decoded, "AI Application Extractor", { page: pageNum });
+        }
 
         // Deduct 2 tokens per record (Skip Super Admin)
         if (decoded && decoded.role !== "super_admin") {

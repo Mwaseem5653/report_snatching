@@ -237,6 +237,25 @@ function parseExcelDate(val: any, formatHint: "DMY" | "MDY" = "DMY"): Date {
     return isNaN(d.getTime()) ? new Date(0) : d;
 }
 
+// --- Helper: Clean Illegal Characters (Prevent Excel Corruption) ---
+function cleanString(val: any): any {
+    if (typeof val !== "string") return val;
+    // Replace control characters (0x00-0x1F) except for newline (0x0A) and carriage return (0x0D)
+    // Also limit length if needed, but the primary cause of corruption is invalid XML characters
+    return val.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+}
+
+// --- Helper: Make Header Keys Unique (ExcelJS Requirement) ---
+function makeUniqueKeys(headers: string[]) {
+    const seen = new Map<string, number>();
+    return headers.map(h => {
+        const cleanH = String(h || "Col").trim();
+        const count = seen.get(cleanH) || 0;
+        seen.set(cleanH, count + 1);
+        return count === 0 ? cleanH : `${cleanH}_${count}`;
+    });
+}
+
 async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages } = options;
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
@@ -552,29 +571,32 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             }
         }
     }
-    sRaw.columns = formattedHeaders.map(h => ({ header: h, key: h, width: 15 }));
+
+    // 🚀 CRITICAL FIX: DEDUPLICATE KEYS AND CLEAN STRINGS
+    const uniqueKeys = makeUniqueKeys(formattedHeaders);
+    sRaw.columns = formattedHeaders.map((h, i) => ({ header: String(h || `Col_${i}`), key: uniqueKeys[i], width: 15 }));
 
     jsonData.forEach(row => {
         const cleanRow: any = {};
-        formattedHeaders.forEach(h => {
+        formattedHeaders.forEach((h, i) => {
+            const key = uniqueKeys[i];
+            let val: any = null;
+
             if (h === "LAC_ID" && row._extractedLac !== undefined) {
-                cleanRow[h] = row._extractedLac;
+                val = row._extractedLac;
             } else if (h === "CELL_ID" && row._extractedCell !== undefined) {
-                cleanRow[h] = row._extractedCell;
+                val = row._extractedCell;
+            } else if (h === dateCol && row._rawDateValue !== undefined) {
+                val = row._rawDateValue;
             } else {
-                // If it's the original date column, use the raw value preserved from the source
-                if (h === dateCol && row._rawDateValue !== undefined) {
-                    cleanRow[h] = row._rawDateValue;
-                } else {
-                    const val = row[h];
-                    if (val instanceof Date) cleanRow[h] = val; // Preserve original Date object
-                    else {
-                        const strVal = String(val);
-                        if (/^\d{10,}$/.test(strVal)) cleanRow[h] = " " + strVal;
-                        else cleanRow[h] = val;
-                    }
+                val = row[h];
+                if (!(val instanceof Date)) {
+                    val = cleanString(val);
+                    const strVal = String(val);
+                    if (/^\d{10,}$/.test(strVal)) val = " " + strVal;
                 }
             }
+            cleanRow[key] = val;
         });
         sRaw.addRow(cleanRow);
     });
@@ -608,9 +630,10 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     s1.getColumn("Ending Date").numFmt = "yyyy-mm-dd hh:mm:ss";
 
     const safeLink = (url: string) => {
-        if (!url) return "";
-        if (url.length > 30000) return "Link (Too Large)";
-        return { text: "Link", hyperlink: url };
+        if (!url || typeof url !== "string") return "";
+        // Excel breaks on extremely long URLs or Data URIs in hyperlinks
+        if (url.startsWith("data:") || url.length > 2000) return "Image/Link Attached";
+        return { text: "Open Link", hyperlink: url };
     };
 
     mobileSummary.forEach(rec => {
@@ -618,10 +641,10 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         const c = cache.get(num) || null;
         const rowData: any = {
             ...rec,
-            "Eyecon Name": c ? (c.eye || " ") : "",
-            "Name": c ? (c.name || " ") : "",
-            "CNIC": c ? (c.cnic ? " " + c.cnic : " ") : "",
-            "Address": c ? (c.address || " ") : "",
+            "Eyecon Name": cleanString(c ? (c.eye || " ") : ""),
+            "Name": cleanString(c ? (c.name || " ") : ""),
+            "CNIC": cleanString(c ? (c.cnic ? " " + c.cnic : " ") : ""),
+            "Address": cleanString(c ? (c.address || " ") : ""),
         };
         if (enableEyecon && includeImages === true) {
             rowData.eyeImage = safeLink(c?.eyeImage);
@@ -638,10 +661,10 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             num, 
             start: ms.start.getTime() > 0 ? ms.start : "N/A", 
             end: ms.end.getTime() > 0 ? ms.end : "N/A", 
-            name: c ? (c.name || " ") : "", 
-            eye: c ? (c.eye || " ") : "", 
-            cnic: c ? (c.cnic ? " " + c.cnic : " ") : "", 
-            addr: c ? (c.address || " ") : "", 
+            name: cleanString(c ? (c.name || " ") : ""), 
+            eye: cleanString(c ? (c.eye || " ") : ""), 
+            cnic: cleanString(c ? (c.cnic ? " " + c.cnic : " ") : ""), 
+            addr: cleanString(c ? (c.address || " ") : ""), 
             inS: log.inSms, outS: log.outSms, inC: log.inCall, outC: log.outCall, total: ms.count 
         };
         if (enableEyecon && includeImages === true) {
@@ -698,7 +721,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         s3.getColumn("start").numFmt = "yyyy-mm-dd hh:mm:ss";
         s3.getColumn("end").numFmt = "yyyy-mm-dd hh:mm:ss";
         s3.addRows(Array.from(addressSummaryMap.entries()).map(([k, s]) => ({ 
-            addr: s.addr || "N/A", 
+            addr: cleanString(s.addr) || "N/A", 
             count: s.count, 
             lac: s.lac,
             cell: s.cell,
@@ -724,7 +747,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         s3b.getColumn("start").numFmt = "yyyy-mm-dd hh:mm:ss";
         s3b.getColumn("end").numFmt = "yyyy-mm-dd hh:mm:ss";
         s3b.addRows(Array.from(onlyAddressSummaryMap.entries()).map(([addr, s]) => ({ 
-            addr: addr, 
+            addr: cleanString(addr), 
             count: s.count, 
             lac: s.lac,
             cell: s.cell,
@@ -751,13 +774,13 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         const sIntel = outWb.addWorksheet("Intelligence Report");
         sIntel.columns = [ { key: "label", width: 35 }, { key: "v1", width: 40 }, { key: "v2", width: 25 }, { key: "v3", width: 50 } ];
         const addHeader = (text: string, color: string = "FF1E3A8A") => {
-            const row = sIntel.addRow([text.toUpperCase()]);
+            const row = sIntel.addRow([cleanString(text).toUpperCase()]);
             row.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
             row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } };
             sIntel.addRow([]);
         };
         const addSubHeader = (text: string) => {
-            const row = sIntel.addRow([text]);
+            const row = sIntel.addRow([cleanString(text)]);
             row.font = { bold: true, size: 10, color: { argb: "FF1E3A8A" } };
             row.border = { bottom: { style: "thin" } };
         };
@@ -802,12 +825,12 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         sortedGroups.forEach(([key, val]) => {
             const [dayIdx, hour] = key.split("-");
             const timeStr = `${hour.padStart(2, '0')}:00 - ${(parseInt(hour) + 1).toString().padStart(2, '0')}:00`;
-            sIntel.addRow([daysOfWeek[parseInt(dayIdx)], timeStr, val.loc, val.count]);
+            sIntel.addRow([daysOfWeek[parseInt(dayIdx)], timeStr, cleanString(val.loc), val.count]);
         });
         sIntel.addRow([]);
         addHeader("SUSPICIOUS NIGHT ACTIVITY (12 AM - 5 AM)", "FF991B1B");
         sIntel.addRow(["Number", "Timestamp", "Type", "Location"]);
-        nightActivity.slice(0, 30).forEach(n => { sIntel.addRow([n.number, n.time, n.type, n.location]); });
+        nightActivity.slice(0, 30).forEach(n => { sIntel.addRow([n.number, n.time, n.type, cleanString(n.location)]); });
         if (nightActivity.length === 0) sIntel.addRow(["No suspicious night activity found."]);
         sIntel.addRow([]);
         addHeader("TOP 5 PRIORITY CONTACTS", "FF065F46");
@@ -862,11 +885,12 @@ export async function POST(req: NextRequest) {
 
         const formData = await req.formData();
 
-        // 🚀 LOG USAGE
-        let fCount = 0;
-        let cIdx = 0;
-        while (formData.has(`cloudinaryUrls[${cIdx}]`)) { fCount++; cIdx++; }
-        await logToolUsage(decoded, "Excel Analyzer", { fileCount: fCount });
+        const topN = parseInt(formData.get("top_n") as string || "15");
+        const eyeconTopN = parseInt(formData.get("eyecon_top_n") as string || "15");
+        const enableLookup = formData.get("enable_lookup") === "true";
+        const enableEyecon = formData.get("enable_eyecon") === "true";
+        const enableIntel = formData.get("enable_intel") === "true";
+        const includeImages = formData.get("include_images") === "true";
 
         const cloudinaryUrls: string[] = [];
         const cloudinaryPublicIds: string[] = [];
@@ -882,13 +906,6 @@ export async function POST(req: NextRequest) {
         
         publicIdsToClean = [...cloudinaryPublicIds];
 
-        const topN = parseInt(formData.get("top_n") as string || "15");
-        const eyeconTopN = parseInt(formData.get("eyecon_top_n") as string || "15");
-        const enableLookup = formData.get("enable_lookup") === "true";
-        const enableEyecon = formData.get("enable_eyecon") === "true";
-        const enableIntel = formData.get("enable_intel") === "true";
-        const includeImages = formData.get("include_images") === "true";
-
         if (cloudinaryUrls.length === 0) return NextResponse.json({ error: "No files provided" }, { status: 400 });
 
         const totalTokensNeeded = cloudinaryUrls.length * 15;
@@ -901,6 +918,9 @@ export async function POST(req: NextRequest) {
         }
 
         const zip = new JSZip();
+        let singleFileBuffer: any = null;
+        let singleFileName = "";
+
         for (let i = 0; i < cloudinaryUrls.length; i++) {
             const url = cloudinaryUrls[i];
             const fileName = fileNames[i];
@@ -913,7 +933,28 @@ export async function POST(req: NextRequest) {
             if (reportBuffer) {
                 const outFileName = fileName.split('.').slice(0, -1).join('.') + "_Analyzed.xlsx";
                 zip.file(outFileName, reportBuffer);
+                if (cloudinaryUrls.length === 1) {
+                    singleFileBuffer = reportBuffer;
+                    singleFileName = outFileName;
+                }
             }
+        }
+
+        // 🚀 LOG USAGE ONLY ON SUCCESS
+        await logToolUsage(decoded, "Excel Analyzer", { 
+            fileCount: cloudinaryUrls.length,
+            lookupCount: enableLookup ? (topN * cloudinaryUrls.length) : 0,
+            eyeconCount: enableEyecon ? (eyeconTopN * cloudinaryUrls.length) : 0
+        });
+
+        if (cloudinaryUrls.length === 1 && singleFileBuffer) {
+            return new NextResponse(singleFileBuffer as any, {
+                status: 200,
+                headers: {
+                    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "Content-Disposition": `attachment; filename="${singleFileName}"`,
+                },
+            });
         }
 
         const zipBuffer = await zip.generateAsync({ type: "arraybuffer" });

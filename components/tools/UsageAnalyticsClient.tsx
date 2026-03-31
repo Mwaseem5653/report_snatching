@@ -36,7 +36,8 @@ export default function UsageAnalyticsClient() {
     const summary = useMemo(() => {
         const totals: Record<string, number> = {
             "Excel Analyzer": 0,
-            "Eyecon/Info Lookup": 0,
+            "Eyecon Lookup": 0,
+            "SIM Info Lookup": 0,
             "Geo Fencing": 0,
             "Movement Visualizer": 0,
             "LAC/Cell Converter": 0,
@@ -47,6 +48,9 @@ export default function UsageAnalyticsClient() {
             Object.entries(user.tools).forEach(([toolName, count]) => {
                 if (totals[toolName] !== undefined) {
                     totals[toolName] += (count as number);
+                } else if (toolName === "Eyecon/Info Lookup") {
+                    // Fallback for older combined logs
+                    totals["SIM Info Lookup"] += (count as number);
                 } else {
                     totals["Others"] = (totals["Others"] || 0) + (count as number);
                 }
@@ -85,7 +89,7 @@ export default function UsageAnalyticsClient() {
     }, [filterPeriod, filterRole, filterTool]);
 
     const ROLES = ["super_admin", "admin", "officer", "ps_user", "market_user", "advanced_tool"];
-    const TOOLS = ["Excel Analyzer", "Eyecon/Info Lookup", "Geo Fencing", "Movement Visualizer", "LAC/Cell Converter", "AI Application Extractor"];
+    const TOOLS = ["Excel Analyzer", "Eyecon Lookup", "SIM Info Lookup", "Geo Fencing", "Movement Visualizer", "LAC/Cell Converter", "AI Application Extractor"];
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -147,10 +151,11 @@ export default function UsageAnalyticsClient() {
             </Card>
 
             {/* Summary Stats Overview (Like Advanced Report) */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
                 {[
                     { label: "Excel Analyzed", value: summary["Excel Analyzer"], color: "blue", icon: FileSpreadsheet },
-                    { label: "Eyecon/Info", value: summary["Eyecon/Info Lookup"], color: "indigo", icon: Eye },
+                    { label: "Eyecon Lookup", value: summary["Eyecon Lookup"], color: "indigo", icon: Eye },
+                    { label: "SIM Info", value: summary["SIM Info Lookup"], color: "cyan", icon: Smartphone },
                     { label: "Geo Fencing", value: summary["Geo Fencing"], color: "emerald", icon: MapPin },
                     { label: "Movement", value: summary["Movement Visualizer"], color: "amber", icon: TrendingUp },
                     { label: "LAC/Cell", value: summary["LAC/Cell Converter"], color: "purple", icon: Smartphone },
@@ -187,7 +192,8 @@ export default function UsageAnalyticsClient() {
                                 <tr className="bg-slate-50/50 border-b border-slate-100">
                                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Officer / User Name</th>
                                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Excel Analyzer</th>
-                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Eyecon/Info</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Eyecon</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">SIM Info</th>
                                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Geo Fencing</th>
                                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">AI Extractor</th>
                                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Movement</th>
@@ -214,8 +220,13 @@ export default function UsageAnalyticsClient() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-center">
-                                            <span className={cn("text-sm font-black", user.tools["Eyecon/Info Lookup"] ? "text-slate-900" : "text-slate-300")}>
-                                                {user.tools["Eyecon/Info Lookup"] || 0}
+                                            <span className={cn("text-sm font-black", user.tools["Eyecon Lookup"] ? "text-slate-900" : "text-slate-300")}>
+                                                {user.tools["Eyecon Lookup"] || 0}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={cn("text-sm font-black", user.tools["SIM Info Lookup"] ? "text-slate-900" : "text-slate-300")}>
+                                                {user.tools["SIM Info Lookup"] || 0}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -236,7 +247,7 @@ export default function UsageAnalyticsClient() {
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={6} className="px-6 py-20 text-center text-slate-400 text-xs font-medium uppercase tracking-widest">No activity recorded for this criteria</td>
+                                        <td colSpan={7} className="px-6 py-20 text-center text-slate-400 text-xs font-medium uppercase tracking-widest">No activity recorded for this criteria</td>
                                     </tr>
                                 )}
                             </tbody>

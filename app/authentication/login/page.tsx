@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle } from "lucide-react";
@@ -13,6 +13,18 @@ export default function SignInPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // 🧹 PROACTIVE CLEANUP: Clear stale cookies on mount
+  useEffect(() => {
+    const clearCookies = async () => {
+        try {
+            await fetch("/api/auth/logout", { method: "POST" });
+        } catch (e) {
+            console.error("Cookie cleanup failed:", e);
+        }
+    };
+    clearCookies();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

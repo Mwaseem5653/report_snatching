@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
+import { logToolUsage } from "@/lib/usageLogger";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -58,6 +59,9 @@ export async function POST(req: NextRequest) {
         if (!tokenCheck.success) {
             return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
         }
+
+        // 🚀 LOG USAGE
+        await logToolUsage(decoded, "Eyecon/Info Lookup", { targets: targets.length });
     } catch (err) {
         return NextResponse.json({ error: "Authentication failed" }, { status: 401 });
     }

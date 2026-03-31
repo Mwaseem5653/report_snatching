@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
+import { logToolUsage } from "@/lib/usageLogger";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -97,6 +98,9 @@ export async function POST(req: NextRequest) {
         const fileUrl = formData.get("url") as string;
         
         if (!fileUrl) return NextResponse.json({ error: "No file URL provided" }, { status: 400 });
+
+        // 🚀 LOG USAGE
+        await logToolUsage(decoded, "Movement Visualizer");
 
         const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, 10); // 10 tokens for visual analysis
         if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });

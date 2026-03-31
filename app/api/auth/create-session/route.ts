@@ -55,10 +55,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Access denied: Official profile not found." }, { status: 403 });
     }
 
-    // 🚀 STRICT SESSION BLOCKING
-    // Check if session exists AND was active in the last 30 minutes
+    // 🚀 RELAXED SESSION POLICY
+    // We no longer block login. Instead, we allow login and overwrite the sessionId.
+    // The GET handler will automatically kick out any older sessions because their 
+    // sessionId won't match the new one we are about to save.
+    
+    /* 
     const nowTs = Date.now();
-    const lastActive = userData.lastActive?.toMillis() || 0;
+    const lastActive = (userData.lastActive && typeof userData.lastActive.toMillis === 'function') 
+        ? userData.lastActive.toMillis() 
+        : 0;
     const isSessionActive = (nowTs - lastActive) < (30 * 60 * 1000); // 30 minutes
 
     if (userData.currentSessionId && isSessionActive) {
@@ -67,6 +73,7 @@ export async function POST(req: Request) {
             code: "ALREADY_LOGGED_IN" 
         }, { status: 403 });
     }
+    */
 
     const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
