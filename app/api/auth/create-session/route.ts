@@ -55,25 +55,23 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Access denied: Official profile not found." }, { status: 403 });
     }
 
-    // 🚀 RELAXED SESSION POLICY
-    // We no longer block login. Instead, we allow login and overwrite the sessionId.
-    // The GET handler will automatically kick out any older sessions because their 
-    // sessionId won't match the new one we are about to save.
-    
-    /* 
+    // 🚀 STRICT SESSION BLOCKING
+    // One ID can only be used by one person. 
+    // We check if the session was active in the last 5 minutes.
     const nowTs = Date.now();
     const lastActive = (userData.lastActive && typeof userData.lastActive.toMillis === 'function') 
         ? userData.lastActive.toMillis() 
         : 0;
-    const isSessionActive = (nowTs - lastActive) < (30 * 60 * 1000); // 30 minutes
+    
+    // 5 minutes threshold for "active" status
+    const isSessionActive = (nowTs - lastActive) < (5 * 60 * 1000); 
 
     if (userData.currentSessionId && isSessionActive) {
         return NextResponse.json({ 
-            error: "This ID is assigned to only one person and is currently active on another device. Kindly contact Admin or wait 30 mins.", 
+            error: "This ID is currently active on another device. One ID can be used by only one person at a time.", 
             code: "ALREADY_LOGGED_IN" 
         }, { status: 403 });
     }
-    */
 
     const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
@@ -145,6 +143,11 @@ export async function GET() {
     }
 
     if (userDoc.exists) {
+        // 🚀 HEARTBEAT: Update lastActive on every session check
+        await adminDb.collection("users").doc(decoded.uid).update({
+            lastActive: admin.firestore.Timestamp.now()
+        });
+
         return NextResponse.json({ 
             authenticated: true, 
             ...decoded,
