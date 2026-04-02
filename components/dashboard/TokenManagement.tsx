@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Coins, History, Plus, Lock, ShieldAlert, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export default function TokenManagement() {
     const [isVerified, setIsVerified] = useState(false);
@@ -151,58 +152,58 @@ export default function TokenManagement() {
     }
 
     return (
-        <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white border-0 shadow-xl">
-                    <CardHeader>
-                        <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+        <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+                <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white border-0 shadow-xl overflow-hidden shrink-0">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-[10px] md:text-xs font-black uppercase tracking-widest flex items-center gap-2">
                             <Coins size={16} className="text-indigo-400" /> System Token Pool
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4 pb-8">
-                        <div className="flex justify-between items-end">
+                    <CardContent className="space-y-4 pb-6">
+                        <div className="flex justify-between items-end gap-4">
                             <div>
-                                <p className="text-3xl font-black">{pool?.generalPool || 0}</p>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase">General Credits</p>
+                                <p className="text-2xl md:text-3xl font-black">{pool?.generalPool || 0}</p>
+                                <p className="text-[8px] md:text-[10px] text-slate-400 font-bold uppercase tracking-tight">General Credits</p>
                             </div>
                             <div className="text-right">
-                                <p className="text-3xl font-black text-indigo-400">{pool?.eyeconPool || 0}</p>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase">Eyecon Tokens</p>
+                                <p className="text-2xl md:text-3xl font-black text-indigo-400">{pool?.eyeconPool || 0}</p>
+                                <p className="text-[8px] md:text-[10px] text-slate-400 font-bold uppercase tracking-tight">Eyecon Tokens</p>
                             </div>
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card className="md:col-span-2 border-slate-200 shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <Card className="lg:col-span-2 border-slate-200 shadow-sm overflow-hidden">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-xs md:text-sm font-bold flex items-center gap-2">
                             <Plus size={18} className="text-emerald-500" /> Add Tokens to Pool
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-500 uppercase">General Amount</label>
+                        <div className="space-y-1.5">
+                            <label className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">General Amount</label>
                             <Input 
                                 type="number" 
                                 value={addGeneral} 
                                 onChange={(e) => setAddGeneral(parseInt(e.target.value) || 0)}
-                                className="h-10 rounded-lg"
+                                className="h-10 rounded-xl border-slate-200 bg-slate-50 focus:bg-white font-bold"
                             />
                         </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-500 uppercase">Eyecon Amount</label>
+                        <div className="space-y-1.5">
+                            <label className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">Eyecon Amount</label>
                             <Input 
                                 type="number" 
                                 value={addEyecon} 
                                 onChange={(e) => setAddEyecon(parseInt(e.target.value) || 0)}
-                                className="h-10 rounded-lg"
+                                className="h-10 rounded-xl border-slate-200 bg-slate-50 focus:bg-white font-bold"
                             />
                         </div>
                         <div className="flex items-end">
                             <Button 
                                 onClick={handleAddTokens} 
                                 disabled={loading}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg h-10"
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/20"
                             >
                                 {loading ? "Updating..." : "Update Pool"}
                             </Button>
@@ -211,52 +212,62 @@ export default function TokenManagement() {
                 </Card>
             </div>
 
-            <Card className="border-slate-200 shadow-sm">
-                <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <Card className="border-slate-200 rounded-[1.5rem] md:rounded-[2rem] shadow-sm overflow-hidden bg-white">
+                <CardHeader className="bg-slate-50 border-b border-slate-100 flex flex-row items-center justify-between p-4 md:p-6">
+                    <CardTitle className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-600 flex items-center gap-2">
                         <History size={18} className="text-blue-500" /> Issuance Logs
                     </CardTitle>
-                    <Button variant="ghost" size="sm" onClick={fetchData} className="text-[10px] font-bold uppercase">Refresh</Button>
+                    <Button variant="ghost" size="sm" onClick={fetchData} className="text-[10px] font-bold uppercase hover:bg-white rounded-xl h-8 px-3">Refresh</Button>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-slate-50">
-                                <TableHead className="text-[10px] font-black uppercase">Timestamp</TableHead>
-                                <TableHead className="text-[10px] font-black uppercase">Action</TableHead>
-                                <TableHead className="text-[10px] font-black uppercase">Target User</TableHead>
-                                <TableHead className="text-[10px] font-black uppercase">Amount</TableHead>
-                                <TableHead className="text-[10px] font-black uppercase">Admin</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {logs.map((log) => (
-                                <TableRow key={log.id} className="hover:bg-slate-50 transition-colors">
-                                    <TableCell className="text-xs text-slate-500">
-                                        {formatDate(log.timestamp)}
-                                    </TableCell>
-                                    <TableCell>
-                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${log.action === 'issue' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                            {log.action?.replace('_', ' ')}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell className="text-xs font-medium text-slate-700">{log.toEmail}</TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-col">
-                                            <span className="text-xs font-bold text-slate-800">{log.amount}</span>
-                                            <span className="text-[9px] text-slate-400 uppercase font-black">{log.type}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-xs text-slate-500">{log.adminEmail}</TableCell>
+                    <div className="overflow-x-auto custom-scrollbar">
+                        <Table className="min-w-[600px]">
+                            <TableHeader>
+                                <TableRow className="bg-slate-50/50 border-b border-slate-100">
+                                    <TableHead className="px-6 py-4 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">Timestamp</TableHead>
+                                    <TableHead className="px-6 py-4 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">Action</TableHead>
+                                    <TableHead className="px-6 py-4 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">Target User</TableHead>
+                                    <TableHead className="px-6 py-4 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Amount</TableHead>
+                                    <TableHead className="px-6 py-4 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">Admin</TableHead>
                                 </TableRow>
-                            ))}
-                            {logs.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={5} className="text-center py-10 text-slate-400">No transactions recorded yet.</TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody className="divide-y divide-slate-50">
+                                {logs.map((log) => (
+                                    <TableRow key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                                        <TableCell className="px-6 py-4 text-[10px] font-bold text-slate-400">
+                                            {formatDate(log.timestamp)}
+                                        </TableCell>
+                                        <TableCell className="px-6 py-4">
+                                            <span className={cn(
+                                                "px-2 py-0.5 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-wider border",
+                                                log.action === 'issue' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                            )}>
+                                                {log.action?.replace('_', ' ')}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell className="px-6 py-4 text-[11px] md:text-xs font-bold text-slate-700 uppercase">
+                                            {log.toEmail?.split('@')[0] || "System"}
+                                            <p className="text-[8px] md:text-[9px] text-slate-400 font-medium normal-case">{log.toEmail}</p>
+                                        </TableCell>
+                                        <TableCell className="px-6 py-4 text-center">
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-xs md:text-sm font-black text-slate-900">{log.amount}</span>
+                                                <span className="text-[7px] md:text-[8px] text-indigo-500 font-black uppercase tracking-widest">{log.type}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="px-6 py-4 text-[10px] font-bold text-slate-400 truncate max-w-[120px]">
+                                            {log.adminEmail}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {logs.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="px-6 py-20 text-center text-slate-400 text-xs font-medium uppercase tracking-widest">No transactions recorded yet.</TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </CardContent>
             </Card>
         </div>

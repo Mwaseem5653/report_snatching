@@ -233,27 +233,27 @@ export default function ApplicationToExcelClient() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center gap-4 bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
-        <div className="p-4 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-600/20">
-            <FileSpreadsheet size={32} />
+    <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col md:flex-row md:items-center gap-4 bg-white p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border border-slate-200 shadow-sm shrink-0">
+        <div className="p-3 md:p-4 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-600/20 shrink-0">
+            <FileSpreadsheet size={28} className="md:w-8 md:h-8" />
         </div>
         <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Application To Excel</h1>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Database Export Utility</p>
+            <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Application To Excel</h1>
+            <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Database Export Utility</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-2 border-slate-200 rounded-[2rem] shadow-xl overflow-hidden bg-white">
-          <CardHeader className="bg-slate-50 border-b border-slate-100 p-6 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-600 flex items-center gap-2">
+        <Card className="md:col-span-2 border-slate-200 rounded-[1.5rem] md:rounded-[2rem] shadow-xl overflow-hidden bg-white">
+          <CardHeader className="bg-slate-50 border-b border-slate-100 p-4 md:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <CardTitle className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-600 flex items-center gap-2">
               <Filter size={18} className="text-emerald-600" /> Export Filters
             </CardTitle>
-            <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-3 bg-white px-3 md:px-4 py-2 rounded-xl border border-slate-200">
                 <History size={16} className="text-slate-400" />
                 <Select value={period} onValueChange={setPeriod}>
-                    <SelectTrigger className="w-[120px] border-0 focus:ring-0 shadow-none h-auto p-0 text-xs font-bold">
+                    <SelectTrigger className="w-[100px] md:w-[120px] border-0 focus:ring-0 shadow-none h-auto p-0 text-[11px] md:text-xs font-bold">
                         <SelectValue placeholder="Period" />
                     </SelectTrigger>
                     <SelectContent>
@@ -265,17 +265,17 @@ export default function ApplicationToExcelClient() {
                 </Select>
             </div>
           </CardHeader>
-          <CardContent className="p-8 space-y-8">
+          <CardContent className="p-6 md:p-8 space-y-6 md:space-y-8">
             {/* Status Selection */}
             <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Application Status</label>
+                    <label className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Application Status</label>
                     <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAllStatuses(selectedStatuses.length !== 3)}>
                         <Checkbox checked={selectedStatuses.length === 3} onCheckedChange={setAllStatuses} id="select-all" />
-                        <label htmlFor="select-all" className="text-[10px] font-bold text-slate-600 uppercase cursor-pointer">Select All</label>
+                        <label htmlFor="select-all" className="text-[9px] md:text-[10px] font-bold text-slate-600 uppercase cursor-pointer">Select All</label>
                     </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
                     {[
                         { id: "pending", label: "Pending", color: "amber" },
                         { id: "processed", label: "In Process", color: "blue" },
@@ -285,22 +285,22 @@ export default function ApplicationToExcelClient() {
                             key={s.id}
                             onClick={() => toggleStatus(s.id)}
                             className={cn(
-                                "flex items-center gap-3 p-4 rounded-2xl border transition-all cursor-pointer",
+                                "flex items-center gap-3 p-3 md:p-4 rounded-xl md:rounded-2xl border transition-all cursor-pointer",
                                 selectedStatuses.includes(s.id) 
                                     ? `bg-${s.color}-50 border-${s.color}-200 shadow-sm` 
                                     : "bg-white border-slate-100 hover:border-slate-200"
                             )}
                         >
                             <div className={cn(
-                                "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+                                "w-4 h-4 md:w-5 md:h-5 rounded-md border-2 flex items-center justify-center transition-all",
                                 selectedStatuses.includes(s.id) 
                                     ? `bg-${s.color}-600 border-${s.color}-600` 
                                     : "bg-white border-slate-200"
                             )}>
-                                {selectedStatuses.includes(s.id) && <Check size={14} className="text-white" />}
+                                {selectedStatuses.includes(s.id) && <Check size={12} className="text-white" />}
                             </div>
                             <span className={cn(
-                                "text-xs font-black uppercase tracking-tight",
+                                "text-[11px] md:text-xs font-black uppercase tracking-tight",
                                 selectedStatuses.includes(s.id) ? `text-${s.color}-700` : "text-slate-500"
                             )}>{s.label}</span>
                         </div>
@@ -310,17 +310,17 @@ export default function ApplicationToExcelClient() {
 
             {/* PS Filter */}
             <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Police Station Name (Optional)</label>
+                <label className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Police Station Name (Optional)</label>
                 <div className="relative">
                     <Select value={psName} onValueChange={setPsName}>
-                        <SelectTrigger className="w-full h-14 rounded-2xl border-slate-200 focus:ring-emerald-500 font-bold bg-white pl-12 relative">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10" size={18} />
+                        <SelectTrigger className="w-full h-12 md:h-14 rounded-xl md:rounded-2xl border-slate-200 focus:ring-emerald-500 font-bold bg-white pl-10 md:pl-12 relative overflow-hidden">
+                            <Search className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10" size={16} />
                             <SelectValue placeholder="Select Police Station" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px]">
                             <SelectItem value="all">All Police Stations</SelectItem>
                             {allPS.map((ps) => (
-                                <SelectItem key={ps} value={ps}>{ps}</SelectItem>
+                                <SelectItem key={ps} value={ps} className="text-xs uppercase">{ps}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
@@ -328,28 +328,28 @@ export default function ApplicationToExcelClient() {
             </div>
 
             {period === "custom" && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">From Date</label>
+                  <label className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">From Date</label>
                   <div className="relative">
                     <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <Input 
                       type="date" 
                       value={fromDate} 
                       onChange={(e) => setFromDate(e.target.value)}
-                      className="pl-12 h-14 rounded-2xl border-slate-200 focus:ring-emerald-500 font-bold" 
+                      className="pl-12 h-12 md:h-14 rounded-xl md:rounded-2xl border-slate-200 focus:ring-emerald-500 font-bold text-xs" 
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">To Date</label>
+                  <label className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">To Date</label>
                   <div className="relative">
                     <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <Input 
                       type="date" 
                       value={toDate} 
                       onChange={(e) => setToDate(e.target.value)}
-                      className="pl-12 h-14 rounded-2xl border-slate-200 focus:ring-emerald-500 font-bold" 
+                      className="pl-12 h-12 md:h-14 rounded-xl md:rounded-2xl border-slate-200 focus:ring-emerald-500 font-bold text-xs" 
                     />
                   </div>
                 </div>
@@ -359,57 +359,53 @@ export default function ApplicationToExcelClient() {
             <Button 
               onClick={downloadExcel} 
               disabled={loading}
-              className="w-full h-16 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-emerald-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              className="w-full h-14 md:h-16 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl md:rounded-2xl font-black uppercase tracking-widest text-xs md:text-sm shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.98]"
             >
               {loading ? (
                 <>
-                  <Loader2 size={24} className="mr-3 animate-spin" />
-                  Processing Database...
+                  <Loader2 size={20} className="mr-3 animate-spin" />
+                  Processing...
                 </>
               ) : (
                 <>
-                  <Download size={24} className="mr-3" />
-                  Generate Excel Report
+                  <Download size={20} className="mr-3" />
+                  Generate Excel
                 </>
               )}
             </Button>
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-            <Card className="border-slate-200 rounded-[2rem] shadow-lg overflow-hidden bg-[#0f172a] text-white">
-                <CardContent className="p-8 space-y-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Export Summary</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-4 md:gap-6">
+            <Card className="border-slate-200 rounded-[1.5rem] md:rounded-[2rem] shadow-lg overflow-hidden bg-[#0f172a] text-white">
+                <CardContent className="p-6 md:p-8 space-y-4">
+                    <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">Export Summary</p>
                     <div className="space-y-1">
-                        <h3 className="text-4xl font-black tracking-tighter text-emerald-400">{stats.count}</h3>
-                        <p className="text-xs font-bold text-slate-300">Records processed in last session</p>
+                        <h3 className="text-3xl md:text-4xl font-black tracking-tighter text-emerald-400">{stats.count}</h3>
+                        <p className="text-[10px] md:text-xs font-bold text-slate-300">Records processed in last session</p>
                     </div>
                     {stats.lastFetch && (
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest pt-4 border-t border-white/10">
+                        <p className="text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest pt-4 border-t border-white/10">
                             Last Export: {stats.lastFetch.toLocaleTimeString()}
                         </p>
                     )}
                 </CardContent>
             </Card>
 
-            <Card className="border-slate-200 rounded-[2rem] shadow-lg overflow-hidden bg-white">
-                <CardContent className="p-6 space-y-4">
+            <Card className="border-slate-200 rounded-[1.5rem] md:rounded-[2rem] shadow-lg overflow-hidden bg-white">
+                <CardContent className="p-5 md:p-6 space-y-4">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><CheckCircle2 size={18} /></div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">Export Guidelines</p>
+                        <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-600">Export Guidelines</p>
                     </div>
-                    <ul className="space-y-3">
-                        <li className="flex gap-3 text-xs text-slate-500 font-medium">
+                    <ul className="space-y-2 md:space-y-3">
+                        <li className="flex gap-3 text-[11px] md:text-xs text-slate-500 font-medium">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                             Includes all "In-Process" and "Completed" cases.
                         </li>
-                        <li className="flex gap-3 text-xs text-slate-500 font-medium">
+                        <li className="flex gap-3 text-[11px] md:text-xs text-slate-500 font-medium">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                             Format strictly follows AI Extractor template.
-                        </li>
-                        <li className="flex gap-3 text-xs text-slate-500 font-medium">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
-                            Dates are filtered by application creation date.
                         </li>
                     </ul>
                 </CardContent>

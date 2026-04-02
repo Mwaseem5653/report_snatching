@@ -4,6 +4,8 @@ import * as admin from "firebase-admin";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 
+export const dynamic = "force-dynamic";
+
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
 export async function GET(req: NextRequest) {

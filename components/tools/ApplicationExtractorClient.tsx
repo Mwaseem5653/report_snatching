@@ -358,7 +358,7 @@ export default function ApplicationExtractorClient() {
   };
 
   return (
-    <div className="h-[calc(100vh-180px)] flex flex-col space-y-4 overflow-hidden">
+    <div className="lg:h-[calc(100vh-120px)] flex flex-col space-y-4 lg:overflow-hidden">
       <AlertModal 
         isOpen={alert.isOpen}
         onClose={() => setAlert({ ...alert, isOpen: false })}
@@ -367,10 +367,10 @@ export default function ApplicationExtractorClient() {
         type={alert.type}
       />
       
-      {/* HEADER SECTION (Compact) */}
+      {/* HEADER SECTION */}
       <div className="flex flex-col lg:flex-row items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-slate-200 shadow-sm shrink-0">
-        <div className="flex items-center gap-4">
-            <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-600/20">
+        <div className="flex items-center gap-4 w-full lg:w-auto">
+            <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-600/20 shrink-0">
                 <ScanText size={24} />
             </div>
             <div>
@@ -379,8 +379,8 @@ export default function ApplicationExtractorClient() {
             </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1 rounded-xl">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1 rounded-xl h-10">
                 <span className="text-[8px] font-black text-slate-400 uppercase">Speed</span>
                 <input 
                     type="number" 
@@ -399,33 +399,33 @@ export default function ApplicationExtractorClient() {
             </div>
 
             {!loading ? (
-                <Button size="sm" onClick={handleStartExtraction} disabled={files.length === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-6 font-black shadow-lg shadow-indigo-600/20 uppercase tracking-tight">
+                <Button size="sm" onClick={handleStartExtraction} disabled={files.length === 0} className="flex-1 lg:flex-none bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-6 font-black shadow-lg shadow-indigo-600/20 uppercase tracking-tight">
                     Start AI
                 </Button>
             ) : (
-                <Button size="sm" onClick={handleStop} variant="destructive" className="rounded-xl h-10 px-6 font-black shadow-lg shadow-red-600/20 uppercase tracking-tight">
+                <Button size="sm" onClick={handleStop} variant="destructive" className="flex-1 lg:flex-none rounded-xl h-10 px-6 font-black shadow-lg shadow-red-600/20 uppercase tracking-tight">
                     Terminate
                 </Button>
             )}
 
             {allResults.length > 0 && (
-                <Button size="sm" onClick={downloadExcel} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-6 font-black shadow-lg shadow-emerald-600/20 uppercase tracking-tight">
+                <Button size="sm" onClick={downloadExcel} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-6 font-black shadow-lg shadow-emerald-600/20 uppercase tracking-tight text-xs">
                     Export ({allResults.length})
                 </Button>
             )}
 
-            <Button variant="ghost" size="sm" onClick={clearAll} className="text-slate-400 hover:text-red-500 p-2">
+            <Button variant="ghost" size="sm" onClick={clearAll} className="text-slate-400 hover:text-red-500 p-2 shrink-0">
                 <Trash2 size={18} />
             </Button>
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 xl:grid-cols-4 gap-4 overflow-hidden">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-4 lg:overflow-hidden">
           
-          {/* LEFT: STATUS & LOGS (Compact) */}
-          <div className="xl:col-span-1 flex flex-col gap-4 overflow-hidden">
+          {/* LEFT: STATUS & LOGS */}
+          <div className="lg:col-span-1 flex flex-col gap-4 lg:overflow-hidden">
               
-              {/* PROGRESS CARD (Compact) */}
+              {/* PROGRESS CARD */}
               <Card className={cn(
                   "border-0 text-white overflow-hidden rounded-3xl shrink-0 transition-all duration-500",
                   loading ? "bg-indigo-600 shadow-lg" : "bg-slate-900"
@@ -451,7 +451,7 @@ export default function ApplicationExtractorClient() {
                   </CardContent>
               </Card>
 
-              {/* COOLDOWN (Floating) */}
+              {/* COOLDOWN */}
               {cooldown > 0 && (
                   <div className="bg-amber-500 text-white p-4 rounded-2xl flex items-center gap-3 animate-pulse shrink-0 shadow-lg shadow-amber-200">
                       <Clock size={20} className="shrink-0" />
@@ -459,8 +459,8 @@ export default function ApplicationExtractorClient() {
                   </div>
               )}
 
-              {/* TERMINAL LOGS (Flex-grow to fill) */}
-              <Card className="flex-1 bg-slate-950 border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col min-h-0">
+              {/* TERMINAL LOGS */}
+              <Card className="flex-1 bg-slate-950 border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col min-h-[300px] lg:min-h-0">
                   <div className="bg-slate-900/50 border-b border-slate-800 px-4 py-2 shrink-0">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                           <Terminal size={12} /> System Console
@@ -468,7 +468,7 @@ export default function ApplicationExtractorClient() {
                   </div>
                   <div 
                     ref={scrollRef}
-                    className="flex-1 p-4 overflow-y-auto font-mono text-[10px] leading-relaxed space-y-1 custom-scrollbar"
+                    className="flex-1 p-4 overflow-y-auto font-mono text-[10px] leading-relaxed space-y-1 custom-scrollbar max-h-[400px] lg:max-h-none"
                   >
                       {liveLog.split('\n').map((line, i) => (
                           <div key={i} className={cn(
@@ -485,8 +485,8 @@ export default function ApplicationExtractorClient() {
               </Card>
           </div>
 
-          {/* RIGHT: LIVE AI FEED (Full Width Expanded) */}
-          <div className="xl:col-span-3 overflow-hidden">
+          {/* RIGHT: LIVE AI FEED */}
+          <div className="lg:col-span-3 lg:overflow-hidden min-h-[400px] lg:min-h-0">
               <Card className="border-slate-200 rounded-3xl overflow-hidden shadow-2xl h-full flex flex-col bg-white">
                   <div className="bg-white border-b border-slate-100 p-4 shrink-0 flex justify-between items-center">
                       <div>
@@ -498,19 +498,10 @@ export default function ApplicationExtractorClient() {
                               <Zap size={12} className="text-indigo-600 fill-indigo-600" />
                               <span className="text-[10px] font-black text-indigo-600 uppercase">Records: {allResults.length}</span>
                           </div>
-                          {loading && (
-                              <div className="flex items-center gap-2">
-                                  <span className="relative flex h-2 w-2">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-                                  </span>
-                                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Analyzing...</span>
-                              </div>
-                          )}
                       </div>
                   </div>
                   
-                  <div className="flex-1 p-8 overflow-y-auto custom-scrollbar font-serif text-sm leading-relaxed text-slate-700 bg-slate-50/30 whitespace-pre-wrap">
+                  <div className="flex-1 p-6 md:p-8 overflow-y-auto custom-scrollbar font-serif text-sm leading-relaxed text-slate-700 bg-slate-50/30 whitespace-pre-wrap">
                       {currentRawFeed || (
                           <div className="h-full flex flex-col items-center justify-center text-center opacity-30 gap-4">
                               <Layers size={64} className="text-slate-300" />

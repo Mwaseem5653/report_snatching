@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, User, ChevronDown, Bell, Coins } from "lucide-react";
+import { LogOut, User, ChevronDown, Bell, Coins, Menu, X, Smartphone, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +27,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
   const [session, setSession] = useState<Session | null>(initialSession || null);
   const [loading, setLoading] = useState(!initialSession);
   const [open, setOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -58,9 +59,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
 
   useEffect(() => {
     if (!initialSession) fetchSession();
-    else {
-        fetchSession(); 
-    }
+    else fetchSession(); 
 
     const handleFocus = () => fetchNotifications();
     const handleRefresh = () => fetchSession();
@@ -98,58 +97,61 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
     <header className="w-full bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200 sticky top-0 z-50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
         
-        {/* 🔹 Left: Logo */}
+        {/* 🔹 Left: Logo & Burger */}
         <div className="flex items-center gap-3 shrink-0">
-          <div className="relative w-10 h-10">
+          <button 
+            onClick={() => setMobileMenuOpen(true)}
+            className="lg:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-xl"
+          >
+            <Menu size={24} />
+          </button>
+          
+          <div className="relative w-9 h-9 md:w-10 md:h-10">
              <Image src="/logo.png" alt="Logo" fill sizes="40px" className="object-contain" />
           </div>
-          <div className="hidden lg:block leading-tight">
-            <h1 className="text-lg font-bold text-slate-800">Sindh Police</h1>
-            <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Official Portal</p>
+          <div className="hidden sm:block leading-tight">
+            <h1 className="text-sm md:text-lg font-black text-slate-800 tracking-tighter uppercase">Sindh Police</h1>
+            <p className="text-[8px] md:text-[10px] text-blue-600 font-bold uppercase tracking-wider">Official Portal</p>
           </div>
         </div>
 
-        {/* 🔹 Center: Navigation */}
-        <div className="flex-1 flex justify-center overflow-x-auto no-scrollbar">
+        {/* 🔹 Center: Navigation (Desktop Only - CSS Hidden to stop flickering) */}
+        <div className="hidden lg:flex flex-1 justify-center overflow-x-auto no-scrollbar">
            {children}
         </div>
 
         {/* 🔹 Right: User Profile & Alerts */}
-        <div className="flex items-center gap-3 shrink-0" ref={dropdownRef}>
-          
-          {/* Profile Dropdown */}
+        <div className="flex items-center gap-2 md:gap-3 shrink-0" ref={dropdownRef}>
           <button
             onClick={() => setOpen((v) => !v)}
             className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full border border-slate-200 hover:bg-slate-50 transition-all relative"
           >
-            <div className="hidden text-right xl:block">
+            <div className="hidden xl:block text-right">
                <p className="text-xs font-bold text-slate-700 leading-none mb-0.5">{session?.name || "Officer"}</p>
                <p className="text-[10px] text-slate-400 font-medium capitalize">{session?.role?.replace("_", " ") || "User"}</p>
             </div>
             
             <div className="relative">
-                <div className="w-9 h-9 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[10px] md:text-xs shadow-sm">
                 {loading ? "..." : initials(session?.name)}
                 </div>
                 {notifCount > 0 && !["ps_user", "market_user"].includes(session?.role || "") && (
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                    <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 md:h-4 md:w-4">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-[8px] text-white items-center justify-center font-black">
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 md:h-4 md:w-4 bg-red-500 text-[7px] md:text-[8px] text-white items-center justify-center font-black">
                             {notifCount > 9 ? "9+" : notifCount}
                         </span>
                     </span>
                 )}
             </div>
-            <ChevronDown size={14} className="text-slate-400 mr-1" />
+            <ChevronDown size={14} className="text-slate-400 mr-1 hidden sm:block" />
           </button>
 
           {open && (
-            <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-top-2">
+            <div className="absolute right-4 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
               <div className="p-4 bg-slate-50 border-b border-slate-100">
                 <p className="text-sm font-bold text-slate-800 truncate">{session?.name ?? "Guest"}</p>
                 <p className="text-xs text-slate-500 truncate">{session?.email ?? "No email"}</p>
-                
-                {/* 🔒 Hide Tokens for PS/Market Users */}
                 {!["ps_user", "market_user"].includes(session?.role || "") && (session?.role === "super_admin" || 
                   (["admin", "officer", "advanced_tool"].includes(session?.role || "") && hasTools) ||
                   session?.permissions?.token_pool
@@ -170,7 +172,6 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
               </div>
 
               <div className="p-2">
-                {/* 🔒 Hide Alerts for PS/Market Users */}
                 {!["ps_user", "market_user"].includes(session?.role || "") && (
                   <>
                     <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex justify-between items-center">
@@ -184,12 +185,9 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                     <div className="h-px bg-slate-100 my-1"></div>
                   </>
                 )}
-                
                 <button className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-600 rounded-xl hover:bg-slate-50 transition-colors">
                    <User size={16} /> Profile Information
                 </button>
-
-                {/* 🔒 Hide Management for PS/Market Users */}
                 {!["ps_user", "market_user"].includes(session?.role || "") && (
                   <>
                     {(session?.role === "super_admin" || session?.role === "admin" || session?.role === "officer") && (
@@ -203,7 +201,6 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                             <User size={16} className="text-blue-500" /> Manage Users
                         </button>
                     )}
-
                     {(session?.role === "super_admin" || session?.permissions?.token_pool) && (
                         <button 
                             onClick={() => {
@@ -217,7 +214,6 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                     )}
                   </>
                 )}
-
                 <div className="h-px bg-slate-100 my-1"></div>
                 <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 rounded-xl hover:bg-red-50 transition-colors font-bold">
                   <LogOut size={16} /> Sign Out
@@ -227,6 +223,47 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
           )}
         </div>
       </div>
+
+      {/* 📱 MOBILE SIDEBAR MENU */}
+      {mobileMenuOpen && (
+        <>
+            <div 
+                className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9998] lg:hidden animate-in fade-in duration-300"
+                onClick={() => setMobileMenuOpen(false)}
+            />
+            {/* 🚀 FIXED HEIGHT: Added h-screen and min-h-screen to ensure full sidebar visibility */}
+            <div className="fixed left-0 top-0 bottom-0 w-[280px] h-screen min-h-screen bg-white z-[9999] lg:hidden shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 border-r border-slate-200">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-blue-900 text-white shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 relative">
+                            <Image src="/logo.png" alt="Logo" fill sizes="32px" className="object-contain" />
+                        </div>
+                        <h2 className="font-black text-sm uppercase tracking-tighter">Official Access</h2>
+                    </div>
+                    <button onClick={() => setMobileMenuOpen(false)} className="p-1 hover:bg-white/10 rounded-lg">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-white">
+                    <div className="space-y-4 pb-20">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Navigation Menu</p>
+                        <div 
+                            className="flex flex-col gap-2" 
+                            onClick={(e) => {
+                                // 🚀 Only close sidebar if clicking a direct link (button without collapsible data attr)
+                                if ((e.target as HTMLElement).closest('button:not([data-collapsible])')) {
+                                    setTimeout(() => setMobileMenuOpen(false), 300);
+                                }
+                            }}
+                        >
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
+      )}
     </header>
   );
 }

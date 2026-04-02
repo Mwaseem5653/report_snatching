@@ -177,22 +177,22 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
   return (
     <div className="w-full space-y-6">
       {/* 🔹 FILTER BAR */}
-      <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><FileText size={20} /></div>
-              <div className="hidden sm:block">
-                  <h2 className="text-lg font-bold text-slate-800">Applications</h2>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Management Portal</p>
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0"><FileText size={20} /></div>
+              <div>
+                  <h2 className="text-base md:text-lg font-bold text-slate-800 leading-tight">Applications</h2>
+                  <p className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold tracking-wider">Management Portal</p>
               </div>
           </div>
-          <div className="flex flex-1 flex-wrap items-center gap-3 justify-end">
-              <div className="relative flex-1 min-w-[200px] max-w-md">
-                  <Search className="absolute left-3 top-2.5 text-slate-400 h-4 w-4" />
-                  <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()} className="pl-9 border-slate-200 rounded-xl bg-slate-50/50 h-10 text-sm" />
+          <div className="flex flex-col sm:flex-row flex-1 items-stretch sm:items-center gap-3 justify-end">
+              <div className="relative flex-1 min-w-0 sm:min-w-[200px] lg:max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
+                  <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()} className="pl-9 border-slate-200 rounded-xl bg-slate-50/50 h-10 text-sm w-full" />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                   <Select value={filterStatus} onValueChange={setFilterStatus}>
-                      <SelectTrigger className="w-[130px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-xs font-bold"><SelectValue placeholder="Status" /></SelectTrigger>
+                      <SelectTrigger className="flex-1 sm:w-[130px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold"><SelectValue placeholder="Status" /></SelectTrigger>
                       <SelectContent>
                           {officerUid ? (
                               <>
@@ -212,7 +212,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                   </Select>
 
                   <Select value={filterPs} onValueChange={setFilterPs}>
-                      <SelectTrigger className="w-[150px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-xs font-bold max-w-[150px] overflow-hidden">
+                      <SelectTrigger className="flex-1 sm:w-[140px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold overflow-hidden">
                           <SelectValue placeholder="All PS" />
                       </SelectTrigger>
                       <SelectContent className="max-h-[300px]">
@@ -224,7 +224,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                   </Select>
 
                   <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-                      <SelectTrigger className="w-[120px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-xs font-bold">
+                      <SelectTrigger className="flex-1 sm:w-[110px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold">
                           <SelectValue placeholder="Period" />
                       </SelectTrigger>
                       <SelectContent>
@@ -236,10 +236,12 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                       </SelectContent>
                   </Select>
               </div>
-              <Button onClick={handleSearch} className="bg-blue-600 text-white rounded-xl h-10 px-6 font-semibold" disabled={loading}>{loading ? "..." : "Search"}</Button>
-              <Button onClick={handleClear} variant="ghost" className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0"><RotateCcw size={18} /></Button>
-              <div className="w-px h-6 bg-slate-200 mx-1"></div>
-              <Button onClick={() => setShowAddForm(true)} className="bg-emerald-600 text-white rounded-xl h-10 px-4 font-semibold"><Plus size={18} className="mr-1" /> New</Button>
+              <div className="flex items-center gap-2">
+                <Button onClick={handleSearch} className="flex-1 sm:flex-none bg-blue-600 text-white rounded-xl h-10 px-4 md:px-6 font-semibold text-xs" disabled={loading}>{loading ? "..." : "Search"}</Button>
+                <Button onClick={handleClear} variant="ghost" className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0 shrink-0"><RotateCcw size={18} /></Button>
+                <div className="hidden sm:block w-px h-6 bg-slate-200 mx-1"></div>
+                <Button onClick={() => setShowAddForm(true)} className="flex-1 sm:flex-none bg-emerald-600 text-white rounded-xl h-10 px-4 font-semibold text-xs shrink-0"><Plus size={18} className="mr-1" /> New</Button>
+              </div>
           </div>
       </div>
 
@@ -251,37 +253,40 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
             <div 
               key={app.id} 
               onClick={() => setSelectedApp(app)} 
-              className="group bg-white border border-slate-200 py-1.5 px-4 rounded-xl cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200 relative overflow-hidden flex items-center justify-between"
+              className="group bg-white border border-slate-200 py-2 px-4 rounded-xl cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200 relative overflow-hidden flex items-center justify-between"
             >
               <div className="absolute top-0 left-0 w-1 h-full bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               
-              <div className="flex flex-col">
-                <p className="font-extrabold text-[#0a2c4e] text-sm uppercase tracking-tight group-hover:text-blue-700 transition-colors leading-tight">
+              <div className="flex flex-col min-w-0 flex-1">
+                <p className="font-black text-[#0a2c4e] text-xs uppercase tracking-tight group-hover:text-blue-700 transition-colors leading-none truncate pr-2">
                   {app.applicantName}
                 </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                    <p className="text-[10px] text-slate-500 font-bold tracking-wider">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
+                    <p className="text-[9px] text-slate-400 font-bold tracking-wider">
                         {app.applicantMobile || app.applicantPhone || "No Contact"}
                     </p>
-                    <span className="w-0.5 h-0.5 bg-slate-300 rounded-full"></span>
-                    <p className="text-[9px] text-blue-600 font-black uppercase tracking-widest bg-blue-50/50 px-1.5 py-0.5 rounded">Type: {app.crimeHead || "N/A"}</p>
+                    <span className="hidden sm:block w-0.5 h-0.5 bg-slate-300 rounded-full"></span>
+                    <p className="text-[8px] text-blue-600 font-black uppercase tracking-widest bg-blue-50 px-1 rounded-[4px]">
+                        {app.crimeHead || "N/A"}
+                    </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-6">
-                <div className="text-right hidden sm:block">
-                    <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Police Station</p>
-                    <p className="font-bold text-slate-700 text-xs uppercase tracking-tight">{app.ps || "SINDH POLICE"}</p>
-                </div>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 shrink-0 ml-2">
+                <div className="flex flex-col items-end gap-1">
                    <span className={cn(
-                        "px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider", 
-                        app.status === "pending" ? "bg-amber-50 text-amber-700" : 
-                        app.status === "processed" ? "bg-blue-50 text-blue-700" : 
-                        "bg-emerald-50 text-emerald-700"
+                        "px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider border", 
+                        app.status === "pending" ? "bg-amber-50 text-amber-600 border-amber-100" : 
+                        app.status === "processed" ? "bg-blue-50 text-blue-600 border-blue-100" : 
+                        "bg-emerald-50 text-emerald-600 border-emerald-100"
                     )}>
                         {app.status}
                     </span>
+                    <p className="font-bold text-slate-400 text-[7px] md:text-[9px] uppercase tracking-tighter truncate max-w-[70px] md:max-w-none text-right leading-none">
+                        {app.ps ? app.ps.toUpperCase() : "SINDH POLICE"}
+                    </p>
+                </div>
+                <div className="flex items-center gap-1 md:gap-2">
                    {currentUser?.role === "super_admin" && (
                        <button 
                          onClick={(e) => {
@@ -290,12 +295,12 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                            setShowDeleteDialog(true);
                            setDeleteInput("");
                          }}
-                         className="p-1.5 text-slate-300 hover:text-red-500 transition-all"
+                         className="p-1 text-slate-300 hover:text-red-500 transition-all"
                        >
-                         <Trash2 size={16} />
+                         <Trash2 size={14} />
                        </button>
                    )}
-                   <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-all" />
+                   <ChevronRight size={14} className="text-slate-300 group-hover:text-blue-500 transition-all" />
                 </div>
               </div>
             </div>

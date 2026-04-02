@@ -69,7 +69,7 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
 
   /* -------------------- UI -------------------- */
   return (
-    <div className="flex flex-col items-center justify-center p-6 w-full max-w-2xl mx-auto">
+    <div className="flex flex-col items-center justify-center lg:p-8 w-full max-w-4xl mx-auto">
       <div className="w-full bg-white shadow-xl shadow-slate-200 rounded-3xl p-8 border border-slate-100">
         <h2 className="text-2xl font-bold text-center text-slate-800 mb-2">
           IMEI Verification Portal
@@ -79,7 +79,7 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
         </p>
 
         {/* Search Bar */}
-        <form onSubmit={handleSearch} className="flex gap-2 mb-8 relative">
+        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3 mb-8 relative">
           <div className="relative flex-1">
              <Search className="absolute left-4 top-3.5 text-slate-400 h-5 w-5" />
              <input
@@ -93,7 +93,7 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
           <button
             type="submit"
             disabled={loading || !imei.trim()}
-            className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 font-semibold shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
+            className="w-full sm:w-auto bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 font-semibold shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="animate-spin h-5 w-5" /> : "Verify"}
           </button>

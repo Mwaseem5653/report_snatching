@@ -78,7 +78,7 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
     <div className="min-h-screen flex flex-col bg-slate-50">
     <SessionHeader initialSession={session}>        
         <TooltipProvider>
-            <nav className="flex items-center gap-1.5 p-1.5 bg-slate-100/50 rounded-2xl border border-slate-200/50 overflow-x-auto no-scrollbar max-w-full">
+            <nav className="flex flex-col lg:flex-row items-stretch lg:items-center gap-1 p-1 bg-slate-100/50 rounded-2xl lg:rounded-xl border border-slate-200/50 w-full lg:w-auto overflow-hidden">
             {/* Render permitted tools directly */}
             {TOOLS_MENU.map((tool) => {
                 const Icon = tool.icon;
@@ -89,16 +89,17 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
                         <button
                             onClick={() => setActiveTab(tool.id)}
                             className={cn(
-                            "flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-xl transition-all duration-200 shrink-0",
+                            "flex items-center lg:justify-center gap-3 px-4 lg:px-0 h-12 lg:w-12 lg:h-12 rounded-xl transition-all duration-200 shrink-0",
                             isActive 
-                                ? "bg-white text-blue-700 shadow-md ring-1 ring-slate-200 scale-105" 
+                                ? "bg-white text-blue-700 shadow-md ring-1 ring-slate-200 lg:scale-105" 
                                 : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/50"
                             )}
                         >
                             <Icon size={isActive ? 22 : 20} strokeWidth={isActive ? 2.5 : 2} />
+                            <span className="lg:hidden text-sm font-bold">{tool.label}</span>
                         </button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="font-bold text-[10px] uppercase tracking-widest bg-[#0a2c4e] text-white border-none py-2 px-3">
+                    <TooltipContent side="bottom" className="hidden lg:block font-bold text-[10px] uppercase tracking-widest bg-[#0a2c4e] text-white border-none py-2 px-3">
                         {tool.label}
                     </TooltipContent>
                 </Tooltip>

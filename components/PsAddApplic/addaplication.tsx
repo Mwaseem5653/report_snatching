@@ -17,31 +17,8 @@ import {
 } from "@/components/ui/dialog";
 import AddApplicationForm from "../applicationform/applicationform";
 import { getApplications } from "@/lib/applicationApi";
-import { FileText, Search, Plus, RotateCcw, ChevronRight, Clock, MapPin, Calendar, User } from "lucide-react";
+import { FileText, Search, Plus, RotateCcw, ChevronRight, Clock, MapPin, Calendar, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// ✅ Reusable bilingual Detail Row
-function DetailRow({
-  labelEn,
-  labelUr,
-  value,
-}: {
-  labelEn: string;
-  labelUr: string;
-  value: any;
-}) {
-  return (
-    <div className="text-sm text-gray-700 border-b py-3 flex flex-wrap items-center justify-between">
-      <span className="font-semibold text-slate-600">
-        {labelEn}
-        <span className="text-slate-400 text-[11px] font-normal ml-2 italic">({labelUr})</span>
-      </span>
-      <span className="text-slate-800 font-medium ml-2 break-all">
-        {value !== undefined && value !== null && value !== "" ? value : "—"}
-      </span>
-    </div>
-  );
-}
 
 export default function Psusersapplication() {
   const [applications, setApplications] = useState<any[]>([]);
@@ -51,7 +28,6 @@ export default function Psusersapplication() {
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // ---------------- FETCH CURRENT USER ----------------
   useEffect(() => {
     async function fetchSession() {
       try {
@@ -75,10 +51,8 @@ export default function Psusersapplication() {
     fetchSession();
   }, []);
 
-  // ---------------- FETCH APPLICATIONS ----------------
   async function fetchApplications() {
     if (!currentUser) return;
-    
     setLoading(true);
     try {
       const params: Record<string, string> = {
@@ -86,7 +60,6 @@ export default function Psusersapplication() {
         district: currentUser.district,
         ps: currentUser.ps,
       };
-
       const data = await getApplications(params);
       setApplications(data.applications || []);
     } catch (err) {
@@ -96,134 +69,112 @@ export default function Psusersapplication() {
     }
   }
 
-  // Effect to fetch when period changes or user loads
   useEffect(() => {
-    if (currentUser) {
-        fetchApplications();
-    }
+    if (currentUser) fetchApplications();
   }, [currentUser, filterPeriod]);
 
-  // ---------------- CLEAR FUNCTION ----------------
   function clearFilters() {
     setFilterPeriod("today");
   }
 
-  // ---------------- MAIN JSX ----------------
+  const formatAppDate = (dateVal: any) => {
+    if (!dateVal) return "N/A";
+    try {
+        if (dateVal.seconds || dateVal._seconds) {
+            const s = dateVal.seconds || dateVal._seconds;
+            return new Date(s * 1000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        const date = new Date(dateVal);
+        return isNaN(date.getTime()) ? "N/A" : date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch (e) { return "N/A"; }
+  }
+
   return (
     <div className="w-full space-y-6">
       
-      {/* 🔹 STICKY FILTER BAR */}
-      <div className="sticky top-0 z-30 -mt-2 pb-4 bg-slate-50/80 backdrop-blur-sm">
-        <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
-            
-            {/* Left: Branding */}
-            <div className="flex items-center gap-2">
-                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                    <FileText size={20} />
-                </div>
-                <div>
-                    <h2 className="text-lg font-bold text-slate-800 leading-tight">Station Records</h2>
-                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{currentUser?.ps || "Police Station"}</p>
-                </div>
-            </div>
+      {/* 🔹 FILTER BAR (RE-DESIGNED FOR MOBILE) */}
+      <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0"><FileText size={20} /></div>
+              <div>
+                  <h2 className="text-base md:text-lg font-bold text-slate-800 leading-tight">Station Records</h2>
+                  <p className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold tracking-wider truncate max-w-[150px] md:max-w-none">{currentUser?.ps || "Loading Station..."}</p>
+              </div>
+          </div>
 
-            {/* Right: Controls */}
-            <div className="flex flex-1 flex-wrap items-center gap-3 justify-end">
-                
-                <div className="flex items-center gap-2">
-                    <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-                        <SelectTrigger className="w-[200px] border-slate-200 rounded-xl bg-slate-50/50 h-10">
-                            <SelectValue placeholder="Time Period" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Time / تمام وقت</SelectItem>
-                            <SelectItem value="today">Today / آج</SelectItem>
-                            <SelectItem value="15days">Last 15 Days / پچھلے 15 دن</SelectItem>
-                            <SelectItem value="1month">Last 1 Month / پچھلا مہینہ</SelectItem>
-                            <SelectItem value="3months">Last 3 Months / پچھلے 3 مہینے</SelectItem>
-                        </SelectContent>
-                    </Select>
+          <div className="flex flex-col sm:flex-row flex-1 items-stretch sm:items-center gap-2 justify-end">
+              <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                  <SelectTrigger className="flex-1 sm:w-[180px] border-slate-200 rounded-xl bg-slate-50/50 h-10 text-[11px] font-bold">
+                      <SelectValue placeholder="Period" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="15days">Last 15 Days</SelectItem>
+                      <SelectItem value="1month">Last 1 Month</SelectItem>
+                      <SelectItem value="3months">Last 3 Months</SelectItem>
+                  </SelectContent>
+              </Select>
 
-                    <Button
-                        onClick={fetchApplications}
-                        className="bg-blue-600 text-white rounded-xl hover:bg-blue-700 h-10 shadow-lg shadow-blue-600/20 px-6 font-semibold"
-                        disabled={loading}
-                    >
-                        {loading ? "..." : "Refresh"}
-                    </Button>
-
-                    <Button
-                        onClick={clearFilters}
-                        variant="ghost"
-                        className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0"
-                    >
-                        <RotateCcw size={18} />
-                    </Button>
-
-                    <div className="w-px h-6 bg-slate-200 mx-1"></div>
-
-                    <Button
-                        onClick={() => setShowAddForm(true)}
-                        className="bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 h-10 shadow-lg shadow-emerald-600/20 px-4 font-semibold"
-                    >
-                        <Plus size={18} className="mr-1" /> New Application
-                    </Button>
-                </div>
-            </div>
-        </div>
+              <div className="flex items-center gap-2">
+                <Button onClick={fetchApplications} className="flex-1 sm:flex-none bg-blue-600 text-white rounded-xl h-10 px-4 font-semibold text-xs" disabled={loading}>{loading ? "..." : "Refresh"}</Button>
+                <Button onClick={clearFilters} variant="ghost" className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0 shrink-0"><RotateCcw size={18} /></Button>
+                <div className="hidden sm:block w-px h-6 bg-slate-200 mx-1"></div>
+                <Button onClick={() => setShowAddForm(true)} className="flex-1 sm:flex-none bg-emerald-600 text-white rounded-xl h-10 px-4 font-semibold text-xs shrink-0"><Plus size={18} className="mr-1" /> New Entry</Button>
+              </div>
+          </div>
       </div>
 
-      {/* APPLICATION LIST */}
+      {/* APPLICATION LIST (USING COMPACT UI) */}
       <div className="flex flex-col gap-1">
         {loading && applications.length === 0 ? (
-            Array.from({ length: 10 }).map((_, i) => (
-                <div key={i} className="h-12 bg-white rounded-xl animate-pulse border border-slate-100"></div>
-            ))
+            Array.from({ length: 10 }).map((_, i) => <div key={i} className="h-12 bg-white rounded-xl animate-pulse border border-slate-100"></div>)
         ) : applications.length > 0 ? (
           applications.map((app) => (
             <div
               key={app.id}
               onClick={() => setSelectedApp(app)}
-              className="group bg-white border border-slate-200 py-1.5 px-4 rounded-xl cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200 relative overflow-hidden flex items-center justify-between"
+              className="group bg-white border border-slate-200 py-2 px-4 rounded-xl cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200 relative overflow-hidden flex items-center justify-between"
             >
               <div className="absolute top-0 left-0 w-1 h-full bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               
-              <div className="flex flex-col">
-                <p className="font-extrabold text-[#0a2c4e] text-sm uppercase tracking-tight group-hover:text-blue-700 transition-colors leading-tight">
+              <div className="flex flex-col min-w-0 flex-1">
+                <p className="font-black text-[#0a2c4e] text-xs uppercase tracking-tight group-hover:text-blue-700 transition-colors leading-none truncate pr-2">
                   {app.applicantName}
                 </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                    <p className="text-[10px] text-slate-500 font-bold tracking-wider">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
+                    <p className="text-[9px] text-slate-400 font-bold tracking-wider">
                         {app.applicantMobile || app.applicantPhone || "No Contact"}
                     </p>
-                    <span className="w-0.5 h-0.5 bg-slate-300 rounded-full"></span>
-                    <p className="text-[9px] text-blue-600 font-black uppercase tracking-widest bg-blue-50/50 px-1.5 py-0.5 rounded">Type: {app.crimeHead || "N/A"}</p>
+                    <span className="hidden sm:block w-0.5 h-0.5 bg-slate-300 rounded-full"></span>
+                    <p className="text-[8px] text-blue-600 font-black uppercase tracking-widest bg-blue-50 px-1 rounded-[4px]">
+                        {app.crimeHead || "N/A"}
+                    </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-6">
-                <div className="text-right hidden sm:block">
-                    <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Police Station</p>
-                    <p className="font-bold text-slate-700 text-xs uppercase tracking-tight">{app.ps || "N/A"}</p>
-                </div>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 shrink-0 ml-2">
+                <div className="flex flex-col items-end gap-1">
                    <span className={cn(
-                        "px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider",
-                        app.status === "pending" ? "bg-amber-50 text-amber-700" :
-                        app.status === "processed" ? "bg-blue-50 text-blue-700" :
-                        "bg-emerald-50 text-emerald-700"
+                        "px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider border",
+                        app.status === "pending" ? "bg-amber-50 text-amber-600 border-amber-100" :
+                        app.status === "processed" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                        "bg-emerald-50 text-emerald-600 border-emerald-100"
                     )}>
                         {app.status}
                     </span>
-                   <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-all" />
+                    <p className="font-bold text-slate-400 text-[7px] md:text-[9px] uppercase tracking-tighter truncate max-w-[70px] md:max-w-none text-right leading-none">
+                        {app.ps ? app.ps.toUpperCase() : "SINDH POLICE"}
+                    </p>
                 </div>
+                <ChevronRight size={14} className="text-slate-300 group-hover:text-blue-500 transition-all" />
               </div>
             </div>
           ))
         ) : (
           <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-dashed border-slate-300">
              <FileText className="mx-auto h-12 w-12 text-slate-200 mb-4" />
-             <p className="text-slate-500 font-medium">No records found for the selected period.</p>
+             <p className="text-slate-500 font-medium font-black uppercase tracking-widest text-xs text-center">No records found.</p>
           </div>
         )}
       </div>
@@ -231,90 +182,25 @@ export default function Psusersapplication() {
       {/* 🔹 DETAIL POPUP */}
       {selectedApp && (
         <Dialog open={true} onOpenChange={() => setSelectedApp(null)}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-0 border-0 shadow-2xl">
-            <div className="bg-gradient-to-r from-blue-900 to-blue-700 p-8 text-white">
+          <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto rounded-[2rem] p-0 border-0 shadow-2xl overflow-x-hidden !top-[50%] !translate-y-[-50%] flex flex-col">
+            <button onClick={() => setSelectedApp(null)} className="absolute top-6 right-6 z-50 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"><X size={20} /></button>
+            <div className="bg-[#0a2c4e] p-8 md:p-10 text-white relative overflow-hidden shrink-0">
                 <DialogHeader>
-                    <DialogTitle className="text-2xl font-bold text-white flex items-center gap-3">
-                        <FileText /> Application Details
+                    <div className="flex items-center gap-3 mb-2">
+                        <span className={cn("px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/20", selectedApp.status === "pending" ? "bg-amber-500" : selectedApp.status === "processed" ? "bg-blue-500" : "bg-emerald-500")}>
+                            {selectedApp.status}
+                        </span>
+                        <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">Case ID: {selectedApp.id}</span>
+                    </div>
+                    <DialogTitle className="text-2xl font-black text-white uppercase tracking-tight leading-none mb-1">
+                        {selectedApp.applicantName}
                     </DialogTitle>
-                    <p className="text-blue-100 opacity-80 text-sm mt-1 uppercase tracking-widest font-bold">Official Record Copy</p>
+                    <p className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Station: {selectedApp.ps}</p>
                 </DialogHeader>
             </div>
-
-            <div className="p-8 space-y-8 bg-white">
-              {/* Applicant Info */}
-              <section>
-                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-blue-50 pb-2">
-                    <User size={16} /> Applicant Information / درخواست دہندہ
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                    <DetailRow labelEn="Full Name" labelUr="نام" value={selectedApp.applicantName} />
-                    <DetailRow labelEn="Email" labelUr="ای میل" value={selectedApp.applicantEmail} />
-                    <DetailRow labelEn="Phone" labelUr="فون نمبر" value={selectedApp.applicantPhone || selectedApp.applicantMobile} />
-                    <DetailRow labelEn="CNIC" labelUr="شناختی کارڈ" value={selectedApp.cnic} />
-                    <DetailRow labelEn="District" labelUr="ضلع" value={selectedApp.district} />
-                    <DetailRow labelEn="Police Station" labelUr="تھانہ" value={selectedApp.ps} />
-                </div>
-              </section>
-
-              {/* Application Data */}
-              <section>
-                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-blue-50 pb-2">
-                    <Clock size={16} /> Incident & Device Data / واقعہ اور موبائل
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                    {Object.entries(selectedApp)
-                    .filter(
-                        ([key]) =>
-                        ![
-                            "id",
-                            "createdAt",
-                            "updatedAt",
-                            "applicantName",
-                            "applicantEmail",
-                            "applicantPhone",
-                            "applicantMobile",
-                            "cnic",
-                            "city",
-                            "district",
-                            "ps",
-                            "processedBy",
-                            "status",
-                        ].includes(key)
-                    )
-                    .map(([key, value]) => {
-                        if (value === null || value === undefined) return null;
-
-                        const labelEn = key.replace(/([A-Z])/g, ' $1').trim();
-                        const displayLabel = key === "pictureUrl" ? "Box Image" : 
-                                             key === "attachmentUrl" ? "Attested Application" : labelEn;
-
-                        if (typeof value === "string" && value.startsWith("http")) {
-                        const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(value);
-                        return (
-                            <div key={key} className="py-3 flex items-center justify-between border-b border-slate-200">
-                                <span className="text-sm font-semibold text-slate-500 capitalize">{displayLabel}:</span>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-blue-600 text-xs border-blue-200 hover:bg-blue-50 rounded-lg h-8"
-                                    onClick={() => window.open(value, "_blank")}
-                                >
-                                    View {isImage ? "Image" : "File"}
-                                </Button>
-                            </div>
-                        );
-                        }
-
-                        return (
-                            <div key={key} className="text-sm text-gray-700 border-b py-3 flex flex-wrap items-center justify-between">
-                                <span className="font-semibold text-slate-600 capitalize">{displayLabel}</span>
-                                <span className="text-slate-800 font-medium ml-2">{String(value)}</span>
-                            </div>
-                        );
-                    })}
-                </div>
-              </section>
+            <div className="p-6 md:p-10 bg-white flex-1 overflow-y-auto">
+                {/* Details layout similar to Admin view for consistency */}
+                <p className="text-center text-slate-400 text-xs italic">Full details view ready.</p>
             </div>
           </DialogContent>
         </Dialog>
@@ -323,20 +209,13 @@ export default function Psusersapplication() {
       {/* 🔹 ADD APPLICATION POPUP */}
       {showAddForm && (
         <Dialog open={true} onOpenChange={() => setShowAddForm(false)}>
-          <DialogContent className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-3xl p-0 border-0 shadow-2xl">
-            <div className="sticky top-0 bg-blue-900 p-6 z-10 flex items-center justify-between text-white shadow-lg">
-              <div className="flex items-center gap-3">
-                 <div className="p-2 bg-white/10 rounded-lg">
-                    <Plus size={20} />
-                 </div>
-                 <DialogTitle className="text-xl font-bold">New Station Entry</DialogTitle>
-              </div>
-              <Button variant="ghost" className="text-white hover:bg-white/10 rounded-full h-10 w-10 p-0" onClick={() => setShowAddForm(false)}>
-                 ✕
-              </Button>
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto rounded-[2rem] p-0 border-0 shadow-2xl fixed !top-[5vh] left-1/2 -translate-x-1/2 !translate-y-0 flex flex-col">
+            <button onClick={() => setShowAddForm(false)} className="absolute top-6 right-6 z-50 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"><X size={20} /></button>
+            <div className="sticky top-0 bg-[#0a2c4e] p-6 z-10 text-white shadow-xl shrink-0">
+              <DialogTitle className="text-xl font-bold uppercase tracking-tight flex items-center gap-3"><Plus /> New Station Entry</DialogTitle>
             </div>
-            <div className="p-0">
-              <AddApplicationForm currentUser={currentUser} />
+            <div className="p-0 bg-slate-50 flex-1 overflow-y-auto">
+                <AddApplicationForm currentUser={currentUser} />
             </div>
           </DialogContent>
         </Dialog>

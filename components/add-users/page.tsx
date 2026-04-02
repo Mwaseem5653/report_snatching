@@ -207,57 +207,56 @@ export default function UserManagement() {
   return (
     <div className="w-full space-y-6">
       
-      {/* 🔹 STICKY FILTER BAR */}
-      <div className="sticky top-0 z-30 -mt-2 pb-4 bg-slate-50/80 backdrop-blur-sm">
-        <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
-            
-            {/* Left: Branding */}
-            <div className="flex items-center gap-2">
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                    <Users size={20} />
-                </div>
-                <div className="hidden sm:block">
-                    <h2 className="text-lg font-bold text-slate-800 leading-tight">User Management</h2>
-                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Access Control</p>
-                </div>
-            </div>
+      {/* 🔹 FILTER BAR */}
+      <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          
+          {/* Left: Branding */}
+          <div className="flex items-center gap-2">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg shrink-0">
+                  <Users size={20} />
+              </div>
+              <div>
+                  <h2 className="text-base md:text-lg font-bold text-slate-800 leading-tight">User Management</h2>
+                  <p className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold tracking-wider">Access Control</p>
+              </div>
+          </div>
 
-            {/* Right: Controls */}
-            <div className="flex flex-1 flex-wrap items-center gap-3 justify-end">
+          {/* Right: Controls */}
+          <div className="flex flex-col sm:flex-row flex-1 items-stretch sm:items-center gap-2 justify-end">
                 
-                <div className="flex items-center gap-2">
-                    {/* District Filter (Super Admin Only) */}
-                    {currentUser?.role === "super_admin" && (
-                        <Select value={filterDistrict} onValueChange={setFilterDistrict}>
-                            <SelectTrigger className="w-[160px] border-slate-200 rounded-xl bg-slate-50/50 h-10 text-[11px] font-bold">
-                                <SelectValue placeholder="District" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Districts</SelectItem>
-                                {currentUser.city && locationData[currentUser.city] && Object.keys(locationData[currentUser.city].districts).map(d => (
-                                    <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
-
-                    <Select value={filterRole} onValueChange={setFilterRole}>
-                        <SelectTrigger className="w-[160px] border-slate-200 rounded-xl bg-slate-50/50 h-10 text-[11px] font-bold">
-                            <SelectValue placeholder="Role" />
+                {/* District Filter (Super Admin Only) */}
+                {currentUser?.role === "super_admin" && (
+                    <Select value={filterDistrict} onValueChange={setFilterDistrict}>
+                        <SelectTrigger className="flex-1 sm:w-[160px] border-slate-200 rounded-xl bg-slate-50/50 h-10 text-[11px] font-bold">
+                            <SelectValue placeholder="District" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="none">All Roles</SelectItem>
-                            {availableFilters().map((r) => (
-                                <SelectItem key={r} value={r} className="capitalize">
-                                    {r.replace("_", " ")}
-                                </SelectItem>
+                            <SelectItem value="all">All Districts</SelectItem>
+                            {currentUser.city && locationData[currentUser.city] && Object.keys(locationData[currentUser.city].districts).map(d => (
+                                <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
+                )}
 
+                <Select value={filterRole} onValueChange={setFilterRole}>
+                    <SelectTrigger className="flex-1 sm:w-[160px] border-slate-200 rounded-xl bg-slate-50/50 h-10 text-[11px] font-bold">
+                        <SelectValue placeholder="Role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">All Roles</SelectItem>
+                        {availableFilters().map((r) => (
+                            <SelectItem key={r} value={r} className="capitalize">
+                                {r.replace("_", " ")}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                <div className="flex items-center gap-2">
                     <Button
                         onClick={handleFilterSearch}
-                        className="bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 h-10 shadow-lg shadow-indigo-600/20 px-6 font-semibold"
+                        className="flex-1 sm:flex-none bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 h-10 shadow-lg shadow-indigo-600/20 px-6 font-semibold text-xs"
                         disabled={loading}
                     >
                         {loading ? "..." : "Search"}
@@ -266,26 +265,25 @@ export default function UserManagement() {
                     <Button
                         onClick={handleClear}
                         variant="ghost"
-                        className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0"
+                        className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0 shrink-0"
                     >
                         <RotateCcw size={18} />
                     </Button>
 
-                    <div className="w-px h-6 bg-slate-200 mx-1"></div>
+                    <div className="hidden sm:block w-px h-6 bg-slate-200 mx-1"></div>
 
                     <Button
                         onClick={() => setShowAddForm(true)}
-                        className="bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 h-10 shadow-lg shadow-emerald-600/20 px-4 font-semibold"
+                        className="flex-1 sm:flex-none bg-emerald-600 text-white rounded-xl h-10 px-4 font-semibold text-xs shrink-0"
                     >
                         <Plus size={18} className="mr-1" /> New User
                     </Button>
                 </div>
-            </div>
-        </div>
+          </div>
       </div>
 
       {/* USERS LIST */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading && users.length === 0 ? (
             Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="h-32 bg-white rounded-2xl animate-pulse border border-slate-100"></div>

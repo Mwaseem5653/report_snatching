@@ -37,6 +37,7 @@ const MAIN_TABS = [
 export default function PsUserClient({ initialSession }: { initialSession: any }) {
   const [activeTab, setActiveTab] = useState<string>("search");
   const [session, setSession] = useState(initialSession);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
 
   useEffect(() => {
     async function refreshSession() {
@@ -63,7 +64,7 @@ export default function PsUserClient({ initialSession }: { initialSession: any }
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
     <SessionHeader initialSession={session}>
-        <nav className="flex items-center gap-1 p-1 bg-slate-100/50 rounded-xl border border-slate-200/50">
+        <nav className="flex flex-col lg:flex-row items-stretch lg:items-center gap-1 p-1 lg:bg-slate-100/50 rounded-2xl lg:rounded-xl lg:border border-slate-200/50 w-full lg:w-auto">
         {MAIN_TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -72,46 +73,94 @@ export default function PsUserClient({ initialSession }: { initialSession: any }
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200",
+                  "flex items-center gap-3 lg:gap-2 px-4 lg:px-3 py-3 lg:py-1.5 rounded-xl lg:rounded-lg text-sm font-bold lg:font-medium transition-all duration-200",
                   isActive 
                     ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200" 
                     : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/50"
                 )}
               >
-                <Icon size={16} />
-                <span className="hidden lg:inline">{tab.label}</span>
+                <Icon size={18} className="lg:w-4 lg:h-4 shrink-0" />
+                <span className="inline">{tab.label}</span>
               </button>
             );
         })}
 
         {TOOLS_MENU.length > 0 && (
-            <DropdownMenu>
-                <DropdownMenuTrigger className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 outline-none",
-                    isToolActive 
-                        ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200" 
-                        : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/50"
-                )}>
-                    <Wrench size={16} />
-                    <span className="hidden lg:inline">Advanced Tools</span>
-                    <ChevronDown size={14} className="opacity-50" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                    {TOOLS_MENU.map((tool) => {
-                        const Icon = tool.icon;
-                        return (
-                            <DropdownMenuItem 
-                                key={tool.id} 
-                                onClick={() => setActiveTab(tool.id)}
-                                className={cn("gap-2 cursor-pointer", activeTab === tool.id && "bg-slate-100 text-blue-600 font-medium")}
-                            >
-                                <Icon size={16} />
-                                {tool.label}
-                            </DropdownMenuItem>
-                        )
-                    })}
-                </DropdownMenuContent>
-            </DropdownMenu>
+            <>
+                <div className="hidden lg:block">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger className={cn(
+                            "flex items-center justify-between lg:justify-start gap-3 lg:gap-2 px-4 lg:px-3 py-3 lg:py-1.5 rounded-xl lg:rounded-lg text-sm font-bold lg:font-medium transition-all duration-200 outline-none",
+                            isToolActive 
+                                ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200" 
+                                : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/50"
+                        )}>
+                            <div className="flex items-center gap-3 lg:gap-2">
+                                <Wrench size={18} className="lg:w-4 lg:h-4" />
+                                <span>Advanced Tools</span>
+                            </div>
+                            <ChevronDown size={14} className="opacity-50" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 mt-2">
+                            {TOOLS_MENU.map((tool) => {
+                                const Icon = tool.icon;
+                                return (
+                                    <DropdownMenuItem 
+                                        key={tool.id} 
+                                        onClick={() => setActiveTab(tool.id)}
+                                        className={cn("gap-3 py-3 lg:py-2 cursor-pointer", activeTab === tool.id && "bg-slate-100 text-blue-600 font-bold lg:font-medium")}
+                                    >
+                                        <Icon size={16} />
+                                        {tool.label}
+                                    </DropdownMenuItem>
+                                )
+                            })}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+
+                <div className="lg:hidden">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setMobileToolsOpen(!mobileToolsOpen);
+                        }}
+                        data-collapsible="true"
+                        className={cn(
+                            "flex items-center justify-between gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 w-full",
+                            isToolActive ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-slate-100"
+                        )}
+                    >
+                        <div className="flex items-center gap-3">
+                            <Wrench size={18} className="shrink-0" />
+                            <span>Advanced Tools</span>
+                        </div>
+                        <ChevronDown size={16} className={cn("transition-transform duration-300", mobileToolsOpen && "rotate-180")} />
+                    </button>
+
+                    {mobileToolsOpen && (
+                        <div className="mt-1 ml-4 pl-4 border-l-2 border-slate-100 space-y-1 animate-in slide-in-from-top-2 duration-300">
+                            {TOOLS_MENU.map((tool) => {
+                                const Icon = tool.icon;
+                                const isActive = activeTab === tool.id;
+                                return (
+                                    <button
+                                        key={tool.id}
+                                        onClick={() => setActiveTab(tool.id)}
+                                        className={cn(
+                                            "flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 w-full",
+                                            isActive ? "text-blue-700 bg-blue-50" : "text-slate-400"
+                                        )}
+                                    >
+                                        <Icon size={16} className="shrink-0" />
+                                        <span>{tool.label}</span>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+            </>
         )}
         </nav>
     </SessionHeader>
