@@ -107,6 +107,23 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
         return;
     }
 
+    // Check mobile number length (digits only)
+    const mobileDigits = formData.mobileNumber.replace(/\D/g, "");
+    if (mobileDigits.length !== 11) {
+        alert("❌ Error: Mobile number must be exactly 11 digits.");
+        return;
+    }
+
+    // Check device last numbers
+    for (let i = 0; i < formData.devices.length; i++) {
+        const d = formData.devices[i];
+        const lastNumDigits = d.lastNumUsed.replace(/\D/g, "");
+        if (lastNumDigits.length !== 11) {
+            alert(`❌ Error: Device ${i+1} last number used must be exactly 11 digits.`);
+            return;
+        }
+    }
+
     setSubmitting(true);
 
     try {
@@ -190,7 +207,7 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">Mobile Number *</Label>
-                    <Input placeholder="0300-XXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-bold" />
+                    <Input placeholder="0300-XXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required minLength={11} maxLength={11} className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-bold" />
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">CNIC Number (Optional)</Label>
@@ -293,14 +310,14 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
                                     <Label className="text-[11px] font-bold uppercase text-slate-500">Last Number Used 1 *</Label>
                                     <div className="relative">
                                         <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                        <Input placeholder="0300-XXXXXXX" name="lastNumUsed" value={device.lastNumUsed} onChange={(e) => handleDeviceChange(index, e)} required className="pl-10 rounded-xl border-slate-200 h-11 bg-white font-bold" />
+                                        <Input placeholder="0300-XXXXXXX" name="lastNumUsed" value={device.lastNumUsed} onChange={(e) => handleDeviceChange(index, e)} required minLength={11} maxLength={11} className="pl-10 rounded-xl border-slate-200 h-11 bg-white font-bold" />
                                     </div>
                                 </div>
                                 <div className="space-y-2">
                                     <Label className="text-[11px] font-bold uppercase text-slate-500">Last Number Used 2 (Optional)</Label>
                                     <div className="relative">
                                         <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                        <Input placeholder="0300-XXXXXXX" name="lastNumUsed2" value={device.lastNumUsed2} onChange={(e) => handleDeviceChange(index, e)} className="pl-10 rounded-xl border-slate-200 h-11 bg-white font-bold" />
+                                        <Input placeholder="0300-XXXXXXX" name="lastNumUsed2" value={device.lastNumUsed2} onChange={(e) => handleDeviceChange(index, e)} minLength={11} maxLength={11} className="pl-10 rounded-xl border-slate-200 h-11 bg-white font-bold" />
                                     </div>
                                 </div>
                             </div>
@@ -320,6 +337,10 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
                     <div className="space-y-2">
                         <Label className="text-[11px] font-bold uppercase text-slate-500">Date of Offence *</Label>
                         <Input type="date" name="dateOfOffence" value={formData.dateOfOffence} onChange={handleChange} required className="rounded-xl h-11 bg-slate-50/50 font-bold border-slate-200" />
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-[11px] font-bold uppercase text-slate-500">Time of Offence *</Label>
+                        <Input type="time" name="timeOfOffence" value={formData.timeOfOffence} onChange={handleChange} required className="rounded-xl h-11 bg-slate-50/50 font-bold border-slate-200" />
                     </div>
                     <div className="md:col-span-2 space-y-2">
                         <Label className="text-[11px] font-bold uppercase text-slate-500">Incident Location / Address *</Label>
@@ -345,8 +366,8 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                    <Label className="text-[11px] font-bold uppercase text-slate-500">Box Picture *</Label>
-                    <Input type="file" accept="image/*" onChange={(e) => handleFileChange(e, "boxPicture")} required className="cursor-pointer" />
+                    <Label className="text-[11px] font-bold uppercase text-slate-500">Box Picture (Optional)</Label>
+                    <Input type="file" accept="image/*" onChange={(e) => handleFileChange(e, "boxPicture")} className="cursor-pointer" />
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">Attested Application *</Label>

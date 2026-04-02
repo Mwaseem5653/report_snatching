@@ -76,6 +76,13 @@ export default function AddApplicationFormNormalUser() {
         showAlert("Missing Info", "Please fill name and mobile number.", "warning");
         return false;
     }
+    // Check mobile number length (digits only)
+    const mobileDigits = formData.mobileNumber.replace(/\D/g, "");
+    if (mobileDigits.length !== 11) {
+        showAlert("Invalid Mobile", "Mobile number must be exactly 11 digits.", "warning");
+        return false;
+    }
+
     if (!formData.city || !formData.district || !formData.psName) {
         showAlert("Missing Info", "Please select City, District and Police Station.", "warning");
         return false;
@@ -91,6 +98,11 @@ export default function AddApplicationFormNormalUser() {
     for (const device of formData.devices) {
         if (!device.mobileModel || !device.imei1 || !device.lastNumUsed) {
             showAlert("Missing Info", "Mobile model, IMEI 1 and Last Number Used are required for all devices.", "warning");
+            return false;
+        }
+        const lastNumDigits = device.lastNumUsed.replace(/\D/g, "");
+        if (lastNumDigits.length !== 11) {
+            showAlert("Invalid Number", "Last number used must be exactly 11 digits.", "warning");
             return false;
         }
     }
@@ -225,7 +237,7 @@ export default function AddApplicationFormNormalUser() {
                     </div>
                     <div className="space-y-1.5">
                         <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Mobile Number <span className="text-red-500">*</span></Label>
-                        <Input placeholder="0300-XXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14 font-bold" />
+                        <Input placeholder="0300-XXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required minLength={11} maxLength={11} className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14 font-bold" />
                     </div>
                     <div className="space-y-1.5">
                         <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">CNIC Number <span className="text-slate-400">(Optional)</span></Label>
@@ -373,7 +385,7 @@ export default function AddApplicationFormNormalUser() {
                                             <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Last Number Used 1 <span className="text-red-500">*</span></Label>
                                             <div className="relative">
                                                 <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                                                <Input placeholder="0300-XXXXXXX" name="lastNumUsed" value={device.lastNumUsed} onChange={(e) => handleDeviceChange(index, e)} required className="rounded-xl border-slate-200 bg-white h-12 pl-10 font-bold" />
+                                                <Input placeholder="0300-XXXXXXX" name="lastNumUsed" value={device.lastNumUsed} onChange={(e) => handleDeviceChange(index, e)} required minLength={11} maxLength={11} className="rounded-xl border-slate-200 bg-white h-12 pl-10 font-bold" />
                                             </div>
                                         </div>
                                         <div className="space-y-1.5">
@@ -415,7 +427,9 @@ export default function AddApplicationFormNormalUser() {
                                   <div className={cn("mx-auto w-12 h-12 md:w-16 md:h-16 rounded-2xl shadow-sm flex items-center justify-center transition-transform group-hover:scale-110", formData.boxPicture ? "bg-emerald-50 text-emerald-600" : "bg-white text-blue-600")}>
                                       {formData.boxPicture ? <CheckCircle2 size={24} /> : <Smartphone size={24} />}
                                   </div>
-                                  <div><p className="font-bold text-slate-800 text-xs md:text-base">{formData.boxPicture ? "Box Picture Selected" : "Box Picture (Optional)"}</p></div>
+                                  <div>
+                                      <p className="font-bold text-slate-800 text-xs md:text-base">{formData.boxPicture ? "Box Picture Selected" : "Box Picture (Optional)"}</p>
+                                  </div>
                                   {formData.boxPicture && <div className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-bold rounded-full inline-flex items-center gap-2 border border-emerald-100 max-w-full truncate">Selected: {formData.boxPicture.name.substring(0, 15)}...</div>}
                               </div>
                           </div>

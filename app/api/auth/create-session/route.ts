@@ -63,8 +63,8 @@ export async function POST(req: Request) {
         ? userData.lastActive.toMillis() 
         : 0;
     
-    // 5 minutes threshold for "active" status
-    const isSessionActive = (nowTs - lastActive) < (5 * 60 * 1000); 
+    // 1 minute threshold for "active" status
+    const isSessionActive = (nowTs - lastActive) < (1 * 60 * 1000); 
 
     if (userData.currentSessionId && isSessionActive) {
         return NextResponse.json({ 

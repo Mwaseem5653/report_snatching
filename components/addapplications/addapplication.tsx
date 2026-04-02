@@ -349,16 +349,40 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                   <DetailRow label="District" value={selectedApp.district} />
                                     <DetailRow label="Police Station" value={selectedApp.ps} />
                                     
-                                    <div className="col-span-full mt-6 mb-2 border-t border-slate-50 pt-6"><h4 className="text-blue-600 font-black text-[11px] uppercase tracking-[0.2em] flex items-center gap-2"><Smartphone size={14}/> Device & Incident Details</h4></div>
-                                    <DetailRow label="Mobile Model" value={selectedApp.mobileModel} icon={Smartphone} />    
-                                    <DetailRow label="IMEI 1" value={selectedApp.imei1} />
-                                    <DetailRow label="IMEI 2" value={selectedApp.imei2} />
-                                    <DetailRow label="Crime Category" value={selectedApp.crimeHead} />
-                                    <DetailRow label="Offence Date" value={formatAppDate(selectedApp.offenceDate)} />
-                                    <DetailRow label="Offence Time" value={selectedApp.offenceTime} />
-                                    <DetailRow label="Offence Address" value={selectedApp.offenceAddress} icon={MapPin} />                    <DetailRow label="Last Num Used" value={selectedApp.lastNumUsed} />
-                  <DetailRow label="Other Lost Property" value={selectedApp.otherLostProperty} />
-                  
+                                    <div className="col-span-full mt-6 mb-2 border-t border-slate-50 pt-6">
+                                        <h4 className="text-blue-600 font-black text-[11px] uppercase tracking-[0.2em] flex items-center gap-2">
+                                            <Smartphone size={14}/> Device & Incident Details
+                                        </h4>
+                                    </div>
+
+                                    {/* 🔹 Handle Multiple Devices or Old Single Device Format */}
+                                    {selectedApp.devices && Array.isArray(selectedApp.devices) ? (
+                                        selectedApp.devices.map((device: any, idx: number) => (
+                                            <div key={idx} className="col-span-full grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2 bg-slate-50/50 p-4 rounded-2xl mb-4 border border-slate-100">
+                                                <p className="col-span-full text-[10px] font-black text-blue-900 uppercase tracking-widest mb-2">Device {idx + 1}</p>
+                                                <DetailRow label="Mobile Model" value={device.mobileModel} icon={Smartphone} />
+                                                <DetailRow label="IMEI 1" value={device.imei1} />
+                                                <DetailRow label="IMEI 2" value={device.imei2} />
+                                                <DetailRow label="Last Num Used" value={device.lastNumUsed} />
+                                                <DetailRow label="Last Num Used 2" value={device.lastNumUsed2} />
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <>
+                                            <DetailRow label="Mobile Model" value={selectedApp.mobileModel} icon={Smartphone} />
+                                            <DetailRow label="IMEI 1" value={selectedApp.imei1} />
+                                            <DetailRow label="IMEI 2" value={selectedApp.imei2} />
+                                            <DetailRow label="Last Num Used" value={selectedApp.lastNumUsed} />
+                                        </>
+                                    )}
+
+                                    <div className="col-span-full grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2 mt-4">
+                                        <DetailRow label="Crime Category" value={selectedApp.crimeHead} />
+                                        <DetailRow label="Offence Date" value={formatAppDate(selectedApp.offenceDate)} />
+                                        <DetailRow label="Offence Time" value={selectedApp.offenceTime} />
+                                        <DetailRow label="Offence Address" value={selectedApp.offenceAddress} icon={MapPin} />
+                                        <DetailRow label="Other Lost Property" value={selectedApp.otherLostProperty} />
+                                    </div>                  
                   <div className="col-span-full mt-6 mb-4 border-t border-slate-50 pt-6"><h4 className="text-blue-600 font-black text-[11px] uppercase tracking-[0.2em] flex items-center gap-2"><CheckCircle2 size={14}/> Attachments & Evidence</h4></div>
                   <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {selectedApp.pictureUrl && (
