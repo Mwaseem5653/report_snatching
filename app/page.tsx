@@ -83,7 +83,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-6 h-24 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="relative h-16 w-16">
-               <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
+               <Image src="/logo.png" alt="Sindh Police Logo - Official Mobile Snatching, Theft & Lost Reporting Portal" fill className="object-contain" priority />
             </div>
             <div className="leading-none border-l-2 border-slate-100 pl-4">
               <h1 className="text-2xl font-black text-[#0a2c4e] tracking-tight">SINDH POLICE</h1>
@@ -183,7 +183,7 @@ export default function LandingPage() {
                     >
                       <Image 
                         src={heroImages[currentImageIndex]} 
-                        alt={`Sindh Police Operations ${currentImageIndex + 1}`} 
+                        alt={`Sindh Police Operations - Advanced CDR Analyzer and Mobile Snatching Reporting Tool ${currentImageIndex + 1}`} 
                         fill 
                         className="object-cover"
                         priority
@@ -321,6 +321,38 @@ export default function LandingPage() {
                  <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-300">Sindh Police FM</p>
               </motion.div>
            </div>
+        </div>
+      </section>
+
+      {/* 🔹 SEO Content Section */}
+      <section className="py-16 bg-slate-50 border-t border-slate-100">
+        <div className="container mx-auto px-6 max-w-5xl">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div className="space-y-6">
+              <h2 className="text-3xl font-black text-[#0a2c4e] uppercase tracking-tight leading-none">
+                Advanced Digital Investigation & Reporting
+              </h2>
+              <div className="h-1 w-20 bg-red-600" />
+              <p className="text-slate-600 text-sm leading-relaxed font-medium">
+                Sindh Police offers a comprehensive digital platform for citizens and officers. Whether you need to file a <span className="font-bold text-slate-800">mobile snatching report</span>, log a <span className="font-bold text-slate-800">theft complaint</span>, or submit a <span className="font-bold text-slate-800">lost mobile report</span>, our portal ensures your data reaches the right department instantly.
+              </p>
+              <p className="text-slate-600 text-sm leading-relaxed font-medium">
+                For law enforcement and authorized personnel, we provide <span className="font-bold text-slate-800">advance tools</span> including a sophisticated <span className="font-bold text-slate-800">CDR Analyzer</span>, application extractor, and real-time database search to accelerate recovery and investigation processes.
+              </p>
+            </div>
+            <div className="bg-[#0a2c4e] p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform duration-700"><ShieldCheck size={120} /></div>
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <Siren size={20} className="text-red-500" /> Key Features
+              </h3>
+              <ul className="space-y-3 text-xs font-bold uppercase tracking-widest text-blue-100">
+                <li className="flex items-center gap-2"><ArrowRight size={14} className="text-red-500" /> Online Stolen Mobile Database</li>
+                <li className="flex items-center gap-2"><ArrowRight size={14} className="text-red-500" /> CDR Analysis Dashboard</li>
+                <li className="flex items-center gap-2"><ArrowRight size={14} className="text-red-500" /> Real-time IMEI Verification</li>
+                <li className="flex items-center gap-2"><ArrowRight size={14} className="text-red-500" /> Automated Application Extraction</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </section>
 
