@@ -356,6 +356,26 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* 🔹 Advertisement / Partners Section */}
+      <section className="py-12 bg-white border-t border-slate-100">
+        <div className="container mx-auto px-6">
+          <div className="text-center mb-8">
+            <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">Public Notice / Advertisements</p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-6">
+            {/* 🚀 Google AdSense Unit */}
+            <div className="w-full max-w-4xl min-h-[90px] bg-slate-50 border border-dashed border-slate-200 rounded-3xl flex items-center justify-center overflow-hidden">
+                <ins className="adsbygoogle"
+                    style={{ display: 'block' }}
+                    data-ad-client="ca-pub-5961112055480826"
+                    data-ad-slot="auto"
+                    data-ad-format="auto"
+                    data-full-width-responsive="true"></ins>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <Footer />
     </div>
   );
