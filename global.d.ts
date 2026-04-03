@@ -1,2 +1,3 @@
-declare module "*.css";
-declare module "*.scss";
+interface Window {
+  adsbygoogle: any[];
+}

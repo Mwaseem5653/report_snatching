@@ -33,6 +33,14 @@ export default function LandingPage() {
     const timer = setInterval(() => {
       setCurrentImageIndex((prev) => (prev + 1) % heroImages.length);
     }, 5000); // 5-second interval as requested
+
+    // 🚀 Initialize Google AdSense
+    try {
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (err) {
+        console.error("AdSense push error:", err);
+    }
+
     return () => clearInterval(timer);
   }, []);
 
@@ -361,7 +369,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-6">
           <div className="flex flex-wrap justify-center gap-6">
             {/* 🚀 Google AdSense Unit */}
-            <div className="w-full max-w-4xl min-h-[90px] bg-slate-50 border border-dashed border-slate-200 rounded-3xl flex items-center justify-center overflow-hidden">
+            <div className="w-full max-w-4xl min-h-[90px] flex items-center justify-center overflow-hidden">
                 <ins className="adsbygoogle"
                     style={{ display: 'block' }}
                     data-ad-client="ca-pub-5961112055480826"
