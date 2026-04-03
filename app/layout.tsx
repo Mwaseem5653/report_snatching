@@ -17,7 +17,7 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "Sindh Police - Mobile Snatching, Theft & Lost Report Portal | CDR Analyzer",
   description: "Official Sindh Police portal to report mobile snatching, theft, or lost devices. Access advance tools like CDR Analyzer and Application Extractor for digital investigation.",
-  keywords: "mobile snatching, theft report, lost mobile report, Sindh Police portal, CDR analyzer, advance tools, IMEI search, PTA lookup, mobile recovery Sindh, kpts, kpts sindh police",
+  keywords: "mobile snatching report sindh, online mobile theft complaint karachi, lost mobile report sindh police, stolen mobile registration sindh, mobile recovery portal sindh police, advanced CDR analyzer pakistan, police CDR analysis tool, CDR format converter sindh police, IMEI database search sindh, PTA mobile lookup online, Sindh Police portal, kpts, kpts sindh police, digital justice sindh",
   alternates: {
     canonical: "https://kpts.com.pk",
   },
