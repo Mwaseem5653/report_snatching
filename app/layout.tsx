@@ -46,6 +46,9 @@ export const metadata: Metadata = {
   },
   verification: {
     google: "google5c13a0972b687103",
+    other: {
+      "google-adsense-account": ["ca-pub-5961112055480826"],
+    },
   },
   icons: {
     icon: "/logo.png",
@@ -61,15 +64,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <Script
+        async
+        src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5961112055480826"
+        crossOrigin="anonymous"
+        strategy="beforeInteractive"
+      />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       > 
-        <Script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5961112055480826"
-          crossOrigin="anonymous"
-          strategy="afterInteractive"
-        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
