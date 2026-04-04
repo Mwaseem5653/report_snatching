@@ -18,7 +18,7 @@ import {
   Check
 } from "lucide-react";
 import { toast } from "sonner";
-import ExcelJS from "exceljs";
+import ExcelJS from "exceljs/dist/exceljs.min.js";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
@@ -182,7 +182,7 @@ export default function ApplicationToExcelClient() {
 
       // Style Header (Matching AI Extractor style)
       const headerRow = worksheet.getRow(1);
-      headerRow.eachCell((cell) => {
+      headerRow.eachCell((cell: any) => {
           cell.fill = {
               type: 'pattern',
               pattern: 'solid',
@@ -198,8 +198,8 @@ export default function ApplicationToExcelClient() {
           cell.alignment = { horizontal: 'center' };
       });
 
-      worksheet.eachRow((row) => {
-          row.eachCell((cell) => {
+      worksheet.eachRow((row: any) => {
+          row.eachCell((cell: any) => {
               cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
           });
       });

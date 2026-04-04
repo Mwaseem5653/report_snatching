@@ -156,21 +156,21 @@ export default function LacCellConverterClient() {
 
   return (
     <div className="h-[calc(100vh-140px)] flex flex-col space-y-4 overflow-hidden max-w-5xl mx-auto">
-      <div className="shrink-0 flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3">
+      <div className="shrink-0 flex flex-col md:flex-row items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4">
+        <div className="flex items-center gap-3 w-full md:w-auto">
             <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-lg">
                 <Cpu size={24} />
             </div>
             <div>
-                <h1 className="text-lg font-black text-slate-800 tracking-tight uppercase leading-none">Tactical ID Converter</h1>
+                <h1 className="text-md md:text-lg font-black text-slate-800 tracking-tight uppercase leading-none">Tactical ID Converter</h1>
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Excel-Style Batch Processor</p>
             </div>
         </div>
-        <div className="flex gap-2">
-            <Button variant="outline" onClick={handleReset} className="rounded-xl font-bold text-slate-500 border-slate-200 h-9 text-xs">
+        <div className="flex items-center justify-center gap-2 w-full md:w-auto flex-wrap">
+            <Button variant="outline" onClick={handleReset} className="flex-1 md:flex-none rounded-xl font-bold text-slate-500 border-slate-200 h-9 text-[10px] md:text-xs">
                 <RotateCcw size={14} className="mr-2" /> Reset
             </Button>
-            <Button onClick={handleCopyAll} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black shadow-lg h-9 px-6 text-xs transition-all active:scale-95">
+            <Button onClick={handleCopyAll} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black shadow-lg h-9 px-4 md:px-6 text-[10px] md:text-xs transition-all active:scale-95 whitespace-nowrap">
                 <ClipboardCheck size={14} className="mr-2" /> Copy All Output
             </Button>
         </div>

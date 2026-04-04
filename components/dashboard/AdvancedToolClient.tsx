@@ -10,6 +10,7 @@ import EyeconLookupClient from "@/components/tools/EyeconLookupClient";
 import ExcelAnalyzerClient from "@/components/tools/ExcelAnalyzerClient";
 import GeoFencingClient from "@/components/tools/GeoFencingClient";
 import MovementVisualizerClient from "@/components/tools/MovementVisualizerClient";
+import RapidApiClient from "@/components/tools/RapidApiClient";
 import {
   FileSpreadsheet,
   ScanText,
@@ -18,7 +19,8 @@ import {
   MapPin,
   Navigation,
   Cpu,
-  Eye
+  Eye,
+  Globe
 } from "lucide-react";
 import {
   Tooltip,
@@ -50,6 +52,7 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
             { id: "extractor", key: "ai_extractor" },
             { id: "utilities", key: "info_tools" },
             { id: "cdr", key: "cdr_generator" },
+            { id: "rapidapi", key: "rapid_api" },
           ].filter(t => t && (isSuper || perms[t.key]));
           
           if (currentTools.length > 0 && !currentTools.some(t => t.id === activeTab)) {
@@ -72,6 +75,7 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
     { id: "extractor", label: "AI Extractor", icon: ScanText, key: "ai_extractor" },
     { id: "utilities", label: "Info Lookup", icon: LayoutGrid, key: "info_tools" },
     { id: "cdr", label: "CDR Generator", icon: FileCode, key: "cdr_generator" },
+    { id: "rapidapi", label: "RapidAPI", icon: Globe, key: "rapid_api" },
   ].filter(t => t && (isSuper || perms[t.key]));
 
   return (
@@ -124,6 +128,7 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
         {(activeTab === "extractor" && (isSuper || perms.ai_extractor)) && <ApplicationExtractorClient />}
         {(activeTab === "utilities" && (isSuper || perms.info_tools)) && <InfoToolsClient />}
         {(activeTab === "cdr" && (isSuper || perms.cdr_generator)) && <CdrFormatClient />}
+        {(activeTab === "rapidapi" && (isSuper || perms.rapid_api)) && <RapidApiClient />}
     </main>
     </div>
   );

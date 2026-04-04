@@ -424,6 +424,7 @@ export default function UserManagement() {
                                         { key: 'app_to_excel', label: 'App To Excel' },
                                         { key: 'info_tools', label: 'Info Tools' },
                                         { key: 'cdr_generator', label: 'CDR Generator' },
+                                        { key: 'rapid_api', label: 'RapidAPI Hub' },
                                         { key: 'eyecon_access', label: 'Eyecon Access' },
                                     ].map((p) => (
                                         <div key={p.key} className="flex items-center space-x-2 p-2 bg-white rounded-lg border border-indigo-100 shadow-sm">

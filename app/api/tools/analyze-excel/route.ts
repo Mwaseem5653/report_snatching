@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
@@ -258,10 +257,25 @@ function makeUniqueKeys(headers: string[]) {
 
 async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages } = options;
-    const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-    const sheetName = wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
-    const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer);
+    const ws = wb.worksheets[0];
+
+    const rawRows: any[][] = [];
+    ws.eachRow({ includeEmpty: true }, (row) => {
+        const rowData = Array.isArray(row.values) ? row.values.slice(1) : [];
+        const processedRow = (rowData as any[]).map(val => {
+            if (val && typeof val === 'object') {
+                if (val.result !== undefined) return val.result;
+                if (val instanceof Date) return val;
+                if (val.text !== undefined) return val.text;
+                return String(val);
+            }
+            return val === null || val === undefined ? "" : val;
+        });
+        rawRows.push(processedRow);
+    });
 
     if (rawRows.length === 0) return null;
 
@@ -586,8 +600,9 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                 val = row._extractedLac;
             } else if (h === "CELL_ID" && row._extractedCell !== undefined) {
                 val = row._extractedCell;
-            } else if (h === dateCol && row._rawDateValue !== undefined) {
-                val = row._rawDateValue;
+            } else if (h === dateCol) {
+                // 🚀 If it's the date column, use the parsed Date object
+                val = row._dateObj && row._dateObj.getTime() > 0 ? row._dateObj : row._rawDateValue;
             } else {
                 val = row[h];
                 if (!(val instanceof Date)) {
@@ -600,6 +615,17 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         });
         sRaw.addRow(cleanRow);
     });
+
+    // 🚀 Apply Date Formatting to the Formatted Data sheet's date column
+    if (dateCol) {
+        const dateHeaderIdx = formattedHeaders.indexOf(dateCol);
+        if (dateHeaderIdx !== -1) {
+            const dateColKey = uniqueKeys[dateHeaderIdx];
+            const column = sRaw.getColumn(dateColKey);
+            column.numFmt = "yyyy-mm-dd hh:mm:ss";
+            column.width = 22;
+        }
+    }
 
     const s1 = outWb.addWorksheet("Mobile Numbers");
     const s1Cols: any[] = [{ header: "Mobile Number", key: "Mobile Number", width: 15 }];
@@ -851,21 +877,21 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             }
         }
         if (discCount === 0) sIntel.addRow(["No single-use numbers detected."]);
-        sIntel.eachRow((row) => {
+        sIntel.eachRow((row: any) => {
             row.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
         });
     }
 
-    outWb.worksheets.forEach(ws => {
+    outWb.worksheets.forEach((ws: any) => {
         const headerRow = ws.getRow(1);
         headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
         headerRow.alignment = { horizontal: "center" };
-        ws.columns?.forEach((col, colIdx) => {
+        ws.columns?.forEach((col: any, colIdx: number) => {
             if (!col) return;
             const headerCell = headerRow.getCell(colIdx + 1);
             headerCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F81BD" } };
             const isEyecon = String(headerCell.value || "").toLowerCase().includes("eyecon");
-            col.eachCell?.((cell) => {
+            col.eachCell?.((cell: any) => {
                 cell.alignment = { horizontal: "center", vertical: "middle", wrapText: isEyecon };
             });
             if (isEyecon) col.width = 40;

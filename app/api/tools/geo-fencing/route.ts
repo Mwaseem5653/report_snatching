@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
@@ -156,17 +155,34 @@ export async function POST(req: NextRequest) {
     
             if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     
-            // 🚀 Deduct 10 General Tokens
-            const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, 10);
-            if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
+    // 🚀 Deduct 10 General Tokens
+    const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, 10);
+    if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
+
+    const buffer = await file.arrayBuffer();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer);
+    const ws = wb.worksheets[0];
     
-            const buffer = await file.arrayBuffer();    const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    const rawRows: any[][] = [];
+    ws.eachRow({ includeEmpty: true }, (row) => {
+        const rowData = Array.isArray(row.values) ? row.values.slice(1) : [];
+        // exceljs row.values is 1-indexed and might contain objects for dates/formulas
+        const processedRow = (rowData as any[]).map(val => {
+            if (val && typeof val === 'object') {
+                if (val.result !== undefined) return val.result;
+                if (val instanceof Date) return val;
+                if (val.text !== undefined) return val.text;
+                return String(val);
+            }
+            return val === null || val === undefined ? "" : val;
+        });
+        rawRows.push(processedRow);
+    });
 
     if (rawRows.length < 2) return NextResponse.json({ error: "Insufficient data in file" }, { status: 400 });
 
-    const headers = rawRows[0].map(String);
+    const headers = rawRows[0].map(h => String(h || ""));
     const dataRows = rawRows.slice(1);
 
     const aCol = findColumn(headers, ['DLD_NO', 'MSISDN', 'A-Party', 'A_NUMBER', 'A', 'DLD NO', 'PHONE', 'NUMBER', 'MSISDN_A', 'A Party', 'A.Party', 'SOURCE_ADDR']);
@@ -319,9 +335,9 @@ export async function POST(req: NextRequest) {
         });
 
         // Apply alignment to all data rows
-        wsOut.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        wsOut.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
             if (rowNumber > 1) {
-                row.eachCell(cell => {
+                row.eachCell((cell: any) => {
                     cell.alignment = { horizontal: "center", vertical: "middle" };
                 });
             }

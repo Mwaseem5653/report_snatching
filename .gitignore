@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+/android/
+/ios/
+capacitor.config.ts
+capacitor.config.js
 
 # debug
 npm-debug.log*

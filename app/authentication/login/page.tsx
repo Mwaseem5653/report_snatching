@@ -3,16 +3,40 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle, Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+// Capacitor Imports
+import { Capacitor } from "@capacitor/core";
+import { NativeBiometric } from "@capgo/capacitor-native-biometric";
+import { Preferences } from "@capacitor/preferences";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isNative, setIsNative] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  useEffect(() => {
+    const checkNative = async () => {
+      const isApp = Capacitor.isNativePlatform();
+      setIsNative(isApp);
+      
+      if (isApp) {
+        try {
+          const result = await NativeBiometric.isAvailable();
+          setBiometricAvailable(result.isAvailable);
+        } catch (e) {
+          console.log("Biometric check failed", e);
+        }
+      }
+    };
+    checkNative();
+  }, []);
 
   // 🧹 PROACTIVE CLEANUP: Clear stale cookies on mount
   useEffect(() => {
@@ -26,16 +50,59 @@ export default function SignInPage() {
     clearCookies();
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+  const saveCredentials = async (email: string, pass: string) => {
+    if (!isNative) return;
+    try {
+      await Preferences.set({ key: 'saved_email', value: email });
+      await NativeBiometric.setCredentials({
+        username: email,
+        password: pass,
+        server: "kpts.com.pk"
+      });
+    } catch (e) {
+      console.error("Failed to save credentials", e);
+    }
+  };
 
+  const handleBiometricLogin = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const verify = await NativeBiometric.verifyIdentity({
+        reason: "Log in to your account",
+        title: "Biometric Login",
+        subtitle: "Confirm identity to continue",
+        description: "Use fingerprint or face ID",
+      });
+
+      const { value: savedEmail } = await Preferences.get({ key: 'saved_email' });
+      if (!savedEmail) {
+        setError("No biometric credentials found. Please login manually first.");
+        setLoading(false);
+        return;
+      }
+
+      const credentials = await NativeBiometric.getCredentials({
+        server: "kpts.com.pk"
+      });
+
+      if (credentials) {
+        await loginUser(credentials.username, credentials.password);
+      }
+    } catch (err: any) {
+      console.error("Biometric Error:", err);
+      setError("Biometric authentication failed or cancelled.");
+      setLoading(false);
+    }
+  };
+
+  const loginUser = async (userEmail: string, userPass: string, shouldSave = false) => {
     try {
       const res = await fetch("/api/auth/create-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: userEmail, password: userPass }),
       });
 
       const data = await res.json();
@@ -46,7 +113,10 @@ export default function SignInPage() {
         return;
       }
 
-      // ✅ Immediate Role-Based Redirection
+      if (shouldSave) {
+        await saveCredentials(userEmail, userPass);
+      }
+
       const role = (data.role || "").toLowerCase();
       const ROLE_PATHS: Record<string, string> = {
         super_admin: "/dashboard/super-admin",
@@ -62,9 +132,16 @@ export default function SignInPage() {
       window.location.href = destination;
     } catch (err: any) {
       console.error("Login Error:", err);
-      setError("Unable to connect to the authentication server. Please try again later.");
+      setError("Unable to connect to the authentication server.");
       setLoading(false);
     }
+  };
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    loginUser(email, password, true);
   };
 
   return (
@@ -176,6 +253,19 @@ export default function SignInPage() {
                >
                  {loading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Authenticating...</> : "Sign In to Dashboard"}
                </Button>
+
+               {biometricAvailable && (
+                 <Button 
+                   type="button"
+                   variant="outline"
+                   onClick={handleBiometricLogin}
+                   disabled={loading}
+                   className="w-full h-14 rounded-2xl border-2 border-blue-100 bg-white hover:bg-blue-50 text-blue-900 font-black uppercase tracking-[0.15em] text-sm shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                 >
+                   <Fingerprint size={22} className="text-blue-600" />
+                   Login with Biometrics
+                 </Button>
+               )}
             </form>
 
             <div className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest pt-4">

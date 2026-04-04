@@ -55,24 +55,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Access denied: Official profile not found." }, { status: 403 });
     }
 
-    // 🚀 STRICT SESSION BLOCKING
-    // One ID can only be used by one person. 
-    // We check if the session was active in the last 5 minutes.
-    const nowTs = Date.now();
-    const lastActive = (userData.lastActive && typeof userData.lastActive.toMillis === 'function') 
-        ? userData.lastActive.toMillis() 
-        : 0;
-    
-    // 1 minute threshold for "active" status
-    const isSessionActive = (nowTs - lastActive) < (1 * 60 * 1000); 
-
-    if (userData.currentSessionId && isSessionActive) {
-        return NextResponse.json({ 
-            error: "This ID is currently active on another device. One ID can be used by only one person at a time.", 
-            code: "ALREADY_LOGGED_IN" 
-        }, { status: 403 });
-    }
-
     const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
     const payload = {

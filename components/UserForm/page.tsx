@@ -46,6 +46,7 @@ export default function AddUserForm({
       ai_extractor: false,
       info_tools: false,
       cdr_generator: false,
+      rapid_api: false,
       token_pool: false,
       advanced_reports: false,
       usage_analytics: false,
@@ -166,6 +167,7 @@ export default function AddUserForm({
     { key: 'app_to_excel', label: 'Application To Excel' },
     { key: 'info_tools', label: 'Info & Lookup Tools' },
     { key: 'cdr_generator', label: 'CDR Generator' },
+    { key: 'rapid_api', label: 'RapidAPI Hub' },
     { key: 'eyecon_access', label: 'Eyecon Access' },
   ];
 

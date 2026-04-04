@@ -5,6 +5,10 @@ import { db } from "@/firebaseconfig";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { CheckCircle, XCircle, Search, Loader2 } from "lucide-react";
 
+// Capacitor Notifications
+import { Capacitor } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
+
 /* -------------------- Types -------------------- */
 type User = {
   name: string;
@@ -28,6 +32,33 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
   const [result, setResult] = useState<IMEIRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
+
+  // 🔔 Trigger Native Notification
+  const triggerNotification = async (imeiVal: string, crime: string, ps: string) => {
+    if (!Capacitor.isNativePlatform()) return;
+    
+    try {
+      const permission = await LocalNotifications.checkPermissions();
+      if (permission.display !== 'granted') {
+        await LocalNotifications.requestPermissions();
+      }
+
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            title: "🚨 STOLEN DEVICE MATCHED!",
+            body: `IMEI ${imeiVal} matched with ${crime} report at PS ${ps}.`,
+            id: Date.now(),
+            schedule: { at: new Date(Date.now() + 1000) },
+            actionTypeId: "",
+            extra: null
+          }
+        ]
+      });
+    } catch (e) {
+      console.error("Notification Error:", e);
+    }
+  };
 
   // 🔍 Search via API (Server-Side)
   const searchIMEI = async (imeiInput: string): Promise<IMEIRecord | null> => {
@@ -63,6 +94,11 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
     const res = await searchIMEI(cleanIMEI);
     setResult(res);
     setShowPopup(true);
+
+    // 🔔 If match found, trigger notification
+    if (res && res.status === "founded") {
+      await triggerNotification(cleanIMEI, res.crimeHead, res.ps);
+    }
 
     setLoading(false);
   };

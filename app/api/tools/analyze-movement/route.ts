@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
 import { logToolUsage } from "@/lib/usageLogger";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
+
+// --- Helper: Process ExcelJS Row to Array ---
+function processRow(row: ExcelJS.Row): any[] {
+    const rowData = Array.isArray(row.values) ? row.values.slice(1) : [];
+    return (rowData as any[]).map(val => {
+        if (val && typeof val === 'object') {
+            if (val.result !== undefined) return val.result;
+            if (val instanceof Date) return val;
+            if (val.text !== undefined) return val.text;
+            return String(val);
+        }
+        return val === null || val === undefined ? "" : val;
+    });
+}
 
 function parseExcelDate(val: any, formatHint: "DMY" | "MDY" = "DMY"): Date {
     if (val instanceof Date) return val;
@@ -110,9 +124,14 @@ export async function POST(req: NextRequest) {
         if (!fileRes.ok) throw new Error("Failed to download file from storage.");
         const buffer = await fileRes.arrayBuffer();
         
-        const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buffer);
+        const ws = wb.worksheets[0];
+
+        const rawRows: any[][] = [];
+        ws.eachRow({ includeEmpty: true }, (row) => {
+            rawRows.push(processRow(row));
+        });
 
         if (rawRows.length === 0) return NextResponse.json({ error: "Empty file" }, { status: 400 });
 

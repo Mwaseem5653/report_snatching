@@ -170,64 +170,64 @@ export default function MovementVisualizerClient() {
   };
 
   return (
-    <div className="h-[calc(100vh-120px)] flex flex-col space-y-4">
+    <div className="h-full md:h-[calc(100vh-120px)] flex flex-col space-y-4">
       
       {/* 🔹 HEADER */}
-      <div className="bg-white px-6 py-2.5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="bg-white px-4 md:px-6 py-4 md:py-2.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-3 w-full md:w-auto">
             <div className="p-2 bg-slate-900 text-white rounded-xl shadow-lg"><Monitor size={18} /></div>
             <div>
-                <h1 className="text-md font-black text-slate-800 tracking-tight uppercase leading-none">Movement visualizer</h1>
-                <p className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mt-1">Tactical Analysis Suite</p>
+                <h1 className="text-sm md:text-md font-black text-slate-800 tracking-tight uppercase leading-none">Movement visualizer</h1>
+                <p className="text-[8px] md:text-[9px] font-bold text-blue-600 uppercase tracking-widest mt-1">Tactical Analysis Suite</p>
             </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
             {allData.length > 0 && (
-                <div className="flex items-center gap-3 bg-slate-50 p-1 pl-4 rounded-xl border border-slate-200">
-                    <div className="flex items-center gap-2 border-r pr-3 border-slate-200">
+                <div className="flex flex-wrap items-center justify-center gap-3 bg-slate-50 p-2 md:p-1 md:pl-4 rounded-xl border border-slate-200 w-full md:w-auto">
+                    <div className="flex items-center gap-2 md:border-r md:pr-3 border-slate-200">
                         <Calendar size={14} className="text-blue-600" />
                         <Select value={selectedDate} onValueChange={(v) => { setSelectedDate(v); setIsPlaying(false); }}>
-                            <SelectTrigger className="w-36 h-7 border-none bg-transparent font-black text-xs shadow-none focus:ring-0"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-32 md:w-36 h-7 border-none bg-transparent font-black text-[10px] md:text-xs shadow-none focus:ring-0"><SelectValue /></SelectTrigger>
                             <SelectContent className="bg-white border-slate-200 z-[10001]">
                                 {availableDates.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                             </SelectContent>
                         </Select>
                     </div>
 
-                    <div className="flex items-center gap-1 px-3 border-r border-slate-200">
-                        <span className="text-[9px] font-black text-slate-400 uppercase">From</span>
-                        <Input value={fromTime} onChange={(e) => setFromTime(e.target.value)} className="w-12 h-6 text-[10px] font-bold p-0 bg-transparent border-none shadow-none text-center tabular-nums" />
+                    <div className="flex items-center gap-1 px-2 md:px-3 md:border-r border-slate-200">
+                        <span className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase">From</span>
+                        <Input value={fromTime} onChange={(e) => setFromTime(e.target.value)} className="w-10 md:w-12 h-6 text-[10px] font-bold p-0 bg-transparent border-none shadow-none text-center tabular-nums" />
                         <Select value={fromPeriod} onValueChange={setFromPeriod}>
-                            <SelectTrigger className="w-12 h-6 text-[9px] font-black border-none bg-blue-100 text-blue-700 uppercase p-1"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-10 md:w-12 h-6 text-[8px] md:text-[9px] font-black border-none bg-blue-100 text-blue-700 uppercase p-1"><SelectValue /></SelectTrigger>
                             <SelectContent><SelectItem value="AM">AM</SelectItem><SelectItem value="PM">PM</SelectItem></SelectContent>
                         </Select>
                     </div>
-                    <div className="flex items-center gap-1 px-3">
-                        <span className="text-[9px] font-black text-slate-400 uppercase">To</span>
-                        <Input value={toTime} onChange={(e) => setToTime(e.target.value)} className="w-12 h-6 text-[10px] font-bold p-0 bg-transparent border-none shadow-none text-center tabular-nums" />
+                    <div className="flex items-center gap-1 px-2 md:px-3">
+                        <span className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase">To</span>
+                        <Input value={toTime} onChange={(e) => setToTime(e.target.value)} className="w-10 md:w-12 h-6 text-[10px] font-bold p-0 bg-transparent border-none shadow-none text-center tabular-nums" />
                         <Select value={toPeriod} onValueChange={setToPeriod}>
-                            <SelectTrigger className="w-12 h-6 text-[9px] font-black border-none bg-indigo-100 text-indigo-700 uppercase p-1"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-10 md:w-12 h-6 text-[8px] md:text-[9px] font-black border-none bg-indigo-100 text-indigo-700 uppercase p-1"><SelectValue /></SelectTrigger>
                             <SelectContent><SelectItem value="AM">AM</SelectItem><SelectItem value="PM">PM</SelectItem></SelectContent>
                         </Select>
                     </div>
                 </div>
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full md:w-auto">
                 {!allData.length ? (
-                    <div className="flex items-center gap-2">
-                        <Input type="file" accept=".xlsx, .csv" onChange={handleFileChange} className="h-10 text-xs w-48 rounded-xl bg-slate-50" />
-                        <Button onClick={uploadAndAnalyze} disabled={!file || loading} size="sm" className="bg-slate-900 h-10 font-black px-6 rounded-xl text-xs">
+                    <div className="flex flex-col md:flex-row items-center gap-2 w-full">
+                        <Input type="file" accept=".xlsx, .csv" onChange={handleFileChange} className="h-10 text-xs w-full md:w-48 rounded-xl bg-slate-50" />
+                        <Button onClick={uploadAndAnalyze} disabled={!file || loading} size="sm" className="w-full md:w-auto bg-slate-900 h-10 font-black px-6 rounded-xl text-xs">
                             {loading ? <Loader2 className="animate-spin" /> : "START ANALYSIS"}
                         </Button>
                     </div>
                 ) : (
-                    <div className="flex items-center gap-2">
-                        <Button onClick={isRecording ? () => mediaRecorderRef.current?.stop() : startRecording} variant={isRecording ? "destructive" : "outline"} size="sm" className="h-9 rounded-xl font-bold gap-2">
+                    <div className="flex items-center justify-center gap-2 w-full md:w-auto">
+                        <Button onClick={isRecording ? () => mediaRecorderRef.current?.stop() : startRecording} variant={isRecording ? "destructive" : "outline"} size="sm" className="flex-1 md:flex-none h-9 rounded-xl font-bold gap-2 text-xs">
                             {isRecording ? <VideoOff size={16} /> : <Video size={16} />} {isRecording ? "Stop" : "Record"}
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => { setAllData([]); setSelectedDate(""); setCurrentMinute(0); setIsPlaying(false); }} className="h-9 w-9 rounded-xl font-bold text-red-600 border-red-100 p-0 shadow-sm">
+                        <Button variant="outline" size="sm" onClick={() => { setAllData([]); setSelectedDate(""); setCurrentMinute(0); setIsPlaying(false); }} className="h-9 w-9 rounded-xl font-bold text-red-600 border-red-100 p-0 shadow-sm shrink-0">
                             <RotateCcw size={16} />
                         </Button>
                     </div>
@@ -236,8 +236,9 @@ export default function MovementVisualizerClient() {
         </div>
       </div>
 
-      <div className="flex-1 flex gap-4 overflow-hidden relative">
-        <div className={cn("transition-all duration-300 flex flex-col gap-4 shrink-0", showSidebar ? "w-80" : "w-0 opacity-0 overflow-hidden")}>
+      <div className="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden relative min-h-[400px]">
+        <div className={cn("transition-all duration-300 flex flex-col gap-4 shrink-0 z-20", 
+            showSidebar ? "w-full md:w-80 h-1/2 md:h-auto absolute md:relative bottom-0 left-0 bg-white/80 backdrop-blur-md md:bg-transparent" : "w-0 opacity-0 overflow-hidden")}>
             <Card className="flex-1 rounded-2xl border-slate-200 shadow-sm overflow-hidden flex flex-col bg-white">
                 <CardHeader className="bg-slate-50 border-b p-4 flex flex-row items-center justify-between">
                     <CardTitle className="text-[10px] font-black uppercase text-slate-500">Timeline Logs</CardTitle>
