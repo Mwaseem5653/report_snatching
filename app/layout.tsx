@@ -64,9 +64,63 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       > 
+        <div id="global-loader" className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white transition-opacity duration-700">
+          <div className="flex gap-1">
+            {["L", "O", "A", "D", "I", "N", "G"].map((char, index) => (
+              <span 
+                key={index} 
+                className="text-4xl font-black text-[#0a2c4e] animate-[wave_1.5s_infinite]"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                {char}
+              </span>
+            ))}
+          </div>
+          <div className="mt-4 w-48 h-1 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-full bg-[#0a2c4e] animate-[progress_2s_infinite]"></div>
+          </div>
+          <style dangerouslySetInnerHTML={{ __html: `
+            @keyframes wave {
+              0%, 40%, 100% { transform: translateY(0); }
+              20% { transform: translateY(-20px); }
+            }
+            @keyframes progress {
+              0% { width: 0%; transform: translateX(-100%); }
+              50% { width: 100%; transform: translateX(0%); }
+              100% { width: 0%; transform: translateX(100%); }
+            }
+          `}} />
+        </div>
+        <Script id="hide-loader" strategy="afterInteractive">
+          {`
+            function hideLoader() {
+              var loader = document.getElementById('global-loader');
+              if (loader) {
+                loader.style.opacity = '0';
+                setTimeout(function() {
+                  loader.style.display = 'none';
+                }, 700);
+              }
+            }
+
+            // Multiple triggers to ensure it hides
+            if (document.readyState === 'complete') {
+              hideLoader();
+            } else {
+              window.addEventListener('load', hideLoader);
+              // Fallback: hide after 8 seconds anyway to prevent stuck screen
+              setTimeout(hideLoader, 8000);
+            }
+          `}
+        </Script>
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5961112055480826"

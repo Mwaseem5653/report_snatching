@@ -21,6 +21,10 @@ export default function SignInPage() {
   const [isNative, setIsNative] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
 
+  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+  const [pendingDestination, setPendingDestination] = useState("");
+  const [pendingCredentials, setPendingCredentials] = useState({ email: "", password: "" });
+
   useEffect(() => {
     const checkNative = async () => {
       const isApp = Capacitor.isNativePlatform();
@@ -50,18 +54,24 @@ export default function SignInPage() {
     clearCookies();
   }, []);
 
-  const saveCredentials = async (email: string, pass: string) => {
+  const saveCredentials = async () => {
     if (!isNative) return;
     try {
-      await Preferences.set({ key: 'saved_email', value: email });
+      await Preferences.set({ key: 'saved_email', value: pendingCredentials.email });
       await NativeBiometric.setCredentials({
-        username: email,
-        password: pass,
+        username: pendingCredentials.email,
+        password: pendingCredentials.password,
         server: "kpts.com.pk"
       });
+      window.location.href = pendingDestination;
     } catch (e) {
       console.error("Failed to save credentials", e);
+      window.location.href = pendingDestination;
     }
+  };
+
+  const skipBiometric = () => {
+    window.location.href = pendingDestination;
   };
 
   const handleBiometricLogin = async () => {
@@ -88,7 +98,7 @@ export default function SignInPage() {
       });
 
       if (credentials) {
-        await loginUser(credentials.username, credentials.password);
+        await loginUser(credentials.username, credentials.password, false);
       }
     } catch (err: any) {
       console.error("Biometric Error:", err);
@@ -97,7 +107,7 @@ export default function SignInPage() {
     }
   };
 
-  const loginUser = async (userEmail: string, userPass: string, shouldSave = false) => {
+  const loginUser = async (userEmail: string, userPass: string, allowBiometricPrompt = true) => {
     try {
       const res = await fetch("/api/auth/create-session", {
         method: "POST",
@@ -113,10 +123,6 @@ export default function SignInPage() {
         return;
       }
 
-      if (shouldSave) {
-        await saveCredentials(userEmail, userPass);
-      }
-
       const role = (data.role || "").toLowerCase();
       const ROLE_PATHS: Record<string, string> = {
         super_admin: "/dashboard/super-admin",
@@ -129,6 +135,19 @@ export default function SignInPage() {
       };
 
       const destination = ROLE_PATHS[role] || "/dashboard/normal-user";
+
+      // 🔹 Check if we should prompt for biometrics
+      if (isNative && biometricAvailable && allowBiometricPrompt) {
+          const { value: alreadyConfigured } = await Preferences.get({ key: 'saved_email' });
+          if (!alreadyConfigured || alreadyConfigured !== userEmail) {
+              setPendingDestination(destination);
+              setPendingCredentials({ email: userEmail, password: userPass });
+              setShowBiometricPrompt(true);
+              setLoading(false);
+              return;
+          }
+      }
+
       window.location.href = destination;
     } catch (err: any) {
       console.error("Login Error:", err);
@@ -143,6 +162,39 @@ export default function SignInPage() {
     setError("");
     loginUser(email, password, true);
   };
+
+  if (showBiometricPrompt) {
+      return (
+          <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+              <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl border border-slate-100 text-center space-y-6 animate-in zoom-in-95 duration-300">
+                  <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Fingerprint size={40} className="text-blue-600" />
+                  </div>
+                  <div className="space-y-2">
+                      <h2 className="text-2xl font-black text-slate-900 tracking-tight">Enable Biometrics?</h2>
+                      <p className="text-slate-500 font-medium text-sm leading-relaxed">
+                          Would you like to use fingerprint or Face ID for faster login next time?
+                      </p>
+                  </div>
+                  <div className="grid gap-3 pt-4">
+                      <Button 
+                          onClick={saveCredentials}
+                          className="h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs shadow-lg shadow-blue-200"
+                      >
+                          Enable Biometric Login
+                      </Button>
+                      <Button 
+                          variant="ghost"
+                          onClick={skipBiometric}
+                          className="h-14 rounded-2xl text-slate-500 font-bold uppercase tracking-widest text-xs"
+                      >
+                          Maybe Later
+                      </Button>
+                  </div>
+              </div>
+          </div>
+      );
+  }
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
