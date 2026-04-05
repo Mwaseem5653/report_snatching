@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -17,10 +17,28 @@ import {
   ExternalLink
 } from "lucide-react";
 
+// Capacitor Imports
+import { Capacitor } from "@capacitor/core";
+import { useRouter } from "next/navigation";
+
 export default function LandingPage() {
+  const router = useRouter();
+  const [isNative, setIsNative] = useState(false);
+  const adsInitialized = useRef(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const heroImages = ["/disimage1.jpg", "/disimage2.jpg", "/disimage3.jpg"];
   
+  // 🔹 Modern Routing: Redirect Native users immediately
+  useEffect(() => {
+    const isApp = Capacitor.getPlatform() !== 'web';
+    setIsNative(isApp);
+    
+    if (isApp) {
+        // Skip landing page on Android/iOS
+        router.push("/authentication/login");
+    }
+  }, [router]);
+
   // 🔹 Cycle through different modern animations
   const transitionTypes = ["block", "slide", "scale"];
   const currentTransition = transitionTypes[currentImageIndex % transitionTypes.length];
@@ -32,13 +50,19 @@ export default function LandingPage() {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentImageIndex((prev) => (prev + 1) % heroImages.length);
-    }, 5000); // 5-second interval as requested
+    }, 5000);
 
-    // 🚀 Initialize Google AdSense
-    try {
-        (window.adsbygoogle = window.adsbygoogle || []).push({});
-    } catch (err) {
-        console.error("AdSense push error:", err);
+    // 🚀 Initialize Google AdSense safely
+    if (!adsInitialized.current) {
+        try {
+            const adsbygoogle = (window as any).adsbygoogle;
+            if (adsbygoogle && document.querySelectorAll('.adsbygoogle:not([data-adsbygoogle-status])').length > 0) {
+                adsbygoogle.push({});
+                adsInitialized.current = true;
+            }
+        } catch (err) {
+            console.error("AdSense push error:", err);
+        }
     }
 
     return () => clearInterval(timer);
@@ -68,6 +92,17 @@ export default function LandingPage() {
     },
   ];
 
+  // While redirecting native users, show a branded loader
+  if (isNative) {
+      return (
+          <div className="min-h-screen bg-[#0a2c4e] flex items-center justify-center">
+              <div className="relative w-24 h-24 animate-pulse">
+                  <Image src="/logo.png" alt="Loading..." fill className="object-contain" />
+              </div>
+          </div>
+      );
+  }
+
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col font-sans">
       
@@ -91,7 +126,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-6 h-24 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="relative h-16 w-16">
-               <Image src="/logo.png" alt="Sindh Police Logo - Official Mobile Snatching, Theft & Lost Reporting Portal" fill className="object-contain" priority />
+               <Image src="/logo.png" alt="Sindh Police Logo" fill className="object-contain" priority />
             </div>
             <div className="leading-none border-l-2 border-slate-100 pl-4">
               <h1 className="text-2xl font-black text-[#0a2c4e] tracking-tight">SINDH POLICE</h1>
@@ -165,7 +200,7 @@ export default function LandingPage() {
             >
                <div className="relative w-full max-w-lg mx-auto lg:mr-0 aspect-[4/3] bg-slate-50 shadow-2xl border-t-8 border-[#0a2c4e] rounded-b-xl overflow-hidden flex items-center justify-center">
                   
-                  {/* 🔹 Permanent Background Logo (Visible during transitions) */}
+                  {/* 🔹 Permanent Background Logo */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
                     <div className="relative w-48 h-48">
                       <Image src="/logo.png" alt="Sindh Police Background" fill className="object-contain grayscale" />
@@ -186,18 +221,17 @@ export default function LandingPage() {
                         currentTransition === "scale" ? { scale: 0.8, opacity: 0 } :
                         { opacity: 0 }
                       }
-                      transition={{ duration: 2.0, ease: [0.22, 1, 0.36, 1] }} // Slower, premium transition
+                      transition={{ duration: 2.0, ease: [0.22, 1, 0.36, 1] }}
                       className="absolute inset-0 z-10"
                     >
                       <Image 
                         src={heroImages[currentImageIndex]} 
-                        alt={`Sindh Police Operations - Advanced CDR Analyzer and Mobile Snatching Reporting Tool ${currentImageIndex + 1}`} 
+                        alt="Sindh Police Operations" 
                         fill 
                         className="object-cover"
                         priority
                       />
                       
-                      {/* 🔹 Conditional Block Reveal Overlay */}
                       {currentTransition === "block" && (
                         <div className="absolute inset-0 grid grid-cols-8 grid-rows-8 z-20 pointer-events-none">
                           {blocks.map((_, i) => (
@@ -207,8 +241,8 @@ export default function LandingPage() {
                               animate={{ opacity: 0 }}
                               exit={{ opacity: 1 }}
                               transition={{
-                                duration: 1.5, // Slower block fade
-                                delay: Math.random() * 1.2, // Increased random delay
+                                duration: 1.5,
+                                delay: Math.random() * 1.2,
                                 ease: "easeInOut"
                               }}
                               className="bg-slate-50"
@@ -329,38 +363,6 @@ export default function LandingPage() {
                  <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-300">Sindh Police FM</p>
               </motion.div>
            </div>
-        </div>
-      </section>
-
-      {/* 🔹 SEO Content Section */}
-      <section className="py-16 bg-slate-50 border-t border-slate-100">
-        <div className="container mx-auto px-6 max-w-5xl">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <h2 className="text-3xl font-black text-[#0a2c4e] uppercase tracking-tight leading-none">
-                Advanced Digital Investigation & Reporting
-              </h2>
-              <div className="h-1 w-20 bg-red-600" />
-              <p className="text-slate-600 text-sm leading-relaxed font-medium">
-                Sindh Police offers a comprehensive digital platform for citizens and officers. Whether you need to file a <span className="font-bold text-slate-800">mobile snatching report</span>, log a <span className="font-bold text-slate-800">theft complaint</span>, or submit a <span className="font-bold text-slate-800">lost mobile report</span>, our portal ensures your data reaches the right department instantly.
-              </p>
-              <p className="text-slate-600 text-sm leading-relaxed font-medium">
-                For law enforcement and authorized personnel, we provide <span className="font-bold text-slate-800">advance tools</span> including a sophisticated <span className="font-bold text-slate-800">CDR Analyzer</span>, application extractor, and real-time database search to accelerate recovery and investigation processes.
-              </p>
-            </div>
-            <div className="bg-[#0a2c4e] p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform duration-700"><ShieldCheck size={120} /></div>
-              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <Siren size={20} className="text-red-500" /> Key Features
-              </h3>
-              <ul className="space-y-3 text-xs font-bold uppercase tracking-widest text-blue-100">
-                <li className="flex items-center gap-2"><ArrowRight size={14} className="text-red-500" /> Online Stolen Mobile Database</li>
-                <li className="flex items-center gap-2"><ArrowRight size={14} className="text-red-500" /> CDR Analysis Dashboard</li>
-                <li className="flex items-center gap-2"><ArrowRight size={14} className="text-red-500" /> Real-time IMEI Verification</li>
-                <li className="flex items-center gap-2"><ArrowRight size={14} className="text-red-500" /> Automated Application Extraction</li>
-              </ul>
-            </div>
-          </div>
         </div>
       </section>
 

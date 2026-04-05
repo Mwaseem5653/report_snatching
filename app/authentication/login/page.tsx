@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle, Fingerprint } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Capacitor Imports
 import { Capacitor } from "@capacitor/core";
@@ -19,107 +19,40 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [isNative, setIsNative] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [useBiometric, setUseBiometric] = useState(false);
-
-  // Use Capacitor Plugins with type safety bypass for better reliability with remote URLs
-  const NativeBiometric = (Capacitor as any).Plugins?.NativeBiometric;
+  const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
-    const checkNative = async () => {
+    const initApp = async () => {
       const isApp = Capacitor.getPlatform() !== 'web';
       setIsNative(isApp);
       
       if (isApp) {
-        console.log("Capacitor App Detected. Initializing Biometrics...");
+        // Check for saved credentials for Auto-Login
+        const { value: savedEmail } = await Preferences.get({ key: 'rem_email' });
+        const { value: savedPass } = await Preferences.get({ key: 'rem_pass' });
         
-        const attemptCheck = async (count: number) => {
-            try {
-                if (!NativeBiometric) {
-                    console.warn("NativeBiometric plugin not found in Capacitor.Plugins");
-                    return false;
-                }
-
-                const result = await NativeBiometric.isAvailable();
-                if (result.isAvailable) {
-                    setBiometricAvailable(true);
-                    console.log("Biometric is READY:", result.biometryType);
-                    
-                    const { value: savedEmail } = await Preferences.get({ key: 'saved_email' });
-                    if (savedEmail) {
-                        setUseBiometric(true);
-                        setTimeout(() => handleBiometricLogin(), 1000);
-                    }
-                    return true;
-                }
-            } catch (e) {
-                console.warn(`Biometric check attempt ${count} failed:`, e);
-                // Allow toggle if we suspect hardware is there despite check failure
-                setBiometricAvailable(true); 
-            }
-            return false;
-        };
-
-        const ok = await attemptCheck(1);
-        if (!ok) {
-            setTimeout(() => attemptCheck(2), 2000);
+        if (savedEmail && savedPass) {
+            setEmail(savedEmail);
+            setPassword(savedPass);
+            setRememberMe(true);
+            // Trigger auto-login
+            loginUser(savedEmail, savedPass);
         }
       }
     };
-    checkNative();
-  }, [NativeBiometric]);
-
-  useEffect(() => {
-    const clearSession = async () => {
-        try {
-            await fetch("/api/auth/logout", { method: "POST" });
-        } catch (e) {
-            console.error("Session cleanup failed:", e);
-        }
-    };
-    clearSession();
+    initApp();
   }, []);
 
-  const handleBiometricLogin = async () => {
-    try {
-      if (!NativeBiometric) {
-          setError("Biometric plugin not found. Please try again or login manually.");
-          return;
-      }
-
-      setLoading(true);
-      setError("");
-
-      const verify = await NativeBiometric.verifyIdentity({
-        reason: "Log in to your account",
-        title: "Biometric Login",
-        subtitle: "Confirm identity to continue",
-        description: "Use fingerprint or face ID",
-      });
-
-      const { value: savedEmail } = await Preferences.get({ key: 'saved_email' });
-      if (!savedEmail) {
-        setError("No biometric credentials found. Please login manually first.");
-        setLoading(false);
-        return;
-      }
-
-      const credentials = await NativeBiometric.getCredentials({
-        server: "kpts.com.pk"
-      });
-
-      if (credentials) {
-        await loginUser(credentials.username, credentials.password);
-      }
-    } catch (err: any) {
-      console.error("Biometric Error:", err);
-      setError(`Biometric Login Error: ${err.message || "Failed to verify identity"}`);
-      setLoading(false);
-    }
-  };
+  // Proactive logout cleanup on mount to ensure fresh state
+  useEffect(() => {
+    fetch("/api/auth/logout", { method: "POST" }).catch(console.error);
+  }, []);
 
   const loginUser = async (userEmail: string, userPass: string) => {
     try {
+      setLoading(true);
+      setError("");
+
       const res = await fetch("/api/auth/create-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -129,28 +62,23 @@ export default function SignInPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Authentication failed. Please check your credentials.");
+        setError(data.error || "Authentication failed. Please check credentials.");
         setLoading(false);
+        // Clear saved data on failed login to avoid infinite loops
+        if (isNative) {
+            await Preferences.remove({ key: 'rem_email' });
+            await Preferences.remove({ key: 'rem_pass' });
+        }
         return;
       }
 
-      // 🚀 Biometric Save Logic: ONLY if toggle is ON
-      if (isNative && useBiometric && NativeBiometric) {
-          try {
-              await Preferences.set({ key: 'saved_email', value: userEmail });
-              
-              await NativeBiometric.setCredentials({
-                  username: userEmail,
-                  password: userPass,
-                  server: "kpts.com.pk"
-              });
-              console.log("Biometric credentials saved successfully.");
-          } catch (e: any) {
-              console.error("Biometric save failed:", e);
-              setError(`Biometric Setup Failed: ${e.message || "Could not save credentials. Make sure screen lock is enabled."}`);
-              setLoading(false);
-              return; 
-          }
+      // Handle "Remember Me"
+      if (isNative && rememberMe) {
+          await Preferences.set({ key: 'rem_email', value: userEmail });
+          await Preferences.set({ key: 'rem_pass', value: userPass });
+      } else if (isNative && !rememberMe) {
+          await Preferences.remove({ key: 'rem_email' });
+          await Preferences.remove({ key: 'rem_pass' });
       }
 
       const role = (data.role || "").toLowerCase();
@@ -164,10 +92,8 @@ export default function SignInPage() {
         user: "/dashboard/normal-user",
       };
 
-      const destination = ROLE_PATHS[role] || "/dashboard/normal-user";
-      window.location.href = destination;
+      window.location.href = ROLE_PATHS[role] || "/dashboard/normal-user";
     } catch (err: any) {
-      console.error("Login Error:", err);
       setError("Unable to connect to the authentication server.");
       setLoading(false);
     }
@@ -175,21 +101,19 @@ export default function SignInPage() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError("");
     loginUser(email, password);
   };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
       
-      {/* 🔹 Left Panel: Branding (Desktop) */}
+      {/* 🔹 Left Panel: Branding */}
       <div className="hidden md:flex flex-col justify-between w-1/2 bg-[#0a2c4e] text-white p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full blur-[150px] opacity-20 -translate-y-1/2 translate-x-1/3"></div>
         
         <div className="relative z-10">
-          <Link href="/" className="inline-flex items-center gap-2 text-blue-300 hover:text-white transition-colors text-sm font-bold mb-8 uppercase tracking-widest text-wrap">
+          <Link href="/" className="inline-flex items-center gap-2 text-blue-300 hover:text-white transition-colors text-sm font-bold mb-8 uppercase tracking-widest">
             <ArrowLeft size={16} /> Back to Portal
           </Link>
           <div className="flex items-center gap-4 mb-6">
@@ -201,21 +125,6 @@ export default function SignInPage() {
                 <p className="text-[10px] font-bold text-blue-400 uppercase tracking-[0.3em]">Official Access</p>
             </div>
           </div>
-        </div>
-
-        <div className="relative z-10 space-y-6 max-w-lg">
-           <h2 className="text-4xl lg:text-5xl font-black leading-[1.1] tracking-tighter">
-             Digital Justice <br />
-             <span className="text-blue-400">Begins Here.</span>
-           </h2>
-           <p className="text-slate-300 text-base lg:text-lg leading-relaxed font-medium">
-             This secure portal is reserved for authorized personnel of Sindh Police. Please authenticate using your official credentials to access the management systems.
-           </p>
-           <div className="flex gap-4 pt-4">
-             <div className="flex items-center gap-2 px-5 py-2.5 bg-white/10 rounded-xl border border-white/10 text-xs font-bold uppercase tracking-widest text-blue-100">
-                <ShieldCheck size={16} className="text-blue-400" /> Authorized Only
-             </div>
-           </div>
         </div>
 
         <div className="relative z-10 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
@@ -231,21 +140,20 @@ export default function SignInPage() {
             </Link>
          </div>
 
-         <div className="w-full max-w-full sm:max-w-md px-4 space-y-6 md:space-y-10 py-12">
+         <div className="w-full max-w-full sm:max-w-md px-4 space-y-6 py-12">
             <div className="text-center md:text-left space-y-2">
                <div className="flex justify-center md:hidden mb-6">
-                  {/* Smaller Logo with better centering */}
                   <div className="relative w-16 h-16 bg-white rounded-full p-2 shadow-2xl border border-slate-100 ring-4 ring-blue-50/50">
                     <Image src="/logo.png" alt="Sindh Police" fill className="object-contain p-1.5" priority />
                   </div>
                </div>
                <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Officer Login</h2>
-               <p className="text-slate-500 font-medium text-sm md:text-base">Enter official credentials to proceed.</p>
+               <p className="text-slate-500 font-medium text-sm md:text-base leading-snug">Authorized Personnel Access Only</p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-6">
+            <form onSubmit={handleLogin} className="space-y-5">
                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</Label>
+                  <Label htmlFor="email" className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</Label>
                   <div className="relative group">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
                     <Input 
@@ -261,7 +169,7 @@ export default function SignInPage() {
                </div>
 
                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Password</Label>
+                  <Label htmlFor="password" className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</Label>
                   <div className="relative group">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
                     <Input 
@@ -276,23 +184,19 @@ export default function SignInPage() {
                   </div>
                </div>
 
-               {isNative && (
-                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
-                        <Fingerprint size={20} className="text-blue-600" />
-                      </div>
-                      <div className="space-y-0.5 text-left">
-                        <p className="text-[11px] font-bold text-slate-900 uppercase tracking-tight">Biometric Login</p>
-                        <p className="text-[9px] text-slate-500 font-medium">Toggle to setup Fingerprint</p>
-                      </div>
-                    </div>
-                    <Switch 
-                      checked={useBiometric}
-                      onCheckedChange={setUseBiometric}
-                    />
-                 </div>
-               )}
+               <div className="flex items-center space-x-2 py-1 ml-1">
+                  <Checkbox 
+                    id="remember" 
+                    checked={rememberMe}
+                    onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                  />
+                  <label
+                    htmlFor="remember"
+                    className="text-xs font-bold text-slate-600 uppercase tracking-tight cursor-pointer select-none"
+                  >
+                    Remember Me
+                  </label>
+               </div>
 
                {error && (
                  <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex items-start gap-3 text-red-700 text-xs font-medium animate-in fade-in slide-in-from-top-2">
@@ -306,36 +210,8 @@ export default function SignInPage() {
                  disabled={loading}
                  className="w-full h-12 rounded-xl bg-[#0a2c4e] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs shadow-md active:scale-[0.98] transition-all"
                >
-                 {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> <span>Wait...</span></> : "Sign In"}
+                 {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> <span>Validating...</span></> : "Sign In"}
                </Button>
-
-               {isNative && (
-                 <div className="space-y-3">
-                    <Button 
-                    type="button"
-                    variant="outline"
-                    onClick={handleBiometricLogin}
-                    disabled={loading}
-                    className="w-full h-11 rounded-xl border-2 border-blue-100 bg-white hover:bg-blue-50 text-blue-900 font-bold uppercase tracking-wider text-[10px] flex items-center justify-center gap-3 transition-all"
-                    >
-                    <Fingerprint size={18} className="text-blue-600" />
-                    Use Biometrics to Login
-                    </Button>
-                    <button 
-                      type="button" 
-                      onClick={async () => {
-                          if (NativeBiometric) {
-                            await NativeBiometric.deleteCredentials({ server: "kpts.com.pk" });
-                          }
-                          await Preferences.remove({ key: 'saved_email' });
-                          window.location.reload();
-                      }}
-                      className="text-[9px] text-slate-400 font-bold uppercase tracking-widest hover:text-red-500 transition-colors mx-auto block"
-                    >
-                        Reset / Switch Account
-                    </button>
-                 </div>
-               )}
             </form>
 
             <div className="text-center text-[9px] font-bold text-slate-400 uppercase tracking-widest pt-4">
