@@ -31,22 +31,34 @@ export default function SignInPage() {
       setIsNative(isApp);
       
       if (isApp) {
-        try {
-          const initial = await NativeBiometric.isAvailable();
-          if (initial.isAvailable) {
-              setBiometricAvailable(true);
-              
-              // 🚀 AUTO-TRIGGER: If we have saved credentials, show fingerprint popup immediately
-              const { value: savedEmail } = await Preferences.get({ key: 'saved_email' });
-              if (savedEmail) {
-                  console.log("Saved credentials found, auto-triggering biometrics...");
-                  setTimeout(() => {
-                      handleBiometricLogin();
-                  }, 1500); // 1.5s delay for smooth transition after splash
-              }
-          }
-        } catch (e) {
-          console.error("Biometric initialization error:", e);
+        console.log("Capacitor App Detected. Initializing Biometrics...");
+        
+        // 🔄 Recursive retry function
+        const attemptCheck = async (count: number) => {
+            try {
+                const result = await NativeBiometric.isAvailable();
+                if (result.isAvailable) {
+                    setBiometricAvailable(true);
+                    console.log("Biometric is READY:", result.biometryType);
+                    
+                    // 🚀 Auto-trigger if credentials exist
+                    const { value: savedEmail } = await Preferences.get({ key: 'saved_email' });
+                    if (savedEmail) {
+                        setTimeout(() => handleBiometricLogin(), 1000);
+                    }
+                    return true;
+                }
+            } catch (e) {
+                console.warn(`Biometric check attempt ${count} failed:`, e);
+            }
+            return false;
+        };
+
+        // Try immediately
+        const ok = await attemptCheck(1);
+        if (!ok) {
+            // Try again after 2 seconds (WebView bridge takes time)
+            setTimeout(() => attemptCheck(2), 2000);
         }
       }
     };
