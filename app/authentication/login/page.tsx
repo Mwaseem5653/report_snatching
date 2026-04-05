@@ -135,6 +135,14 @@ export default function SignInPage() {
       if (!res.ok) {
         setError(data.error || "Authentication failed. Please check your credentials.");
         setLoading(false);
+        
+        // 🚀 SECURITY: If login fails, and we used biometrics, it might mean the user is deleted.
+        // Clear local credentials to prevent further attempts.
+        if (isNative) {
+            await NativeBiometric.deleteCredentials({ server: "kpts.com.pk" });
+            await Preferences.remove({ key: 'saved_email' });
+            setBiometricAvailable(false);
+        }
         return;
       }
 
