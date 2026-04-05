@@ -24,22 +24,26 @@ export default function SignInPage() {
 
   useEffect(() => {
     const initApp = async () => {
-      const isApp = Capacitor.getPlatform() !== 'web';
-      setIsNative(isApp);
-      
-      if (isApp && !hasAutoLoggedIn.current) {
-        // Check for saved credentials for Auto-Login
-        const { value: savedEmail } = await Preferences.get({ key: 'rem_email' });
-        const { value: savedPass } = await Preferences.get({ key: 'rem_pass' });
+      try {
+        const isApp = Capacitor.getPlatform() !== 'web';
+        setIsNative(isApp);
         
-        if (savedEmail && savedPass) {
-            setEmail(savedEmail);
-            setPassword(savedPass);
-            setRememberMe(true);
-            hasAutoLoggedIn.current = true;
-            // Trigger auto-login
-            loginUser(savedEmail, savedPass);
+        if (isApp && !hasAutoLoggedIn.current) {
+          // Check for saved credentials for Auto-Login (Mobile Only)
+          const { value: savedEmail } = await Preferences.get({ key: 'rem_email' });
+          const { value: savedPass } = await Preferences.get({ key: 'rem_pass' });
+          
+          if (savedEmail && savedPass) {
+              setEmail(savedEmail);
+              setPassword(savedPass);
+              setRememberMe(true);
+              hasAutoLoggedIn.current = true;
+              // Trigger auto-login
+              loginUser(savedEmail, savedPass);
+          }
         }
+      } catch (e) {
+        console.error("Initialization error:", e);
       }
     };
     initApp();
@@ -50,10 +54,8 @@ export default function SignInPage() {
       setLoading(true);
       setError("");
 
-      // Mobile app ke liye absolute URL zaroori hai connection error khatam karne ke liye
-      const baseUrl = Capacitor.getPlatform() !== 'web' ? 'https://kpts.com.pk' : '';
-
-      const res = await fetch(`${baseUrl}/api/auth/create-session`, {
+      // Using relative path is better for remote URL apps
+      const res = await fetch("/api/auth/create-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: userEmail, password: userPass }),
@@ -64,6 +66,7 @@ export default function SignInPage() {
       if (!res.ok) {
         setError(data.error || "Authentication failed. Please check credentials.");
         setLoading(false);
+        // Clear saved data on failed login
         if (isNative) {
             await Preferences.remove({ key: 'rem_email' });
             await Preferences.remove({ key: 'rem_pass' });
@@ -71,13 +74,16 @@ export default function SignInPage() {
         return;
       }
 
-      // Handle "Remember Me" - Only save if login is successful
+      // Handle "Remember Me" (Mobile Only)
       if (isNative && rememberMe) {
           await Preferences.set({ key: 'rem_email', value: userEmail });
           await Preferences.set({ key: 'rem_pass', value: userPass });
+      } else if (isNative && !rememberMe) {
+          await Preferences.remove({ key: 'rem_email' });
+          await Preferences.remove({ key: 'rem_pass' });
       }
 
-      // 🛡️ ROLE-BASED REDIRECTION (Unchanged logic)
+      // 🛡️ ROLE-BASED REDIRECTION (Preserved logic)
       const role = (data.role || "").toLowerCase();
       const ROLE_PATHS: Record<string, string> = {
         super_admin: "/dashboard/super-admin",
@@ -94,7 +100,7 @@ export default function SignInPage() {
       
     } catch (err: any) {
       console.error("Login Error:", err);
-      setError("Unable to connect to the authentication server. Please check your internet.");
+      setError("Unable to connect to server. Please check your internet connection.");
       setLoading(false);
     }
   };
@@ -107,7 +113,7 @@ export default function SignInPage() {
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
       
-      {/* 🔹 Left Panel */}
+      {/* 🔹 Left Panel: Branding (RESTORED SIDE CONTENT) */}
       <div className="hidden md:flex flex-col justify-between w-1/2 bg-[#0a2c4e] text-white p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full blur-[150px] opacity-20 -translate-y-1/2 translate-x-1/3"></div>
@@ -127,12 +133,27 @@ export default function SignInPage() {
           </div>
         </div>
 
+        <div className="relative z-10 space-y-6 max-w-lg">
+           <h2 className="text-5xl font-black leading-[1.1] tracking-tighter">
+             Digital Justice <br />
+             <span className="text-blue-400">Begins Here.</span>
+           </h2>
+           <p className="text-slate-300 text-lg leading-relaxed font-medium">
+             This secure portal is reserved for authorized personnel of Sindh Police. Please authenticate using your official credentials to access the management systems.
+           </p>
+           <div className="flex gap-4 pt-4">
+             <div className="flex items-center gap-2 px-5 py-2.5 bg-white/10 rounded-xl border border-white/10 text-xs font-bold uppercase tracking-widest text-blue-100">
+                <ShieldCheck size={16} className="text-blue-400" /> Authorized Only
+             </div>
+           </div>
+        </div>
+
         <div className="relative z-10 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
           © {new Date().getFullYear()} Sindh Police Software Section
         </div>
       </div>
 
-      {/* 🔹 Right Panel */}
+      {/* 🔹 Right Panel: Login Form */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-2 md:p-12 relative bg-white lg:bg-slate-50 min-h-screen md:min-h-0">
          <div className="absolute top-6 left-6 md:hidden">
             <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors text-xs font-bold uppercase tracking-wider">
@@ -184,19 +205,22 @@ export default function SignInPage() {
                   </div>
                </div>
 
-               <div className="flex items-center space-x-2 py-1 ml-1">
-                  <Checkbox 
-                    id="remember" 
-                    checked={rememberMe}
-                    onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                  />
-                  <label
-                    htmlFor="remember"
-                    className="text-xs font-bold text-slate-600 uppercase tracking-tight cursor-pointer select-none"
-                  >
-                    Remember Me
-                  </label>
-               </div>
+               {/* Remember Me - MOBILE ONLY */}
+               {isNative && (
+                   <div className="flex items-center space-x-2 py-1 ml-1">
+                      <Checkbox 
+                        id="remember" 
+                        checked={rememberMe}
+                        onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                      />
+                      <label
+                        htmlFor="remember"
+                        className="text-xs font-bold text-slate-600 uppercase tracking-tight cursor-pointer select-none"
+                      >
+                        Remember Me
+                      </label>
+                   </div>
+               )}
 
                {error && (
                  <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex items-start gap-3 text-red-700 text-xs font-medium animate-in fade-in slide-in-from-top-2">
