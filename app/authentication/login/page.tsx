@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle, Fingerprint } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle, Fingerprint, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,7 @@ export default function SignInPage() {
   const [isNative, setIsNative] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [useBiometric, setUseBiometric] = useState(false);
+  const [savePassword, setSavePassword] = useState(false);
 
   useEffect(() => {
     const checkNative = async () => {
@@ -139,17 +140,22 @@ export default function SignInPage() {
 
       const destination = ROLE_PATHS[role] || "/dashboard/normal-user";
 
-      if (isNative && biometricAvailable && useBiometric) {
-          try {
+      // 🚀 Save Credentials Logic
+      if (isNative) {
+          if (biometricAvailable && useBiometric) {
+              try {
+                  await Preferences.set({ key: 'saved_email', value: userEmail });
+                  await NativeBiometric.setCredentials({
+                      username: userEmail,
+                      password: userPass,
+                      server: "kpts.com.pk"
+                  });
+              } catch (e) {
+                  console.error("Auto-save biometric failed", e);
+              }
+          } else if (savePassword) {
               await Preferences.set({ key: 'saved_email', value: userEmail });
-              await NativeBiometric.setCredentials({
-                  username: userEmail,
-                  password: userPass,
-                  server: "kpts.com.pk"
-              });
-              console.log("Biometric credentials auto-saved.");
-          } catch (e) {
-              console.error("Auto-save biometric failed", e);
+              await Preferences.set({ key: 'saved_password', value: userPass });
           }
       }
 
@@ -169,7 +175,7 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
+    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
       
       {/* 🔹 Left Panel: Branding */}
       <div className="hidden md:flex flex-col justify-between w-1/2 bg-[#0a2c4e] text-white p-12 relative overflow-hidden">
@@ -181,8 +187,8 @@ export default function SignInPage() {
             <ArrowLeft size={16} /> Back to Portal
           </Link>
           <div className="flex items-center gap-4 mb-6">
-            <div className="relative w-14 h-14 bg-white rounded-full p-1 shadow-xl">
-               <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" />
+            <div className="relative w-14 h-14 bg-white rounded-full p-1 shadow-xl shrink-0">
+               <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
             </div>
             <div>
                 <h1 className="text-2xl font-black tracking-tight">SINDH POLICE</h1>
@@ -192,11 +198,11 @@ export default function SignInPage() {
         </div>
 
         <div className="relative z-10 space-y-6 max-w-lg">
-           <h2 className="text-5xl font-black leading-[1.1] tracking-tighter">
+           <h2 className="text-4xl lg:text-5xl font-black leading-[1.1] tracking-tighter">
              Digital Justice <br />
              <span className="text-blue-400">Begins Here.</span>
            </h2>
-           <p className="text-slate-300 text-lg leading-relaxed font-medium">
+           <p className="text-slate-300 text-base lg:text-lg leading-relaxed font-medium">
              This secure portal is reserved for authorized personnel of Sindh Police. Please authenticate using your official credentials to access the management systems.
            </p>
            <div className="flex gap-4 pt-4">
@@ -212,29 +218,29 @@ export default function SignInPage() {
       </div>
 
       {/* 🔹 Right Panel: Login Form */}
-      <div className="w-full md:w-1/2 flex items-center justify-center p-6 md:p-12 relative bg-white lg:bg-slate-50">
+      <div className="w-full md:w-1/2 flex items-center justify-center p-4 md:p-12 relative bg-white lg:bg-slate-50 min-h-screen md:min-h-0">
          <div className="absolute top-6 left-6 md:hidden">
             <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors text-xs font-bold uppercase tracking-wider">
               <ArrowLeft size={16} /> Home
             </Link>
          </div>
 
-         <div className="w-full max-w-md space-y-10">
+         <div className="w-full max-w-[90%] sm:max-w-md space-y-8 md:space-y-10 py-12">
             <div className="text-center md:text-left space-y-2">
-               <div className="md:hidden flex justify-center mb-6">
-                  <div className="relative w-20 h-20 bg-white rounded-full p-2 shadow-2xl border border-slate-100">
-                    <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" />
+               <div className="flex justify-center md:hidden mb-6">
+                  <div className="relative w-24 h-24 bg-white rounded-full p-3 shadow-2xl border border-slate-100 ring-8 ring-blue-50/50">
+                    <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
                   </div>
                </div>
-               <h2 className="text-4xl font-black text-slate-900 tracking-tight">Officer Login</h2>
-               <p className="text-slate-500 font-medium">Enter your official credentials to proceed to the dashboard.</p>
+               <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Officer Login</h2>
+               <p className="text-slate-500 font-medium text-sm md:text-base">Enter your official credentials to proceed to the dashboard.</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-6">
                <div className="space-y-2">
                   <Label htmlFor="email" className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</Label>
                   <div className="relative group">
-                    <Mail className="absolute left-4 top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
                     <Input 
                       id="email" 
                       type="email" 
@@ -250,7 +256,7 @@ export default function SignInPage() {
                <div className="space-y-2">
                   <Label htmlFor="password" className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Password</Label>
                   <div className="relative group">
-                    <Lock className="absolute left-4 top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
                     <Input 
                       id="password" 
                       type="password" 
@@ -263,21 +269,44 @@ export default function SignInPage() {
                   </div>
                </div>
 
-               {biometricAvailable && (
-                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                        <Fingerprint size={20} className="text-blue-600" />
-                      </div>
-                      <div className="space-y-0.5">
-                        <p className="text-xs font-bold text-slate-900 uppercase tracking-tight">Biometric Login</p>
-                        <p className="text-[10px] text-slate-500 font-medium">Enable for faster access</p>
-                      </div>
+               {isNative && (
+                 <div className="space-y-3">
+                    {/* Biometric Toggle */}
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
+                            <Fingerprint size={20} className="text-blue-600" />
+                          </div>
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-bold text-slate-900 uppercase tracking-tight">Biometric Login</p>
+                            <p className="text-[10px] text-slate-500 font-medium">
+                                {biometricAvailable ? "Enable for faster access" : "Setup fingerprint on device"}
+                            </p>
+                          </div>
+                        </div>
+                        <Switch 
+                          checked={useBiometric}
+                          onCheckedChange={setUseBiometric}
+                          disabled={!biometricAvailable && useBiometric === false}
+                        />
                     </div>
-                    <Switch 
-                      checked={useBiometric}
-                      onCheckedChange={setUseBiometric}
-                    />
+
+                    {/* Save Password Toggle */}
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-slate-200 rounded-xl flex items-center justify-center shrink-0">
+                            <Save size={20} className="text-slate-600" />
+                          </div>
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-bold text-slate-900 uppercase tracking-tight">Save Credentials</p>
+                            <p className="text-[10px] text-slate-500 font-medium">Save for easy login</p>
+                          </div>
+                        </div>
+                        <Switch 
+                          checked={savePassword}
+                          onCheckedChange={setSavePassword}
+                        />
+                    </div>
                  </div>
                )}
 
@@ -296,7 +325,7 @@ export default function SignInPage() {
                  {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> <span className="animate-pulse">Authenticating...</span></> : "Sign In"}
                </Button>
 
-               {biometricAvailable && (
+               {isNative && biometricAvailable && (
                  <div className="space-y-3">
                     <Button 
                     type="button"
@@ -313,6 +342,7 @@ export default function SignInPage() {
                       onClick={async () => {
                           await NativeBiometric.deleteCredentials({ server: "kpts.com.pk" });
                           await Preferences.remove({ key: 'saved_email' });
+                          await Preferences.remove({ key: 'saved_password' });
                           window.location.reload();
                       }}
                       className="text-[10px] text-slate-400 font-bold uppercase tracking-widest hover:text-red-500 transition-colors mx-auto block"
