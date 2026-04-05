@@ -22,8 +22,8 @@ export default function SignInPage() {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [useBiometric, setUseBiometric] = useState(false);
 
-  // Use Capacitor.Plugins for better reliability with remote URLs
-  const NativeBiometric = (Capacitor.Plugins as any).NativeBiometric;
+  // Use Capacitor Plugins with type safety bypass for better reliability with remote URLs
+  const NativeBiometric = (Capacitor as any).Plugins?.NativeBiometric;
 
   useEffect(() => {
     const checkNative = async () => {
@@ -67,7 +67,7 @@ export default function SignInPage() {
       }
     };
     checkNative();
-  }, []);
+  }, [NativeBiometric]);
 
   useEffect(() => {
     const clearSession = async () => {
@@ -203,6 +203,21 @@ export default function SignInPage() {
           </div>
         </div>
 
+        <div className="relative z-10 space-y-6 max-w-lg">
+           <h2 className="text-4xl lg:text-5xl font-black leading-[1.1] tracking-tighter">
+             Digital Justice <br />
+             <span className="text-blue-400">Begins Here.</span>
+           </h2>
+           <p className="text-slate-300 text-base lg:text-lg leading-relaxed font-medium">
+             This secure portal is reserved for authorized personnel of Sindh Police. Please authenticate using your official credentials to access the management systems.
+           </p>
+           <div className="flex gap-4 pt-4">
+             <div className="flex items-center gap-2 px-5 py-2.5 bg-white/10 rounded-xl border border-white/10 text-xs font-bold uppercase tracking-widest text-blue-100">
+                <ShieldCheck size={16} className="text-blue-400" /> Authorized Only
+             </div>
+           </div>
+        </div>
+
         <div className="relative z-10 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
           © {new Date().getFullYear()} Sindh Police Software Section
         </div>
@@ -219,6 +234,7 @@ export default function SignInPage() {
          <div className="w-full max-w-full sm:max-w-md px-4 space-y-6 md:space-y-10 py-12">
             <div className="text-center md:text-left space-y-2">
                <div className="flex justify-center md:hidden mb-6">
+                  {/* Smaller Logo with better centering */}
                   <div className="relative w-16 h-16 bg-white rounded-full p-2 shadow-2xl border border-slate-100 ring-4 ring-blue-50/50">
                     <Image src="/logo.png" alt="Sindh Police" fill className="object-contain p-1.5" priority />
                   </div>
