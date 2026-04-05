@@ -34,16 +34,18 @@ export default function SignInPage() {
       if (isApp) {
         console.log("Capacitor App Detected. Checking Biometrics...");
         try {
-          // Wait a bit for plugin initialization
+          // 🛡️ Proactive initial check
+          const initial = await NativeBiometric.isAvailable();
+          if (initial.isAvailable) setBiometricAvailable(true);
+
+          // 🕒 Fallback: re-check after a delay (some Androids need time)
           setTimeout(async () => {
               const result = await NativeBiometric.isAvailable();
               if (result.isAvailable) {
                   setBiometricAvailable(true);
                   console.log("Biometric Available:", result.biometryType);
-              } else {
-                  console.warn("Biometric is NOT available on this device.");
               }
-          }, 1000);
+          }, 2000);
         } catch (e) {
           console.error("Biometric initialization error:", e);
         }
@@ -172,6 +174,65 @@ export default function SignInPage() {
     setError("");
     loginUser(email, password, true);
   };
+
+  const [showFirstLaunchPrompt, setShowFirstLaunchPrompt] = useState(false);
+
+  useEffect(() => {
+    const checkFirstLaunch = async () => {
+        const { value: hasSeen } = await Preferences.get({ key: 'has_seen_biometric_welcome' });
+        if (!hasSeen && isNative && biometricAvailable) {
+            setShowFirstLaunchPrompt(true);
+        }
+    };
+    if (isNative && biometricAvailable) {
+        checkFirstLaunch();
+    }
+  }, [isNative, biometricAvailable]);
+
+  const acceptFirstLaunch = async () => {
+      await Preferences.set({ key: 'has_seen_biometric_welcome', value: 'true' });
+      setShowFirstLaunchPrompt(false);
+      // This prepares the user mentally, the actual setup happens after login
+  };
+
+  const declineFirstLaunch = async () => {
+      await Preferences.set({ key: 'has_seen_biometric_welcome', value: 'true' });
+      setShowFirstLaunchPrompt(false);
+  };
+
+  if (showFirstLaunchPrompt) {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-[#0a2c4e] p-6 relative overflow-hidden">
+            <div className="absolute inset-0 bg-[url('/waseem.jpg')] opacity-20 bg-cover bg-center"></div>
+            <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl relative z-10 text-center space-y-6 animate-in zoom-in-95 duration-500">
+                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto ring-8 ring-blue-50/50">
+                    <ShieldCheck size={40} className="text-blue-600 animate-pulse" />
+                </div>
+                <div className="space-y-2">
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">Security Setup</h2>
+                    <p className="text-slate-500 text-sm font-medium leading-relaxed">
+                        Enable Fingerprint security for faster and more secure access to DIC-POLICE.
+                    </p>
+                </div>
+                <div className="grid gap-3 pt-2">
+                    <Button 
+                        onClick={acceptFirstLaunch}
+                        className="h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs shadow-lg shadow-blue-200"
+                    >
+                        Enable Biometrics
+                    </Button>
+                    <Button 
+                        variant="ghost"
+                        onClick={declineFirstLaunch}
+                        className="h-14 rounded-2xl text-slate-400 font-bold uppercase tracking-widest text-xs"
+                    >
+                        Maybe Later
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+  }
 
   if (showBiometricPrompt) {
       return (
