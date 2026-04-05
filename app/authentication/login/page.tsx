@@ -7,6 +7,7 @@ import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle, Fingerprint }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 // Capacitor Imports
 import { Capacitor } from "@capacitor/core";
@@ -20,10 +21,7 @@ export default function SignInPage() {
   const [error, setError] = useState("");
   const [isNative, setIsNative] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
-
-  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
-  const [pendingDestination, setPendingDestination] = useState("");
-  const [pendingCredentials, setPendingCredentials] = useState({ email: "", password: "" });
+  const [useBiometric, setUseBiometric] = useState(false);
 
   useEffect(() => {
     const checkNative = async () => {
@@ -33,7 +31,6 @@ export default function SignInPage() {
       if (isApp) {
         console.log("Capacitor App Detected. Initializing Biometrics...");
         
-        // 🔄 Recursive retry function
         const attemptCheck = async (count: number) => {
             try {
                 const result = await NativeBiometric.isAvailable();
@@ -41,9 +38,9 @@ export default function SignInPage() {
                     setBiometricAvailable(true);
                     console.log("Biometric is READY:", result.biometryType);
                     
-                    // 🚀 Auto-trigger if credentials exist
                     const { value: savedEmail } = await Preferences.get({ key: 'saved_email' });
                     if (savedEmail) {
+                        setUseBiometric(true);
                         setTimeout(() => handleBiometricLogin(), 1000);
                     }
                     return true;
@@ -54,10 +51,8 @@ export default function SignInPage() {
             return false;
         };
 
-        // Try immediately
         const ok = await attemptCheck(1);
         if (!ok) {
-            // Try again after 2 seconds (WebView bridge takes time)
             setTimeout(() => attemptCheck(2), 2000);
         }
       }
@@ -65,41 +60,16 @@ export default function SignInPage() {
     checkNative();
   }, []);
 
-  // 🧹 PROACTIVE CLEANUP: Clear stale cookies and biometrics on mount if needed
   useEffect(() => {
     const clearSession = async () => {
         try {
             await fetch("/api/auth/logout", { method: "POST" });
-            
-            // If we are native, we can also clear the biometric vault here 
-            // but usually we keep it for "Login with Biometrics" button.
-            // ONLY delete if you explicitly want to unpair the phone.
         } catch (e) {
             console.error("Session cleanup failed:", e);
         }
     };
     clearSession();
   }, []);
-
-  const saveCredentials = async () => {
-    if (!isNative) return;
-    try {
-      await Preferences.set({ key: 'saved_email', value: pendingCredentials.email });
-      await NativeBiometric.setCredentials({
-        username: pendingCredentials.email,
-        password: pendingCredentials.password,
-        server: "kpts.com.pk"
-      });
-      window.location.href = pendingDestination;
-    } catch (e) {
-      console.error("Failed to save credentials", e);
-      window.location.href = pendingDestination;
-    }
-  };
-
-  const skipBiometric = () => {
-    window.location.href = pendingDestination;
-  };
 
   const handleBiometricLogin = async () => {
     try {
@@ -148,8 +118,6 @@ export default function SignInPage() {
         setError(data.error || "Authentication failed. Please check your credentials.");
         setLoading(false);
         
-        // 🚀 SECURITY: If login fails, and we used biometrics, it might mean the user is deleted.
-        // Clear local credentials to prevent further attempts.
         if (isNative) {
             await NativeBiometric.deleteCredentials({ server: "kpts.com.pk" });
             await Preferences.remove({ key: 'saved_email' });
@@ -171,14 +139,18 @@ export default function SignInPage() {
 
       const destination = ROLE_PATHS[role] || "/dashboard/normal-user";
 
-      // 🔹 Check if we should prompt for biometrics
-      if (isNative && biometricAvailable && allowBiometricPrompt) {
-          // Temporarily removing 'alreadyConfigured' check to FORCE the popup for your test
-          setPendingDestination(destination);
-          setPendingCredentials({ email: userEmail, password: userPass });
-          setShowBiometricPrompt(true);
-          setLoading(false);
-          return;
+      if (isNative && biometricAvailable && useBiometric) {
+          try {
+              await Preferences.set({ key: 'saved_email', value: userEmail });
+              await NativeBiometric.setCredentials({
+                  username: userEmail,
+                  password: userPass,
+                  server: "kpts.com.pk"
+              });
+              console.log("Biometric credentials auto-saved.");
+          } catch (e) {
+              console.error("Auto-save biometric failed", e);
+          }
       }
 
       window.location.href = destination;
@@ -195,98 +167,6 @@ export default function SignInPage() {
     setError("");
     loginUser(email, password, true);
   };
-
-  const [showFirstLaunchPrompt, setShowFirstLaunchPrompt] = useState(false);
-
-  useEffect(() => {
-    const checkFirstLaunch = async () => {
-        const { value: hasSeen } = await Preferences.get({ key: 'has_seen_biometric_welcome' });
-        if (!hasSeen && isNative && biometricAvailable) {
-            setShowFirstLaunchPrompt(true);
-        }
-    };
-    if (isNative && biometricAvailable) {
-        checkFirstLaunch();
-    }
-  }, [isNative, biometricAvailable]);
-
-  const acceptFirstLaunch = async () => {
-      await Preferences.set({ key: 'has_seen_biometric_welcome', value: 'true' });
-      setShowFirstLaunchPrompt(false);
-      // This prepares the user mentally, the actual setup happens after login
-  };
-
-  const declineFirstLaunch = async () => {
-      await Preferences.set({ key: 'has_seen_biometric_welcome', value: 'true' });
-      setShowFirstLaunchPrompt(false);
-  };
-
-  if (showFirstLaunchPrompt) {
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-[#0a2c4e] p-6 relative overflow-hidden">
-            <div className="absolute inset-0 bg-[url('/waseem.jpg')] opacity-20 bg-cover bg-center"></div>
-            <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl relative z-10 text-center space-y-6 animate-in zoom-in-95 duration-500">
-                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto ring-8 ring-blue-50/50">
-                    <ShieldCheck size={40} className="text-blue-600 animate-pulse" />
-                </div>
-                <div className="space-y-2">
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">Security Setup</h2>
-                    <p className="text-slate-500 text-sm font-medium leading-relaxed">
-                        Enable Fingerprint security for faster and more secure access to DIC-POLICE.
-                    </p>
-                </div>
-                <div className="grid gap-3 pt-2">
-                    <Button 
-                        onClick={acceptFirstLaunch}
-                        className="h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs shadow-lg shadow-blue-200"
-                    >
-                        Enable Biometrics
-                    </Button>
-                    <Button 
-                        variant="ghost"
-                        onClick={declineFirstLaunch}
-                        className="h-14 rounded-2xl text-slate-400 font-bold uppercase tracking-widest text-xs"
-                    >
-                        Maybe Later
-                    </Button>
-                </div>
-            </div>
-        </div>
-    );
-  }
-
-  if (showBiometricPrompt) {
-      return (
-          <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-              <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-xl border border-slate-100 text-center space-y-4 animate-in fade-in zoom-in-95 duration-500">
-                  <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto">
-                      <Fingerprint size={32} className="text-blue-600 animate-pulse" />
-                  </div>
-                  <div className="space-y-1">
-                      <h2 className="text-xl font-bold text-slate-900">Secure Login</h2>
-                      <p className="text-slate-500 text-sm">
-                          Use Biometrics for faster access next time?
-                      </p>
-                  </div>
-                  <div className="grid gap-2 pt-2">
-                      <Button 
-                          onClick={saveCredentials}
-                          className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest text-[10px] shadow-sm"
-                      >
-                          Setup Biometrics
-                      </Button>
-                      <Button 
-                          variant="ghost"
-                          onClick={skipBiometric}
-                          className="h-11 rounded-lg text-slate-400 font-bold uppercase tracking-widest text-[10px]"
-                      >
-                          Skip
-                      </Button>
-                  </div>
-              </div>
-          </div>
-      );
-  }
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
@@ -382,6 +262,24 @@ export default function SignInPage() {
                     />
                   </div>
                </div>
+
+               {biometricAvailable && (
+                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                        <Fingerprint size={20} className="text-blue-600" />
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-slate-900 uppercase tracking-tight">Biometric Login</p>
+                        <p className="text-[10px] text-slate-500 font-medium">Enable for faster access</p>
+                      </div>
+                    </div>
+                    <Switch 
+                      checked={useBiometric}
+                      onCheckedChange={setUseBiometric}
+                    />
+                 </div>
+               )}
 
                {error && (
                  <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex items-start gap-3 text-red-700 text-sm font-medium animate-in fade-in slide-in-from-top-2">
