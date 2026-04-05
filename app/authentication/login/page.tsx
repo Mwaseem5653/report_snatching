@@ -27,25 +27,24 @@ export default function SignInPage() {
 
   useEffect(() => {
     const checkNative = async () => {
-      // 🚀 Detect if we are in Capacitor
       const isApp = Capacitor.getPlatform() !== 'web';
       setIsNative(isApp);
       
       if (isApp) {
-        console.log("Capacitor App Detected. Checking Biometrics...");
         try {
-          // 🛡️ Proactive initial check
           const initial = await NativeBiometric.isAvailable();
-          if (initial.isAvailable) setBiometricAvailable(true);
-
-          // 🕒 Fallback: re-check after a delay (some Androids need time)
-          setTimeout(async () => {
-              const result = await NativeBiometric.isAvailable();
-              if (result.isAvailable) {
-                  setBiometricAvailable(true);
-                  console.log("Biometric Available:", result.biometryType);
+          if (initial.isAvailable) {
+              setBiometricAvailable(true);
+              
+              // 🚀 AUTO-TRIGGER: If we have saved credentials, show fingerprint popup immediately
+              const { value: savedEmail } = await Preferences.get({ key: 'saved_email' });
+              if (savedEmail) {
+                  console.log("Saved credentials found, auto-triggering biometrics...");
+                  setTimeout(() => {
+                      handleBiometricLogin();
+                  }, 1500); // 1.5s delay for smooth transition after splash
               }
-          }, 2000);
+          }
         } catch (e) {
           console.error("Biometric initialization error:", e);
         }
@@ -54,16 +53,20 @@ export default function SignInPage() {
     checkNative();
   }, []);
 
-  // 🧹 PROACTIVE CLEANUP: Clear stale cookies on mount
+  // 🧹 PROACTIVE CLEANUP: Clear stale cookies and biometrics on mount if needed
   useEffect(() => {
-    const clearCookies = async () => {
+    const clearSession = async () => {
         try {
             await fetch("/api/auth/logout", { method: "POST" });
+            
+            // If we are native, we can also clear the biometric vault here 
+            // but usually we keep it for "Login with Biometrics" button.
+            // ONLY delete if you explicitly want to unpair the phone.
         } catch (e) {
-            console.error("Cookie cleanup failed:", e);
+            console.error("Session cleanup failed:", e);
         }
     };
-    clearCookies();
+    clearSession();
   }, []);
 
   const saveCredentials = async () => {
@@ -150,14 +153,12 @@ export default function SignInPage() {
 
       // 🔹 Check if we should prompt for biometrics
       if (isNative && biometricAvailable && allowBiometricPrompt) {
-          const { value: alreadyConfigured } = await Preferences.get({ key: 'saved_email' });
-          if (!alreadyConfigured || alreadyConfigured !== userEmail) {
-              setPendingDestination(destination);
-              setPendingCredentials({ email: userEmail, password: userPass });
-              setShowBiometricPrompt(true);
-              setLoading(false);
-              return;
-          }
+          // Temporarily removing 'alreadyConfigured' check to FORCE the popup for your test
+          setPendingDestination(destination);
+          setPendingCredentials({ email: userEmail, password: userPass });
+          setShowBiometricPrompt(true);
+          setLoading(false);
+          return;
       }
 
       window.location.href = destination;
@@ -378,16 +379,29 @@ export default function SignInPage() {
                </Button>
 
                {biometricAvailable && (
-                 <Button 
-                   type="button"
-                   variant="outline"
-                   onClick={handleBiometricLogin}
-                   disabled={loading}
-                   className="w-full h-14 rounded-2xl border-2 border-blue-100 bg-white hover:bg-blue-50 text-blue-900 font-black uppercase tracking-[0.15em] text-sm shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-                 >
-                   <Fingerprint size={22} className="text-blue-600" />
-                   Login with Biometrics
-                 </Button>
+                 <div className="space-y-3">
+                    <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={handleBiometricLogin}
+                    disabled={loading}
+                    className="w-full h-12 rounded-xl border-2 border-blue-100 bg-white hover:bg-blue-50 text-blue-900 font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-3 transition-all"
+                    >
+                    <Fingerprint size={20} className="text-blue-600 animate-pulse" />
+                    Login with Biometrics
+                    </Button>
+                    <button 
+                      type="button" 
+                      onClick={async () => {
+                          await NativeBiometric.deleteCredentials({ server: "kpts.com.pk" });
+                          await Preferences.remove({ key: 'saved_email' });
+                          window.location.reload();
+                      }}
+                      className="text-[10px] text-slate-400 font-bold uppercase tracking-widest hover:text-red-500 transition-colors mx-auto block"
+                    >
+                        Switch Account or Forget Device
+                    </button>
+                 </div>
                )}
             </form>
 
