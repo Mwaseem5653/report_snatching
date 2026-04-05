@@ -27,19 +27,25 @@ export default function SignInPage() {
 
   useEffect(() => {
     const checkNative = async () => {
-      const isApp = Capacitor.isNativePlatform();
+      // 🚀 Detect if we are in Capacitor
+      const isApp = Capacitor.getPlatform() !== 'web';
       setIsNative(isApp);
       
       if (isApp) {
+        console.log("Capacitor App Detected. Checking Biometrics...");
         try {
-          // 🚀 Proactive availability check
-          const result = await NativeBiometric.isAvailable();
-          if (result.isAvailable) {
-              setBiometricAvailable(true);
-              console.log("Biometric is available:", result.biometryType);
-          }
+          // Wait a bit for plugin initialization
+          setTimeout(async () => {
+              const result = await NativeBiometric.isAvailable();
+              if (result.isAvailable) {
+                  setBiometricAvailable(true);
+                  console.log("Biometric Available:", result.biometryType);
+              } else {
+                  console.warn("Biometric is NOT available on this device.");
+              }
+          }, 1000);
         } catch (e) {
-          console.error("Biometric availability check failed:", e);
+          console.error("Biometric initialization error:", e);
         }
       }
     };

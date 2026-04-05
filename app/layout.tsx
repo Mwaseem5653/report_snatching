@@ -72,24 +72,37 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       > 
-        <div id="global-loader" className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0a2c4e] transition-opacity duration-1000">
-          {/* 🔹 Waseem Image - Full Screen Background */}
-          <div className="absolute inset-0 w-full h-full overflow-hidden">
+        <div id="global-loader" className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0a2c4e] transition-opacity duration-700">
+          
+          {/* 📱 Mobile App (Capacitor) - Show Full Screen Image */}
+          <div className="absolute inset-0 w-full h-full overflow-hidden hidden [.is-native_&]:block">
              <img 
                src="/waseem.jpg" 
                alt="Sindh Police Welcome" 
                className="w-full h-full object-cover" 
              />
-             {/* Optional: Add a subtle overlay to make any text readable if needed */}
-             <div className="absolute inset-0 bg-black/20"></div>
+             <div className="absolute inset-0 bg-[#0a2c4e]/30"></div>
           </div>
 
-          {/* Loader Elements (Overlay on top of the image) */}
-          <div className="relative z-10 flex flex-col items-center mt-auto mb-20">
-            <div className="w-16 h-1 bg-white/30 rounded-full overflow-hidden">
-                <div className="h-full bg-white animate-[loading-bar_1.5s_infinite_ease-in-out]"></div>
+          {/* 💻 Website (Browser) - Simple Loading (Like Dell) */}
+          <div className="relative z-10 flex flex-col items-center [.is-native_&]:mb-20 [.is-native_&]:mt-auto">
+            <div className="flex flex-col items-center gap-3">
+                <span className="text-white text-lg font-light tracking-[0.5em] animate-pulse [.is-native_&]:hidden">
+                    LOADING
+                </span>
+                <div className="w-24 h-0.5 bg-white/20 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-400 animate-[loading-bar_1.5s_infinite_ease-in-out]"></div>
+                </div>
             </div>
           </div>
+          
+          <Script id="native-check" strategy="beforeInteractive">
+            {`
+              if (window.Capacitor && window.Capacitor.getPlatform() !== 'web') {
+                document.body.classList.add('is-native');
+              }
+            `}
+          </Script>
           
           <style dangerouslySetInnerHTML={{ __html: `
             @keyframes loading-bar {
@@ -147,6 +160,78 @@ export default function RootLayout({
             }),
           }}
         />
+        {/* 🚀 Top Loading Bar (for page switching) */}
+        <div id="page-loader" className="fixed top-0 left-0 right-0 z-[10000] h-[3px] bg-transparent pointer-events-none">
+          <div className="h-full bg-blue-500 w-0 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
+        </div>
+
+        <Script id="route-loader" strategy="afterInteractive">
+          {`
+            (function() {
+              var bar = document.querySelector('#page-loader > div');
+              var progress = 0;
+              var timer = null;
+
+              function start() {
+                if (!bar) return;
+                progress = 0;
+                bar.style.width = '0%';
+                bar.style.opacity = '1';
+                bar.style.transition = 'width 0.4s ease-out, opacity 0.2s';
+                
+                clearInterval(timer);
+                timer = setInterval(() => {
+                  if (progress < 90) {
+                    progress += (90 - progress) * 0.1;
+                    bar.style.width = progress + '%';
+                  }
+                }, 200);
+              }
+              
+              function stop() {
+                clearInterval(timer);
+                if (bar) {
+                  bar.style.width = '100%';
+                  setTimeout(() => {
+                    bar.style.opacity = '0';
+                    setTimeout(() => { bar.style.width = '0%'; }, 300);
+                  }, 200);
+                }
+              }
+
+              // 🕵️ Monkey-patch history to detect ALL navigations (router.push, links, back/forward)
+              const originalPush = window.history.pushState;
+              const originalReplace = window.history.replaceState;
+
+              window.history.pushState = function() {
+                start();
+                return originalPush.apply(window.history, arguments);
+              };
+
+              window.history.replaceState = function() {
+                start();
+                return originalReplace.apply(window.history, arguments);
+              };
+
+              window.addEventListener('popstate', start);
+
+              // Observe DOM changes to stop the loader (when new page content arrives)
+              var observer = new MutationObserver(() => {
+                if (progress > 0) stop();
+              });
+              observer.observe(document.body, { childList: true, subtree: true });
+
+              // Handle standard clicks as well
+              document.addEventListener('click', function(e) {
+                var target = e.target.closest('a');
+                if (target && target.href && !target.href.includes('#') && !target.target && target.origin === window.location.origin) {
+                  start();
+                }
+              });
+            })();
+          `}
+        </Script>
+
         <Toaster position="top-center" richColors />
         {children}
       </body>
