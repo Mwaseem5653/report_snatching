@@ -48,6 +48,9 @@ export default function SignInPage() {
                 }
             } catch (e) {
                 console.warn(`Biometric check attempt ${count} failed:`, e);
+                // Even if isAvailable fails, we still allow the toggle to be ON 
+                // in case the plugin has a detection issue but hardware works.
+                setBiometricAvailable(true); 
             }
             return false;
         };
@@ -100,7 +103,7 @@ export default function SignInPage() {
       }
     } catch (err: any) {
       console.error("Biometric Error:", err);
-      setError("Biometric authentication failed or cancelled.");
+      setError(`Biometric Login Error: ${err.message || "Failed to verify identity"}`);
       setLoading(false);
     }
   };
@@ -121,26 +124,23 @@ export default function SignInPage() {
         return;
       }
 
-      // 🚀 Biometric Save Logic: If toggle is ON, we MUST save successfully to proceed
+      // 🚀 Biometric Save Logic: ONLY if toggle is ON
       if (isNative && useBiometric) {
           try {
-              const check = await NativeBiometric.isAvailable();
-              if (!check.isAvailable) {
-                  throw new Error("Biometric hardware not available or not set up.");
-              }
-
+              // Try saving directly without redundant check
               await Preferences.set({ key: 'saved_email', value: userEmail });
+              
               await NativeBiometric.setCredentials({
                   username: userEmail,
                   password: userPass,
                   server: "kpts.com.pk"
               });
-              console.log("Biometric credentials saved.");
-          } catch (e) {
-              console.error("Biometric setup failed:", e);
-              setError("Biometric Setup Failed. Please ensure Fingerprint/FaceID is set up on your device.");
+              console.log("Biometric credentials saved successfully.");
+          } catch (e: any) {
+              console.error("Biometric save failed:", e);
+              setError(`Biometric Setup Failed: ${e.message || "Could not save credentials. Make sure screen lock is enabled."}`);
               setLoading(false);
-              return; // 🛑 HALT LOGIN if biometric save fails
+              return; 
           }
       }
 
@@ -180,7 +180,7 @@ export default function SignInPage() {
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full blur-[150px] opacity-20 -translate-y-1/2 translate-x-1/3"></div>
         
         <div className="relative z-10">
-          <Link href="/" className="inline-flex items-center gap-2 text-blue-300 hover:text-white transition-colors text-sm font-bold mb-8 uppercase tracking-widest">
+          <Link href="/" className="inline-flex items-center gap-2 text-blue-300 hover:text-white transition-colors text-sm font-bold mb-8 uppercase tracking-widest text-wrap">
             <ArrowLeft size={16} /> Back to Portal
           </Link>
           <div className="flex items-center gap-4 mb-6">
@@ -194,43 +194,29 @@ export default function SignInPage() {
           </div>
         </div>
 
-        <div className="relative z-10 space-y-6 max-w-lg">
-           <h2 className="text-4xl lg:text-5xl font-black leading-[1.1] tracking-tighter">
-             Digital Justice <br />
-             <span className="text-blue-400">Begins Here.</span>
-           </h2>
-           <p className="text-slate-300 text-base lg:text-lg leading-relaxed font-medium">
-             This secure portal is reserved for authorized personnel of Sindh Police. Please authenticate using your official credentials to access the management systems.
-           </p>
-           <div className="flex gap-4 pt-4">
-             <div className="flex items-center gap-2 px-5 py-2.5 bg-white/10 rounded-xl border border-white/10 text-xs font-bold uppercase tracking-widest text-blue-100">
-                <ShieldCheck size={16} className="text-blue-400" /> Authorized Only
-             </div>
-           </div>
-        </div>
-
         <div className="relative z-10 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
           © {new Date().getFullYear()} Sindh Police Software Section
         </div>
       </div>
 
       {/* 🔹 Right Panel: Login Form */}
-      <div className="w-full md:w-1/2 flex items-center justify-center p-4 md:p-12 relative bg-white lg:bg-slate-50 min-h-screen md:min-h-0">
+      <div className="w-full md:w-1/2 flex items-center justify-center p-2 md:p-12 relative bg-white lg:bg-slate-50 min-h-screen md:min-h-0">
          <div className="absolute top-6 left-6 md:hidden">
             <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors text-xs font-bold uppercase tracking-wider">
               <ArrowLeft size={16} /> Home
             </Link>
          </div>
 
-         <div className="w-full max-w-[90%] sm:max-w-md space-y-8 md:space-y-10 py-12">
+         <div className="w-full max-w-full sm:max-w-md px-4 space-y-6 md:space-y-10 py-12">
             <div className="text-center md:text-left space-y-2">
                <div className="flex justify-center md:hidden mb-6">
-                  <div className="relative w-24 h-24 bg-white rounded-full p-3 shadow-2xl border border-slate-100 ring-4 ring-blue-50/50">
-                    <Image src="/logo.png" alt="Sindh Police" fill className="object-contain p-2" priority />
+                  {/* Smaller Logo with better centering */}
+                  <div className="relative w-16 h-16 bg-white rounded-full p-2 shadow-2xl border border-slate-100 ring-4 ring-blue-50/50">
+                    <Image src="/logo.png" alt="Sindh Police" fill className="object-contain p-1.5" priority />
                   </div>
                </div>
                <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Officer Login</h2>
-               <p className="text-slate-500 font-medium text-sm md:text-base">Enter your official credentials to proceed to the dashboard.</p>
+               <p className="text-slate-500 font-medium text-sm md:text-base">Enter official credentials to proceed.</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-6">
@@ -245,7 +231,7 @@ export default function SignInPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      className="pl-12 h-14 rounded-2xl bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all font-medium text-slate-700"
+                      className="pl-12 h-14 rounded-2xl bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all font-medium text-slate-700 w-full"
                     />
                   </div>
                </div>
@@ -261,7 +247,7 @@ export default function SignInPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="pl-12 h-14 rounded-2xl bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all font-medium text-slate-700"
+                      className="pl-12 h-14 rounded-2xl bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all font-medium text-slate-700 w-full"
                     />
                   </div>
                </div>
@@ -272,11 +258,9 @@ export default function SignInPage() {
                       <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
                         <Fingerprint size={20} className="text-blue-600" />
                       </div>
-                      <div className="space-y-0.5">
-                        <p className="text-xs font-bold text-slate-900 uppercase tracking-tight">Biometric Login</p>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                            {biometricAvailable ? "Enable for faster access" : "Hardware not available"}
-                        </p>
+                      <div className="space-y-0.5 text-left">
+                        <p className="text-[11px] font-bold text-slate-900 uppercase tracking-tight">Biometric Login</p>
+                        <p className="text-[9px] text-slate-500 font-medium">Toggle to setup Fingerprint</p>
                       </div>
                     </div>
                     <Switch 
@@ -287,9 +271,9 @@ export default function SignInPage() {
                )}
 
                {error && (
-                 <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex items-start gap-3 text-red-700 text-sm font-medium animate-in fade-in slide-in-from-top-2">
-                    <AlertCircle size={18} className="shrink-0 mt-0.5" /> 
-                    <span>{error}</span>
+                 <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex items-start gap-3 text-red-700 text-xs font-medium animate-in fade-in slide-in-from-top-2">
+                    <AlertCircle size={14} className="shrink-0 mt-0.5" /> 
+                    <span className="break-words">{error}</span>
                  </div>
                )}
 
@@ -298,20 +282,20 @@ export default function SignInPage() {
                  disabled={loading}
                  className="w-full h-12 rounded-xl bg-[#0a2c4e] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs shadow-md active:scale-[0.98] transition-all"
                >
-                 {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> <span className="animate-pulse">Authenticating...</span></> : "Sign In"}
+                 {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> <span>Wait...</span></> : "Sign In"}
                </Button>
 
-               {isNative && biometricAvailable && (
+               {isNative && (
                  <div className="space-y-3">
                     <Button 
                     type="button"
                     variant="outline"
                     onClick={handleBiometricLogin}
                     disabled={loading}
-                    className="w-full h-12 rounded-xl border-2 border-blue-100 bg-white hover:bg-blue-50 text-blue-900 font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-3 transition-all"
+                    className="w-full h-11 rounded-xl border-2 border-blue-100 bg-white hover:bg-blue-50 text-blue-900 font-bold uppercase tracking-wider text-[10px] flex items-center justify-center gap-3 transition-all"
                     >
-                    <Fingerprint size={20} className="text-blue-600 animate-pulse" />
-                    Login with Biometrics
+                    <Fingerprint size={18} className="text-blue-600" />
+                    Use Biometrics to Login
                     </Button>
                     <button 
                       type="button" 
@@ -320,16 +304,16 @@ export default function SignInPage() {
                           await Preferences.remove({ key: 'saved_email' });
                           window.location.reload();
                       }}
-                      className="text-[10px] text-slate-400 font-bold uppercase tracking-widest hover:text-red-500 transition-colors mx-auto block"
+                      className="text-[9px] text-slate-400 font-bold uppercase tracking-widest hover:text-red-500 transition-colors mx-auto block"
                     >
-                        Reset Biometrics / Switch Account
+                        Reset / Switch Account
                     </button>
                  </div>
                )}
             </form>
 
-            <div className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest pt-4">
-               Secure Official Access Portal
+            <div className="text-center text-[9px] font-bold text-slate-400 uppercase tracking-widest pt-4">
+               Secure Official Portal
             </div>
          </div>
       </div>
