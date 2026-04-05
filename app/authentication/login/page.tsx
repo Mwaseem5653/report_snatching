@@ -166,29 +166,29 @@ export default function SignInPage() {
   if (showBiometricPrompt) {
       return (
           <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-              <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl border border-slate-100 text-center space-y-6 animate-in zoom-in-95 duration-300">
-                  <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <Fingerprint size={40} className="text-blue-600" />
+              <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-xl border border-slate-100 text-center space-y-4 animate-in fade-in zoom-in-95 duration-500">
+                  <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto">
+                      <Fingerprint size={32} className="text-blue-600 animate-pulse" />
                   </div>
-                  <div className="space-y-2">
-                      <h2 className="text-2xl font-black text-slate-900 tracking-tight">Enable Biometrics?</h2>
-                      <p className="text-slate-500 font-medium text-sm leading-relaxed">
-                          Would you like to use fingerprint or Face ID for faster login next time?
+                  <div className="space-y-1">
+                      <h2 className="text-xl font-bold text-slate-900">Secure Login</h2>
+                      <p className="text-slate-500 text-sm">
+                          Use Biometrics for faster access next time?
                       </p>
                   </div>
-                  <div className="grid gap-3 pt-4">
+                  <div className="grid gap-2 pt-2">
                       <Button 
                           onClick={saveCredentials}
-                          className="h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs shadow-lg shadow-blue-200"
+                          className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest text-[10px] shadow-sm"
                       >
-                          Enable Biometric Login
+                          Setup Biometrics
                       </Button>
                       <Button 
                           variant="ghost"
                           onClick={skipBiometric}
-                          className="h-14 rounded-2xl text-slate-500 font-bold uppercase tracking-widest text-xs"
+                          className="h-11 rounded-lg text-slate-400 font-bold uppercase tracking-widest text-[10px]"
                       >
-                          Maybe Later
+                          Skip
                       </Button>
                   </div>
               </div>
@@ -301,9 +301,9 @@ export default function SignInPage() {
                <Button 
                  type="submit" 
                  disabled={loading}
-                 className="w-full h-14 rounded-2xl bg-[#0a2c4e] hover:bg-slate-800 text-white font-black uppercase tracking-[0.15em] text-sm shadow-xl shadow-blue-900/20 active:scale-[0.98] transition-all"
+                 className="w-full h-12 rounded-xl bg-[#0a2c4e] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs shadow-md active:scale-[0.98] transition-all"
                >
-                 {loading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Authenticating...</> : "Sign In to Dashboard"}
+                 {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> <span className="animate-pulse">Authenticating...</span></> : "Sign In"}
                </Button>
 
                {biometricAvailable && (
