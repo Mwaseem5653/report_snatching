@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle } from "lucide-react";
@@ -20,13 +20,14 @@ export default function SignInPage() {
   const [error, setError] = useState("");
   const [isNative, setIsNative] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const hasAutoLoggedIn = useRef(false);
 
   useEffect(() => {
     const initApp = async () => {
       const isApp = Capacitor.getPlatform() !== 'web';
       setIsNative(isApp);
       
-      if (isApp) {
+      if (isApp && !hasAutoLoggedIn.current) {
         // Check for saved credentials for Auto-Login
         const { value: savedEmail } = await Preferences.get({ key: 'rem_email' });
         const { value: savedPass } = await Preferences.get({ key: 'rem_pass' });
@@ -35,6 +36,7 @@ export default function SignInPage() {
             setEmail(savedEmail);
             setPassword(savedPass);
             setRememberMe(true);
+            hasAutoLoggedIn.current = true;
             // Trigger auto-login
             loginUser(savedEmail, savedPass);
         }
@@ -43,17 +45,15 @@ export default function SignInPage() {
     initApp();
   }, []);
 
-  // Proactive logout cleanup on mount to ensure fresh state
-  useEffect(() => {
-    fetch("/api/auth/logout", { method: "POST" }).catch(console.error);
-  }, []);
-
   const loginUser = async (userEmail: string, userPass: string) => {
     try {
       setLoading(true);
       setError("");
 
-      const res = await fetch("/api/auth/create-session", {
+      // Mobile app ke liye absolute URL zaroori hai connection error khatam karne ke liye
+      const baseUrl = Capacitor.getPlatform() !== 'web' ? 'https://kpts.com.pk' : '';
+
+      const res = await fetch(`${baseUrl}/api/auth/create-session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: userEmail, password: userPass }),
@@ -64,7 +64,6 @@ export default function SignInPage() {
       if (!res.ok) {
         setError(data.error || "Authentication failed. Please check credentials.");
         setLoading(false);
-        // Clear saved data on failed login to avoid infinite loops
         if (isNative) {
             await Preferences.remove({ key: 'rem_email' });
             await Preferences.remove({ key: 'rem_pass' });
@@ -72,15 +71,13 @@ export default function SignInPage() {
         return;
       }
 
-      // Handle "Remember Me"
+      // Handle "Remember Me" - Only save if login is successful
       if (isNative && rememberMe) {
           await Preferences.set({ key: 'rem_email', value: userEmail });
           await Preferences.set({ key: 'rem_pass', value: userPass });
-      } else if (isNative && !rememberMe) {
-          await Preferences.remove({ key: 'rem_email' });
-          await Preferences.remove({ key: 'rem_pass' });
       }
 
+      // 🛡️ ROLE-BASED REDIRECTION (Unchanged logic)
       const role = (data.role || "").toLowerCase();
       const ROLE_PATHS: Record<string, string> = {
         super_admin: "/dashboard/super-admin",
@@ -92,9 +89,12 @@ export default function SignInPage() {
         user: "/dashboard/normal-user",
       };
 
-      window.location.href = ROLE_PATHS[role] || "/dashboard/normal-user";
+      const destination = ROLE_PATHS[role] || "/dashboard/normal-user";
+      window.location.href = destination;
+      
     } catch (err: any) {
-      setError("Unable to connect to the authentication server.");
+      console.error("Login Error:", err);
+      setError("Unable to connect to the authentication server. Please check your internet.");
       setLoading(false);
     }
   };
@@ -107,7 +107,7 @@ export default function SignInPage() {
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
       
-      {/* 🔹 Left Panel: Branding */}
+      {/* 🔹 Left Panel */}
       <div className="hidden md:flex flex-col justify-between w-1/2 bg-[#0a2c4e] text-white p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full blur-[150px] opacity-20 -translate-y-1/2 translate-x-1/3"></div>
@@ -132,7 +132,7 @@ export default function SignInPage() {
         </div>
       </div>
 
-      {/* 🔹 Right Panel: Login Form */}
+      {/* 🔹 Right Panel */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-2 md:p-12 relative bg-white lg:bg-slate-50 min-h-screen md:min-h-0">
          <div className="absolute top-6 left-6 md:hidden">
             <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors text-xs font-bold uppercase tracking-wider">
