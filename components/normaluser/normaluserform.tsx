@@ -385,7 +385,7 @@ export default function AddApplicationFormNormalUser() {
                                             <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Last Number Used 1 <span className="text-red-500">*</span></Label>
                                             <div className="relative">
                                                 <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                                                <Input placeholder="0300-XXXXXXX" name="lastNumUsed" value={device.lastNumUsed} onChange={(e) => handleDeviceChange(index, e)} required minLength={11} maxLength={11} className="rounded-xl border-slate-200 bg-white h-12 pl-10 font-bold" />
+                                                <Input placeholder="0300-XXXXXXX" name="lastNumUsed" value={device.lastNumUsed} onChange={(e) => handleDeviceChange(index, e)} required minLength={12} maxLength={12} className="rounded-xl border-slate-200 bg-white h-12 pl-10 font-bold" />
                                             </div>
                                         </div>
                                         <div className="space-y-1.5">

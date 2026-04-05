@@ -310,14 +310,14 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
                                     <Label className="text-[11px] font-bold uppercase text-slate-500">Last Number Used 1 *</Label>
                                     <div className="relative">
                                         <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                        <Input placeholder="0300-XXXXXXX" name="lastNumUsed" value={device.lastNumUsed} onChange={(e) => handleDeviceChange(index, e)} required minLength={11} maxLength={11} className="pl-10 rounded-xl border-slate-200 h-11 bg-white font-bold" />
+                                        <Input placeholder="0300-XXXXXXX" name="lastNumUsed" value={device.lastNumUsed} onChange={(e) => handleDeviceChange(index, e)} required minLength={12} maxLength={12} className="pl-10 rounded-xl border-slate-200 h-11 bg-white font-bold" />
                                     </div>
                                 </div>
                                 <div className="space-y-2">
                                     <Label className="text-[11px] font-bold uppercase text-slate-500">Last Number Used 2 (Optional)</Label>
                                     <div className="relative">
                                         <PhoneForwarded className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                        <Input placeholder="0300-XXXXXXX" name="lastNumUsed2" value={device.lastNumUsed2} onChange={(e) => handleDeviceChange(index, e)} minLength={11} maxLength={11} className="pl-10 rounded-xl border-slate-200 h-11 bg-white font-bold" />
+                                        <Input placeholder="0300-XXXXXXX" name="lastNumUsed2" value={device.lastNumUsed2} onChange={(e) => handleDeviceChange(index, e)} minLength={12} maxLength={12} className="pl-10 rounded-xl border-slate-200 h-11 bg-white font-bold" />
                                     </div>
                                 </div>
                             </div>
