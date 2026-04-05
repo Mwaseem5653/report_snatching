@@ -11,7 +11,6 @@ import { Switch } from "@/components/ui/switch";
 
 // Capacitor Imports
 import { Capacitor } from "@capacitor/core";
-import { NativeBiometric } from "@capgo/capacitor-native-biometric";
 import { Preferences } from "@capacitor/preferences";
 
 export default function SignInPage() {
@@ -23,6 +22,9 @@ export default function SignInPage() {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [useBiometric, setUseBiometric] = useState(false);
 
+  // Use Capacitor.Plugins for better reliability with remote URLs
+  const NativeBiometric = (Capacitor.Plugins as any).NativeBiometric;
+
   useEffect(() => {
     const checkNative = async () => {
       const isApp = Capacitor.getPlatform() !== 'web';
@@ -33,6 +35,11 @@ export default function SignInPage() {
         
         const attemptCheck = async (count: number) => {
             try {
+                if (!NativeBiometric) {
+                    console.warn("NativeBiometric plugin not found in Capacitor.Plugins");
+                    return false;
+                }
+
                 const result = await NativeBiometric.isAvailable();
                 if (result.isAvailable) {
                     setBiometricAvailable(true);
@@ -41,15 +48,13 @@ export default function SignInPage() {
                     const { value: savedEmail } = await Preferences.get({ key: 'saved_email' });
                     if (savedEmail) {
                         setUseBiometric(true);
-                        // Auto-trigger biometric login on launch if already enabled
                         setTimeout(() => handleBiometricLogin(), 1000);
                     }
                     return true;
                 }
             } catch (e) {
                 console.warn(`Biometric check attempt ${count} failed:`, e);
-                // Even if isAvailable fails, we still allow the toggle to be ON 
-                // in case the plugin has a detection issue but hardware works.
+                // Allow toggle if we suspect hardware is there despite check failure
                 setBiometricAvailable(true); 
             }
             return false;
@@ -77,6 +82,11 @@ export default function SignInPage() {
 
   const handleBiometricLogin = async () => {
     try {
+      if (!NativeBiometric) {
+          setError("Biometric plugin not found. Please try again or login manually.");
+          return;
+      }
+
       setLoading(true);
       setError("");
 
@@ -125,9 +135,8 @@ export default function SignInPage() {
       }
 
       // 🚀 Biometric Save Logic: ONLY if toggle is ON
-      if (isNative && useBiometric) {
+      if (isNative && useBiometric && NativeBiometric) {
           try {
-              // Try saving directly without redundant check
               await Preferences.set({ key: 'saved_email', value: userEmail });
               
               await NativeBiometric.setCredentials({
@@ -210,7 +219,6 @@ export default function SignInPage() {
          <div className="w-full max-w-full sm:max-w-md px-4 space-y-6 md:space-y-10 py-12">
             <div className="text-center md:text-left space-y-2">
                <div className="flex justify-center md:hidden mb-6">
-                  {/* Smaller Logo with better centering */}
                   <div className="relative w-16 h-16 bg-white rounded-full p-2 shadow-2xl border border-slate-100 ring-4 ring-blue-50/50">
                     <Image src="/logo.png" alt="Sindh Police" fill className="object-contain p-1.5" priority />
                   </div>
@@ -300,7 +308,9 @@ export default function SignInPage() {
                     <button 
                       type="button" 
                       onClick={async () => {
-                          await NativeBiometric.deleteCredentials({ server: "kpts.com.pk" });
+                          if (NativeBiometric) {
+                            await NativeBiometric.deleteCredentials({ server: "kpts.com.pk" });
+                          }
                           await Preferences.remove({ key: 'saved_email' });
                           window.location.reload();
                       }}
