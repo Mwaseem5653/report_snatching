@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle, Fingerprint, Save } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle, Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,6 @@ export default function SignInPage() {
   const [isNative, setIsNative] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [useBiometric, setUseBiometric] = useState(false);
-  const [savePassword, setSavePassword] = useState(false);
 
   useEffect(() => {
     const checkNative = async () => {
@@ -42,6 +41,7 @@ export default function SignInPage() {
                     const { value: savedEmail } = await Preferences.get({ key: 'saved_email' });
                     if (savedEmail) {
                         setUseBiometric(true);
+                        // Auto-trigger biometric login on launch if already enabled
                         setTimeout(() => handleBiometricLogin(), 1000);
                     }
                     return true;
@@ -96,7 +96,7 @@ export default function SignInPage() {
       });
 
       if (credentials) {
-        await loginUser(credentials.username, credentials.password, false);
+        await loginUser(credentials.username, credentials.password);
       }
     } catch (err: any) {
       console.error("Biometric Error:", err);
@@ -105,7 +105,7 @@ export default function SignInPage() {
     }
   };
 
-  const loginUser = async (userEmail: string, userPass: string, allowBiometricPrompt = true) => {
+  const loginUser = async (userEmail: string, userPass: string) => {
     try {
       const res = await fetch("/api/auth/create-session", {
         method: "POST",
@@ -118,13 +118,30 @@ export default function SignInPage() {
       if (!res.ok) {
         setError(data.error || "Authentication failed. Please check your credentials.");
         setLoading(false);
-        
-        if (isNative) {
-            await NativeBiometric.deleteCredentials({ server: "kpts.com.pk" });
-            await Preferences.remove({ key: 'saved_email' });
-            setBiometricAvailable(false);
-        }
         return;
+      }
+
+      // 🚀 Biometric Save Logic: If toggle is ON, we MUST save successfully to proceed
+      if (isNative && useBiometric) {
+          try {
+              const check = await NativeBiometric.isAvailable();
+              if (!check.isAvailable) {
+                  throw new Error("Biometric hardware not available or not set up.");
+              }
+
+              await Preferences.set({ key: 'saved_email', value: userEmail });
+              await NativeBiometric.setCredentials({
+                  username: userEmail,
+                  password: userPass,
+                  server: "kpts.com.pk"
+              });
+              console.log("Biometric credentials saved.");
+          } catch (e) {
+              console.error("Biometric setup failed:", e);
+              setError("Biometric Setup Failed. Please ensure Fingerprint/FaceID is set up on your device.");
+              setLoading(false);
+              return; // 🛑 HALT LOGIN if biometric save fails
+          }
       }
 
       const role = (data.role || "").toLowerCase();
@@ -139,26 +156,6 @@ export default function SignInPage() {
       };
 
       const destination = ROLE_PATHS[role] || "/dashboard/normal-user";
-
-      // 🚀 Save Credentials Logic
-      if (isNative) {
-          if (biometricAvailable && useBiometric) {
-              try {
-                  await Preferences.set({ key: 'saved_email', value: userEmail });
-                  await NativeBiometric.setCredentials({
-                      username: userEmail,
-                      password: userPass,
-                      server: "kpts.com.pk"
-                  });
-              } catch (e) {
-                  console.error("Auto-save biometric failed", e);
-              }
-          } else if (savePassword) {
-              await Preferences.set({ key: 'saved_email', value: userEmail });
-              await Preferences.set({ key: 'saved_password', value: userPass });
-          }
-      }
-
       window.location.href = destination;
     } catch (err: any) {
       console.error("Login Error:", err);
@@ -171,13 +168,13 @@ export default function SignInPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    loginUser(email, password, true);
+    loginUser(email, password);
   };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
       
-      {/* 🔹 Left Panel: Branding */}
+      {/* 🔹 Left Panel: Branding (Desktop) */}
       <div className="hidden md:flex flex-col justify-between w-1/2 bg-[#0a2c4e] text-white p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full blur-[150px] opacity-20 -translate-y-1/2 translate-x-1/3"></div>
@@ -228,8 +225,8 @@ export default function SignInPage() {
          <div className="w-full max-w-[90%] sm:max-w-md space-y-8 md:space-y-10 py-12">
             <div className="text-center md:text-left space-y-2">
                <div className="flex justify-center md:hidden mb-6">
-                  <div className="relative w-24 h-24 bg-white rounded-full p-3 shadow-2xl border border-slate-100 ring-8 ring-blue-50/50">
-                    <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
+                  <div className="relative w-24 h-24 bg-white rounded-full p-3 shadow-2xl border border-slate-100 ring-4 ring-blue-50/50">
+                    <Image src="/logo.png" alt="Sindh Police" fill className="object-contain p-2" priority />
                   </div>
                </div>
                <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Officer Login</h2>
@@ -270,43 +267,22 @@ export default function SignInPage() {
                </div>
 
                {isNative && (
-                 <div className="space-y-3">
-                    {/* Biometric Toggle */}
-                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
-                            <Fingerprint size={20} className="text-blue-600" />
-                          </div>
-                          <div className="space-y-0.5">
-                            <p className="text-xs font-bold text-slate-900 uppercase tracking-tight">Biometric Login</p>
-                            <p className="text-[10px] text-slate-500 font-medium">
-                                {biometricAvailable ? "Enable for faster access" : "Setup fingerprint on device"}
-                            </p>
-                          </div>
-                        </div>
-                        <Switch 
-                          checked={useBiometric}
-                          onCheckedChange={setUseBiometric}
-                          disabled={!biometricAvailable && useBiometric === false}
-                        />
+                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
+                        <Fingerprint size={20} className="text-blue-600" />
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-slate-900 uppercase tracking-tight">Biometric Login</p>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                            {biometricAvailable ? "Enable for faster access" : "Hardware not available"}
+                        </p>
+                      </div>
                     </div>
-
-                    {/* Save Password Toggle */}
-                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-slate-200 rounded-xl flex items-center justify-center shrink-0">
-                            <Save size={20} className="text-slate-600" />
-                          </div>
-                          <div className="space-y-0.5">
-                            <p className="text-xs font-bold text-slate-900 uppercase tracking-tight">Save Credentials</p>
-                            <p className="text-[10px] text-slate-500 font-medium">Save for easy login</p>
-                          </div>
-                        </div>
-                        <Switch 
-                          checked={savePassword}
-                          onCheckedChange={setSavePassword}
-                        />
-                    </div>
+                    <Switch 
+                      checked={useBiometric}
+                      onCheckedChange={setUseBiometric}
+                    />
                  </div>
                )}
 
@@ -342,12 +318,11 @@ export default function SignInPage() {
                       onClick={async () => {
                           await NativeBiometric.deleteCredentials({ server: "kpts.com.pk" });
                           await Preferences.remove({ key: 'saved_email' });
-                          await Preferences.remove({ key: 'saved_password' });
                           window.location.reload();
                       }}
                       className="text-[10px] text-slate-400 font-bold uppercase tracking-widest hover:text-red-500 transition-colors mx-auto block"
                     >
-                        Switch Account or Forget Device
+                        Reset Biometrics / Switch Account
                     </button>
                  </div>
                )}
