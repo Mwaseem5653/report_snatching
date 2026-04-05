@@ -207,7 +207,7 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">Mobile Number *</Label>
-                    <Input placeholder="0300-XXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required minLength={11} maxLength={11} className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-bold" />
+                    <Input placeholder="0300-XXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required minLength={12} maxLength={12} className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-bold" />
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">CNIC Number (Optional)</Label>

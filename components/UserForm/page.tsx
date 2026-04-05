@@ -304,7 +304,7 @@ export default function AddUserForm({
                   <Label className="text-xs font-bold uppercase text-slate-500">Phone Number</Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <Input name="phone" placeholder="03XXXXXXXXX" required className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900" />
+                    <Input name="phone" placeholder="03XXXXXXXXX" required maxLength={11} pattern="03[0-9]{9}" title="Please enter a valid 11-digit Pakistani mobile number starting with 03" className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900" />
                   </div>
                 </div>
                 <div className="space-y-2">

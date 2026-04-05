@@ -32,10 +32,14 @@ export default function SignInPage() {
       
       if (isApp) {
         try {
+          // 🚀 Proactive availability check
           const result = await NativeBiometric.isAvailable();
-          setBiometricAvailable(result.isAvailable);
+          if (result.isAvailable) {
+              setBiometricAvailable(true);
+              console.log("Biometric is available:", result.biometryType);
+          }
         } catch (e) {
-          console.log("Biometric check failed", e);
+          console.error("Biometric availability check failed:", e);
         }
       }
     };
