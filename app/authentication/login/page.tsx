@@ -1,89 +1,40 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-
-// Capacitor Imports
-import { Capacitor } from "@capacitor/core";
-import { Preferences } from "@capacitor/preferences";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [isNative, setIsNative] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const hasAutoLoggedIn = useRef(false);
 
-  useEffect(() => {
-    const initApp = async () => {
-      try {
-        const isApp = Capacitor.getPlatform() !== 'web';
-        setIsNative(isApp);
-        
-        if (isApp && !hasAutoLoggedIn.current) {
-          // Check for saved credentials for Auto-Login (Mobile Only)
-          const { value: savedEmail } = await Preferences.get({ key: 'rem_email' });
-          const { value: savedPass } = await Preferences.get({ key: 'rem_pass' });
-          
-          if (savedEmail && savedPass) {
-              setEmail(savedEmail);
-              setPassword(savedPass);
-              setRememberMe(true);
-              hasAutoLoggedIn.current = true;
-              // Trigger auto-login
-              loginUser(savedEmail, savedPass);
-          }
-        }
-      } catch (e) {
-        console.error("Initialization error:", e);
-      }
-    };
-    initApp();
-  }, []);
-
-  const loginUser = async (userEmail: string, userPass: string) => {
+  const loginUser = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
       setLoading(true);
       setError("");
 
-      // Using relative path is better for remote URL apps
       const res = await fetch("/api/auth/create-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: userEmail, password: userPass }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Authentication failed. Please check credentials.");
+        setError(data.error || "Authentication failed. Please check your credentials.");
         setLoading(false);
-        // Clear saved data on failed login
-        if (isNative) {
-            await Preferences.remove({ key: 'rem_email' });
-            await Preferences.remove({ key: 'rem_pass' });
-        }
         return;
       }
 
-      // Handle "Remember Me" (Mobile Only)
-      if (isNative && rememberMe) {
-          await Preferences.set({ key: 'rem_email', value: userEmail });
-          await Preferences.set({ key: 'rem_pass', value: userPass });
-      } else if (isNative && !rememberMe) {
-          await Preferences.remove({ key: 'rem_email' });
-          await Preferences.remove({ key: 'rem_pass' });
-      }
-
-      // 🛡️ ROLE-BASED REDIRECTION (Preserved logic)
+      // 🛡️ ROLE-BASED REDIRECTION (Original logic)
       const role = (data.role || "").toLowerCase();
       const ROLE_PATHS: Record<string, string> = {
         super_admin: "/dashboard/super-admin",
@@ -100,20 +51,15 @@ export default function SignInPage() {
       
     } catch (err: any) {
       console.error("Login Error:", err);
-      setError("Unable to connect to server. Please check your internet connection.");
+      setError("Unable to connect to the authentication server.");
       setLoading(false);
     }
-  };
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    loginUser(email, password);
   };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
       
-      {/* 🔹 Left Panel: Branding (RESTORED SIDE CONTENT) */}
+      {/* 🔹 Left Panel: Branding (Visible on Desktop) */}
       <div className="hidden md:flex flex-col justify-between w-1/2 bg-[#0a2c4e] text-white p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full blur-[150px] opacity-20 -translate-y-1/2 translate-x-1/3"></div>
@@ -172,7 +118,7 @@ export default function SignInPage() {
                <p className="text-slate-500 font-medium text-sm md:text-base leading-snug">Authorized Personnel Access Only</p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-5">
+            <form onSubmit={loginUser} className="space-y-5">
                <div className="space-y-2">
                   <Label htmlFor="email" className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</Label>
                   <div className="relative group">
@@ -204,23 +150,6 @@ export default function SignInPage() {
                     />
                   </div>
                </div>
-
-               {/* Remember Me - MOBILE ONLY */}
-               {isNative && (
-                   <div className="flex items-center space-x-2 py-1 ml-1">
-                      <Checkbox 
-                        id="remember" 
-                        checked={rememberMe}
-                        onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                      />
-                      <label
-                        htmlFor="remember"
-                        className="text-xs font-bold text-slate-600 uppercase tracking-tight cursor-pointer select-none"
-                      >
-                        Remember Me
-                      </label>
-                   </div>
-               )}
 
                {error && (
                  <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex items-start gap-3 text-red-700 text-xs font-medium animate-in fade-in slide-in-from-top-2">
