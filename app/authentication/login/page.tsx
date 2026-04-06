@@ -3,63 +3,75 @@
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle, Fingerprint } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn, getApiUrl } from "@/lib/utils";
 
 // Capacitor Imports
 import { Capacitor } from "@capacitor/core";
-import { NativeBiometric } from "@capgo/capacitor-native-biometric";
 import { Preferences } from "@capacitor/preferences";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  
-  // Biometric States
   const [isNative, setIsNative] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
-  const [enableBioToggle, setEnableBioToggle] = useState(false);
 
-  const performLogin = useCallback(async (loginEmail: string, loginPass: string, isManual: boolean = false) => {
+  // 1. Load remembered credentials on mount
+  useEffect(() => {
+    const loadSavedCredentials = async () => {
+      setIsNative(Capacitor.isNativePlatform());
       try {
-        const apiUrl = getApiUrl("/api/auth/create-session");
-        console.log("Attempting login at:", apiUrl);
-        
-        const res = await fetch(apiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: loginEmail, password: loginPass }),
-        });
+        const { value: savedEmail } = await Preferences.get({ key: "remembered_email" });
+        const { value: savedPassword } = await Preferences.get({ key: "remembered_password" });
+        const { value: isRemembered } = await Preferences.get({ key: "is_remembered" });
 
-        const data = await res.json();
-        console.log("Login response status:", res.status, data);
-
-        if (!res.ok) {
-          setError(data.error || `Error ${res.status}: Authentication failed.`);
-          setLoading(false);
-          return;
+        if (isRemembered === "true" && savedEmail && savedPassword) {
+          setEmail(savedEmail);
+          setPassword(savedPassword);
+          setRememberMe(true);
         }
+      } catch (err) {
+        console.error("Error loading saved credentials:", err);
+      }
+    };
+    loadSavedCredentials();
+  }, []);
 
-      // 🔐 If toggle is ON or was already enabled, save/update credentials
-      if (isManual && Capacitor.isNativePlatform() && enableBioToggle) {
-        try {
-          await Preferences.set({ key: "biometric_enabled", value: "true" });
-          await Preferences.set({ key: "user_email", value: loginEmail });
-          await Preferences.set({ key: "user_password", value: loginPass });
-        } catch (bioErr: any) {
-          console.error("Failed to enable biometrics:", bioErr);
-        }
-      } else if (isManual && Capacitor.isNativePlatform() && !enableBioToggle) {
-        await Preferences.remove({ key: "biometric_enabled" });
-        await Preferences.remove({ key: "user_email" });
-        await Preferences.remove({ key: "user_password" });
+  const performLogin = useCallback(async (loginEmail: string, loginPass: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      const apiUrl = getApiUrl("/api/auth/create-session");
+      
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail, password: loginPass }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Authentication failed. Please check your credentials.");
+        setLoading(false);
+        return;
+      }
+
+      // 💾 Handle Remember Me
+      if (rememberMe) {
+        await Preferences.set({ key: "remembered_email", value: loginEmail });
+        await Preferences.set({ key: "remembered_password", value: loginPass });
+        await Preferences.set({ key: "is_remembered", value: "true" });
+      } else {
+        await Preferences.remove({ key: "remembered_email" });
+        await Preferences.remove({ key: "remembered_password" });
+        await Preferences.remove({ key: "is_remembered" });
       }
 
       // 🛡️ ROLE-BASED REDIRECTION
@@ -78,101 +90,20 @@ export default function SignInPage() {
       window.location.href = destination;
     } catch (err) {
       console.error("Login Fetch Error:", err);
-      setError("Unable to connect to the authentication server. Check Internet or CORS.");
+      setError("Unable to connect to the authentication server. Please check your internet connection.");
       setLoading(false);
     }
-  }, [enableBioToggle]);
-
-  const handleBiometricLogin = useCallback(async () => {
-    try {
-      const { value: isEnabled } = await Preferences.get({ key: "biometric_enabled" });
-      if (isEnabled !== "true") return;
-
-      const { value: storedEmail } = await Preferences.get({ key: "user_email" });
-      const { value: storedPassword } = await Preferences.get({ key: "user_password" });
-
-      if (!storedEmail || !storedPassword) return;
-
-      setLoading(true);
-      setError("");
-
-      try {
-        await NativeBiometric.verifyIdentity({
-          reason: "Log in to your account",
-          title: "Biometric Login",
-          subtitle: "Welcome back!",
-          description: "Verify your identity to continue",
-        });
-        await performLogin(storedEmail, storedPassword);
-      } catch (err: any) {
-        console.error("Biometric Verification Error:", err);
-        setError(`Fingerprint Error: ${err.message || "Try manual login"}`);
-        setLoading(false);
-      }
-    } catch (err: any) {
-      console.error("Biometric Login Flow Error:", err);
-      setLoading(false);
-    }
-  }, [performLogin]);
-
-  useEffect(() => {
-    const checkBiometrics = async () => {
-      // Small delay to ensure bridge is ready
-      await new Promise(r => setTimeout(r, 1000));
-      
-      const native = Capacitor.isNativePlatform();
-      setIsNative(native);
-
-      if (native) {
-        try {
-          // Double check if plugin is actually available
-          if (Capacitor.isPluginAvailable("NativeBiometric")) {
-              const result = await NativeBiometric.isAvailable();
-              console.log("Biometric Available:", result.isAvailable);
-              
-              if (result.isAvailable) {
-                setBiometricAvailable(true);
-                const { value } = await Preferences.get({ key: "biometric_enabled" });
-                if (value === "true") {
-                  setBiometricEnabled(true);
-                  setEnableBioToggle(true);
-                  // Auto-trigger
-                  handleBiometricLogin();
-                }
-              }
-          } else {
-              console.warn("NativeBiometric plugin NOT available in Capacitor bridge.");
-          }
-        } catch (err: any) {
-          console.error("Biometric check error:", err);
-        }
-      }
-    };
-    checkBiometrics();
-  }, [handleBiometricLogin]);
+  }, [rememberMe]);
 
   const loginUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError("");
-    await performLogin(email, password, true);
+    await performLogin(email, password);
   };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
       
-      {/* 📱 Mobile Branding (Logo only visible on mobile) */}
-      <div className="md:hidden flex items-center gap-4 bg-[#0a2c4e] text-white p-6 shadow-xl border-b border-blue-900/50">
-          <div className="relative w-12 h-12 bg-white rounded-full p-1 shadow-lg shrink-0">
-             <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
-          </div>
-          <div>
-              <h1 className="text-xl font-black tracking-tight uppercase leading-none">SINDH POLICE</h1>
-              <p className="text-[9px] font-bold text-blue-300 uppercase tracking-widest mt-1">Officer Login Portal</p>
-          </div>
-      </div>
-
-      {/* 💻 Desktop Branding Panel */}
+      {/* 💻 Desktop Branding Panel (Hidden on mobile) */}
       <div className="hidden md:flex flex-col justify-between w-1/2 bg-[#0a2c4e] text-white p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="relative z-10">
@@ -195,9 +126,19 @@ export default function SignInPage() {
         </div>
       </div>
 
-      {/* Login Form */}
+      {/* Login Form Area */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-4 md:p-12 bg-white min-h-screen md:min-h-0">
          <div className="w-full max-w-md space-y-6">
+            
+            {/* 📱 Mobile Logo (Visible only on mobile/small screens) */}
+            <div className="md:hidden flex flex-col items-center mb-2">
+                <div className="relative w-20 h-20 bg-white rounded-full p-1 shadow-2xl border border-slate-100 mb-4">
+                   <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
+                </div>
+                <h1 className="text-xl font-black tracking-tighter text-[#0a2c4e] uppercase">SINDH POLICE</h1>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Proud to Serve</p>
+            </div>
+
             <div className="text-center md:text-left space-y-2">
                <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Officer Login</h2>
                <p className="text-slate-500 font-medium text-sm">Authorized Personnel Access Only</p>
@@ -234,22 +175,17 @@ export default function SignInPage() {
                   </div>
                </div>
 
-               {/* Toggle Section - Forced visible if native for debugging */}
-               {isNative && (
-                 <div className="flex items-center justify-between px-1 py-1 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-                   <div className="flex flex-col gap-0.5">
-                     <Label htmlFor="bio-toggle" className="text-[11px] font-bold text-slate-700 uppercase">Enable Biometric Login</Label>
-                     <p className="text-[9px] text-slate-400 font-medium">Auto-login on next app launch</p>
-                   </div>
-                   <Switch 
-                     id="bio-toggle" 
-                     checked={enableBioToggle} 
-                     onCheckedChange={setEnableBioToggle}
-                     disabled={!biometricAvailable}
-                     className="data-[state=checked]:bg-blue-600"
-                   />
-                 </div>
-               )}
+               <div className="flex items-center space-x-2 px-1">
+                  <Checkbox 
+                    id="remember" 
+                    checked={rememberMe} 
+                    onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                    className="rounded-md border-slate-300 text-blue-600 focus:ring-blue-600 h-5 w-5"
+                  />
+                  <Label htmlFor="remember" className="text-xs font-bold text-slate-600 cursor-pointer uppercase tracking-tight">
+                    Remember Me
+                  </Label>
+               </div>
 
                {error && (
                  <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex items-start gap-3 text-red-700 text-xs font-medium animate-in fade-in slide-in-from-top-2">
@@ -258,28 +194,32 @@ export default function SignInPage() {
                  </div>
                )}
 
-               <div className="flex gap-2">
-                 <Button 
-                   type="submit" 
-                   disabled={loading}
-                   className="flex-1 h-12 rounded-xl bg-[#0a2c4e] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs shadow-md transition-all"
-                 >
-                   {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> <span>Validating...</span></> : "Sign In"}
-                 </Button>
-
-                 {isNative && biometricAvailable && biometricEnabled && (
-                   <Button
-                     type="button"
-                     onClick={handleBiometricLogin}
-                     disabled={loading}
-                     variant="outline"
-                     className="w-12 h-12 rounded-xl border-slate-200 flex items-center justify-center p-0 hover:bg-blue-50 text-blue-600 transition-all shadow-sm"
-                   >
-                     <Fingerprint size={24} />
-                   </Button>
-                 )}
-               </div>
+               <Button 
+                 type="submit" 
+                 disabled={loading}
+                 className="w-full h-14 rounded-2xl bg-[#0a2c4e] hover:bg-slate-800 text-white font-bold uppercase tracking-widest text-sm shadow-xl transition-all"
+               >
+                 {loading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> <span>Validating...</span></> : "Sign In to Account"}
+               </Button>
             </form>
+
+            <div className="pt-6 border-t border-slate-100 text-center">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Official Security Standards</p>
+                <div className="flex justify-center gap-6 text-slate-300">
+                    <div className="flex flex-col items-center gap-1">
+                        <CheckCircle2 size={20} className="text-emerald-500" />
+                        <span className="text-[8px] font-black uppercase">Secure SSL</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                        <CheckCircle2 size={20} className="text-emerald-500" />
+                        <span className="text-[8px] font-black uppercase">Direct Auth</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                        <CheckCircle2 size={20} className="text-emerald-500" />
+                        <span className="text-[8px] font-black uppercase">Encrypted</span>
+                    </div>
+                </div>
+            </div>
          </div>
       </div>
 
