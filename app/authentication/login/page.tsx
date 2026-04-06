@@ -1,47 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Loader2, Mail, Lock, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { cn, getApiUrl } from "@/lib/utils";
-
-// Capacitor Imports
-import { Capacitor } from "@capacitor/core";
-import { Preferences } from "@capacitor/preferences";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [isNative, setIsNative] = useState(false);
-
-  // 1. Load remembered credentials on mount
-  useEffect(() => {
-    const loadSavedCredentials = async () => {
-      setIsNative(Capacitor.isNativePlatform());
-      try {
-        const { value: savedEmail } = await Preferences.get({ key: "remembered_email" });
-        const { value: savedPassword } = await Preferences.get({ key: "remembered_password" });
-        const { value: isRemembered } = await Preferences.get({ key: "is_remembered" });
-
-        if (isRemembered === "true" && savedEmail && savedPassword) {
-          setEmail(savedEmail);
-          setPassword(savedPassword);
-          setRememberMe(true);
-        }
-      } catch (err) {
-        console.error("Error loading saved credentials:", err);
-      }
-    };
-    loadSavedCredentials();
-  }, []);
 
   const performLogin = useCallback(async (loginEmail: string, loginPass: string) => {
     setLoading(true);
@@ -63,17 +35,6 @@ export default function SignInPage() {
         return;
       }
 
-      // 💾 Handle Remember Me
-      if (rememberMe) {
-        await Preferences.set({ key: "remembered_email", value: loginEmail });
-        await Preferences.set({ key: "remembered_password", value: loginPass });
-        await Preferences.set({ key: "is_remembered", value: "true" });
-      } else {
-        await Preferences.remove({ key: "remembered_email" });
-        await Preferences.remove({ key: "remembered_password" });
-        await Preferences.remove({ key: "is_remembered" });
-      }
-
       // 🛡️ ROLE-BASED REDIRECTION
       const role = (data.role || "").toLowerCase();
       const ROLE_PATHS: Record<string, string> = {
@@ -93,7 +54,7 @@ export default function SignInPage() {
       setError("Unable to connect to the authentication server. Please check your internet connection.");
       setLoading(false);
     }
-  }, [rememberMe]);
+  }, []);
 
   const loginUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,18 +139,6 @@ export default function SignInPage() {
                       className="pl-12 h-14 rounded-2xl bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-600 transition-all"
                     />
                   </div>
-               </div>
-
-               <div className="flex items-center space-x-2 px-1">
-                  <Checkbox 
-                    id="remember" 
-                    checked={rememberMe} 
-                    onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                    className="rounded-md border-slate-300 text-blue-600 focus:ring-blue-600 h-5 w-5"
-                  />
-                  <Label htmlFor="remember" className="text-xs font-bold text-slate-600 cursor-pointer uppercase tracking-tight">
-                    Remember Me
-                  </Label>
                </div>
 
                {error && (
