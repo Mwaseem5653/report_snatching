@@ -26,7 +26,6 @@ export default function SignInPage() {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [enableBioToggle, setEnableBioToggle] = useState(false);
 
-  // Define performLogin first
   const performLogin = useCallback(async (loginEmail: string, loginPass: string, isManual: boolean = false) => {
     try {
       const res = await fetch("/api/auth/create-session", {
@@ -51,12 +50,8 @@ export default function SignInPage() {
           await Preferences.set({ key: "user_password", value: loginPass });
         } catch (bioErr: any) {
           console.error("Failed to enable biometrics:", bioErr);
-          setError(`Biometric Setup Error: ${bioErr.message || "Could not save credentials"}`);
-          setLoading(false);
-          return;
         }
       } else if (isManual && Capacitor.isNativePlatform() && !enableBioToggle) {
-        // If toggle is OFF manually, clear stored credentials
         await Preferences.remove({ key: "biometric_enabled" });
         await Preferences.remove({ key: "user_email" });
         await Preferences.remove({ key: "user_password" });
@@ -78,7 +73,7 @@ export default function SignInPage() {
       window.location.href = destination;
     } catch (err) {
       console.error("Login Fetch Error:", err);
-      setError("Unable to connect to the authentication server.");
+      setError("Unable to connect to the authentication server. Check Internet or CORS.");
       setLoading(false);
     }
   }, [enableBioToggle]);
@@ -106,12 +101,11 @@ export default function SignInPage() {
         await performLogin(storedEmail, storedPassword);
       } catch (err: any) {
         console.error("Biometric Verification Error:", err);
-        setError(`Biometric Auth Failed: ${err.message || "User cancelled or not recognized"}`);
+        setError(`Fingerprint Error: ${err.message || "Try manual login"}`);
         setLoading(false);
       }
     } catch (err: any) {
       console.error("Biometric Login Flow Error:", err);
-      setError(`Biometric System Error: ${err.message || "Unknown error"}`);
       setLoading(false);
     }
   }, [performLogin]);
@@ -124,21 +118,24 @@ export default function SignInPage() {
       if (native) {
         try {
           const result = await NativeBiometric.isAvailable();
+          console.log("Biometric Available:", result.isAvailable);
+          
           if (result.isAvailable) {
             setBiometricAvailable(true);
             const { value } = await Preferences.get({ key: "biometric_enabled" });
             if (value === "true") {
               setBiometricEnabled(true);
               setEnableBioToggle(true);
-              // 🚀 Auto-trigger biometric login on load
-              setTimeout(() => {
-                handleBiometricLogin();
-              }, 800);
+              // Auto-trigger
+              handleBiometricLogin();
             }
           }
         } catch (err: any) {
-          console.error("Biometric availability error:", err);
-          setError(`Biometric Availability Error: ${err.message || "Device check failed"}`);
+          console.error("Biometric check error:", err);
+          // Show error for debugging
+          if (Capacitor.isNativePlatform()) {
+             setError(`Plugin Error: ${err.message}`);
+          }
         }
       }
     };
@@ -155,11 +152,9 @@ export default function SignInPage() {
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
       
-      {/* 🔹 Left Panel: Branding (Visible on Desktop) */}
+      {/* branding panel */}
       <div className="hidden md:flex flex-col justify-between w-1/2 bg-[#0a2c4e] text-white p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full blur-[150px] opacity-20 -translate-y-1/2 translate-x-1/3"></div>
-        
         <div className="relative z-10">
           <Link href="/" className="inline-flex items-center gap-2 text-blue-300 hover:text-white transition-colors text-sm font-bold mb-8 uppercase tracking-widest">
             <ArrowLeft size={16} /> Back to Portal
@@ -168,95 +163,69 @@ export default function SignInPage() {
             <div className="relative w-14 h-14 bg-white rounded-full p-1 shadow-xl shrink-0">
                <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
             </div>
-            <div>
-                <h1 className="text-2xl font-black tracking-tight">SINDH POLICE</h1>
-                <p className="text-[10px] font-bold text-blue-400 uppercase tracking-[0.3em]">Official Access</p>
-            </div>
+            <h1 className="text-2xl font-black tracking-tight uppercase">SINDH POLICE</h1>
           </div>
         </div>
-
-        <div className="relative z-10 space-y-6 max-w-lg">
-           <h2 className="text-5xl font-black leading-[1.1] tracking-tighter">
-             Digital Justice <br />
-             <span className="text-blue-400">Begins Here.</span>
-           </h2>
-           <p className="text-slate-300 text-lg leading-relaxed font-medium">
-             This secure portal is reserved for authorized personnel of Sindh Police. Please authenticate using your official credentials to access the management systems.
-           </p>
-           <div className="flex gap-4 pt-4">
-             <div className="flex items-center gap-2 px-5 py-2.5 bg-white/10 rounded-xl border border-white/10 text-xs font-bold uppercase tracking-widest text-blue-100">
-                <ShieldCheck size={16} className="text-blue-400" /> Authorized Only
-             </div>
-           </div>
-        </div>
-
+        <h2 className="text-5xl font-black leading-[1.1] tracking-tighter">
+          Digital Justice <br />
+          <span className="text-blue-400">Begins Here.</span>
+        </h2>
         <div className="relative z-10 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
           © {new Date().getFullYear()} Sindh Police Software Section
         </div>
       </div>
 
-      {/* 🔹 Right Panel: Login Form */}
-      <div className="w-full md:w-1/2 flex items-center justify-center p-2 md:p-12 relative bg-white lg:bg-slate-50 min-h-screen md:min-h-0">
-         <div className="absolute top-6 left-6 md:hidden">
-            <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors text-xs font-bold uppercase tracking-wider">
-              <ArrowLeft size={16} /> Home
-            </Link>
-         </div>
-
-         <div className="w-full max-w-full sm:max-w-md px-4 space-y-6 py-12">
+      {/* Login Form */}
+      <div className="w-full md:w-1/2 flex items-center justify-center p-4 md:p-12 bg-white min-h-screen md:min-h-0">
+         <div className="w-full max-w-md space-y-6">
             <div className="text-center md:text-left space-y-2">
-               <div className="flex justify-center md:hidden mb-6">
-                  <div className="relative w-16 h-16 bg-white rounded-full p-2 shadow-2xl border border-slate-100 ring-4 ring-blue-50/50">
-                    <Image src="/logo.png" alt="Sindh Police" fill className="object-contain p-1.5" priority />
-                  </div>
-               </div>
                <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Officer Login</h2>
-               <p className="text-slate-500 font-medium text-sm md:text-base leading-snug">Authorized Personnel Access Only</p>
+               <p className="text-slate-500 font-medium text-sm">Authorized Personnel Access Only</p>
             </div>
 
             <form onSubmit={loginUser} className="space-y-5">
                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</Label>
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Email Address</Label>
                   <div className="relative group">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600" />
                     <Input 
-                      id="email" 
                       type="email" 
                       placeholder="name@sindhpolice.gov.pk" 
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      className="pl-12 h-14 rounded-2xl bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all font-medium text-slate-700 w-full"
+                      className="pl-12 h-14 rounded-2xl bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-600 transition-all"
                     />
                   </div>
                </div>
 
                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</Label>
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Password</Label>
                   <div className="relative group">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600" />
                     <Input 
-                      id="password" 
                       type="password" 
                       placeholder="••••••••" 
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="pl-12 h-14 rounded-2xl bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all font-medium text-slate-700 w-full"
+                      className="pl-12 h-14 rounded-2xl bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-600 transition-all"
                     />
                   </div>
                </div>
 
-               {isNative && biometricAvailable && (
-                 <div className="flex items-center justify-between px-1 py-1">
+               {/* Toggle Section - Forced visible if native for debugging */}
+               {isNative && (
+                 <div className="flex items-center justify-between px-1 py-1 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                    <div className="flex flex-col gap-0.5">
-                     <Label htmlFor="bio-toggle" className="text-[11px] font-bold text-slate-700">Remember with Fingerprint</Label>
+                     <Label htmlFor="bio-toggle" className="text-[11px] font-bold text-slate-700 uppercase">Enable Biometric Login</Label>
                      <p className="text-[9px] text-slate-400 font-medium">Auto-login on next app launch</p>
                    </div>
                    <Switch 
                      id="bio-toggle" 
                      checked={enableBioToggle} 
                      onCheckedChange={setEnableBioToggle}
+                     disabled={!biometricAvailable}
                      className="data-[state=checked]:bg-blue-600"
                    />
                  </div>
@@ -273,7 +242,7 @@ export default function SignInPage() {
                  <Button 
                    type="submit" 
                    disabled={loading}
-                   className="flex-1 h-12 rounded-xl bg-[#0a2c4e] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs shadow-md active:scale-[0.98] transition-all"
+                   className="flex-1 h-12 rounded-xl bg-[#0a2c4e] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs shadow-md transition-all"
                  >
                    {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> <span>Validating...</span></> : "Sign In"}
                  </Button>
@@ -284,18 +253,13 @@ export default function SignInPage() {
                      onClick={handleBiometricLogin}
                      disabled={loading}
                      variant="outline"
-                     className="w-12 h-12 rounded-xl border-slate-200 flex items-center justify-center p-0 hover:bg-blue-50 hover:text-blue-600 transition-all active:scale-95"
-                     title="Login with Fingerprint"
+                     className="w-12 h-12 rounded-xl border-slate-200 flex items-center justify-center p-0 hover:bg-blue-50 text-blue-600 transition-all shadow-sm"
                    >
                      <Fingerprint size={24} />
                    </Button>
                  )}
                </div>
             </form>
-
-            <div className="text-center text-[9px] font-bold text-slate-400 uppercase tracking-widest pt-4">
-               Secure Official Portal
-            </div>
          </div>
       </div>
 
