@@ -161,7 +161,18 @@ export default function SignInPage() {
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
       
-      {/* branding panel */}
+      {/* 📱 Mobile Branding (Logo only visible on mobile) */}
+      <div className="md:hidden flex items-center gap-4 bg-[#0a2c4e] text-white p-6 shadow-xl border-b border-blue-900/50">
+          <div className="relative w-12 h-12 bg-white rounded-full p-1 shadow-lg shrink-0">
+             <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
+          </div>
+          <div>
+              <h1 className="text-xl font-black tracking-tight uppercase leading-none">SINDH POLICE</h1>
+              <p className="text-[9px] font-bold text-blue-300 uppercase tracking-widest mt-1">Officer Login Portal</p>
+          </div>
+      </div>
+
+      {/* 💻 Desktop Branding Panel */}
       <div className="hidden md:flex flex-col justify-between w-1/2 bg-[#0a2c4e] text-white p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="relative z-10">

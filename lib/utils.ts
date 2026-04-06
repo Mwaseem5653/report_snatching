@@ -9,20 +9,19 @@ export function cn(...inputs: ClassValue[]) {
 export function getApiUrl(path: string) {
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
 
-  // If we are in the browser (web), always use relative paths
-  if (typeof window !== "undefined" && !Capacitor.isNativePlatform()) {
-    return cleanPath;
-  }
+  // If we're on the server (SSR), return as-is
+  if (typeof window === "undefined") return cleanPath;
 
-  // If we are on Android/Native
+  // On Native Android/iOS
   if (Capacitor.isNativePlatform()) {
-    // If the app is hosted at kpts.com.pk already, use relative
-    if (typeof window !== "undefined" && window.location.host.includes("kpts.com.pk")) {
-        return cleanPath;
+    // If the app is already loading from our production domain, use relative paths (prevents CORS)
+    if (window.location.host.includes("kpts.com.pk")) {
+      return cleanPath;
     }
     // Otherwise, point to the production server
     return `https://kpts.com.pk${cleanPath}`;
   }
 
+  // On Web browser, always use relative
   return cleanPath;
 }
