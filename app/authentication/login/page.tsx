@@ -103,26 +103,31 @@ export default function SignInPage() {
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
       
-      {/* 💻 Desktop Branding Panel (Hidden on mobile) */}
+      {/* 💻 Desktop Branding Panel (Side Panel) */}
       <div className="hidden md:flex flex-col justify-between w-1/2 bg-[#0a2c4e] text-white p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="relative z-10">
-          <Link href="/" className="inline-flex items-center gap-2 text-blue-300 hover:text-white transition-colors text-sm font-bold mb-8 uppercase tracking-widest">
+          <Link href="/" className="inline-flex items-center gap-2 text-blue-300 hover:text-white transition-colors text-sm font-bold mb-12 uppercase tracking-widest">
             <ArrowLeft size={16} /> Back to Portal
           </Link>
-          <div className="flex items-center gap-4 mb-6">
-            <div className="relative w-14 h-14 bg-white rounded-full p-1 shadow-xl shrink-0">
-               <Image src="/logo.png" alt="Sindh Police" fill className="object-contain" priority />
-            </div>
-            <h1 className="text-2xl font-black tracking-tight uppercase">SINDH POLICE</h1>
+          
+          <div className="space-y-4">
+            <h1 className="text-xl font-bold tracking-widest uppercase text-blue-400">Sindh Police</h1>
+            <h2 className="text-6xl font-black leading-[1.1] tracking-tighter">
+              Digital Justice <br />
+              <span className="text-blue-300">Begins Here.</span>
+            </h2>
+            <p className="text-blue-100/60 text-lg font-medium max-w-md leading-relaxed">
+              Advancing law enforcement through cutting-edge digital intelligence and centralized data analytics.
+            </p>
           </div>
         </div>
-        <h2 className="text-5xl font-black leading-[1.1] tracking-tighter">
-          Digital Justice <br />
-          <span className="text-blue-400">Begins Here.</span>
-        </h2>
-        <div className="relative z-10 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-          © {new Date().getFullYear()} Sindh Police Software Section
+
+        <div className="relative z-10 space-y-1">
+            <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Official Command & Control Portal</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+              © {new Date().getFullYear()} Sindh Police Software Section
+            </p>
         </div>
       </div>
 
