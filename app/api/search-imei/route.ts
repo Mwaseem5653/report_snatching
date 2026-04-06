@@ -8,10 +8,10 @@ const SECRET = process.env.SESSION_JWT_SECRET!;
 
 export async function POST(req: NextRequest) {
   try {
-    const { imei } = await req.json();
+    const { imei, allImeis: requestedImeis } = await req.json();
 
-    if (!imei) {
-      return NextResponse.json({ success: false, message: "IMEI is required" }, { status: 400 });
+    if (!imei && (!requestedImeis || !Array.isArray(requestedImeis))) {
+      return NextResponse.json({ success: false, message: "IMEI or allImeis array is required" }, { status: 400 });
     }
 
     // 1. Get Session for Logging
@@ -27,44 +27,38 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const cleanIMEI = imei.trim();
     const appsRef = adminDb.collection("applications");
+    let query: any;
+    let searchLabel: string;
 
-    // 2. Search for ACTIVE reports only (Ignore 'complete' ones)
-    // We fetch any report matching the IMEI
-    let snapshot = await appsRef.where("imei1", "==", cleanIMEI).get();
-    if (snapshot.empty) {
-      snapshot = await appsRef.where("imei2", "==", cleanIMEI).get();
+    if (requestedImeis && Array.isArray(requestedImeis) && requestedImeis.length > 0) {
+        // Search for any of the requested IMEIs in the allImeis array field
+        query = appsRef.where("allImeis", "array-contains-any", requestedImeis);
+        searchLabel = requestedImeis.join(", ");
+    } else {
+        const cleanIMEI = imei.trim();
+        // Search for the single IMEI in the allImeis array field
+        query = appsRef.where("allImeis", "array-contains", cleanIMEI);
+        searchLabel = cleanIMEI;
     }
 
-    // 🚀 Logic: A match is only valid if at least one report is NOT 'complete'
-    const allReports = snapshot.docs.map((doc: any) => doc.data());
+    // 2. Search for ACTIVE reports using the 'allImeis' array field
+    // A match is only valid if at least one report is NOT 'complete'
+    // This includes 'pending' and 'processed' statuses.
+    const snapshot = await query.get();
+    
+    const allReports = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
     const activeReport = allReports.find((report: any) => report.status !== "complete");
 
     const isMatch = !!activeReport;
-    const applicationId = snapshot.empty ? null : snapshot.docs[0].id;
+    const applicationId = activeReport ? activeReport.id : null;
 
-    // 3. LOG EVERY SEARCH
-    if (currentUser && currentUser.role !== "super_admin") {
-        await adminDb.collection("search_history").add({
-            imei: cleanIMEI,
-            searchedBy: {
-                uid: currentUser.uid,
-                name: currentUser.name || "Unknown",
-                role: currentUser.role,
-                district: currentUser.district || "N/A",
-                ps: currentUser.ps || "N/A",
-            },
-            timestamp: admin.firestore.Timestamp.now(),
-            wasMatch: isMatch
-        });
-    }
-
-    // 4. LOG THE RECOVERY MATCH (Only for Active/Stolen devices)
+    // 3. LOG THE RECOVERY MATCH (Only for Active/Stolen devices)
+    // Only store data if the IMEI matched an active report
     const restrictedRoles = ["super_admin", "admin", "officer"];
     if (isMatch && currentUser && !restrictedRoles.includes(currentUser.role)) {
         await adminDb.collection("matched_imeis").add({
-            imei: cleanIMEI,
+            imei: searchLabel,
             applicationId,
             applicantName: activeReport?.applicantName || "N/A",
             crimeHead: activeReport?.crimeHead || "N/A",
@@ -83,7 +77,7 @@ export async function POST(req: NextRequest) {
         });
     }
 
-    // 5. Response logic
+    // 4. Response logic
     if (!isMatch) {
       return NextResponse.json({ success: false, message: "No active record found" }, { status: 404 });
     }

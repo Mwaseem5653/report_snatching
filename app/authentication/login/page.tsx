@@ -1,29 +1,38 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowLeft, ShieldCheck, AlertCircle, Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+
+// Capacitor Imports
+import { Capacitor } from "@capacitor/core";
+import { NativeBiometric } from "@capgo/capacitor-native-biometric";
+import { Preferences } from "@capacitor/preferences";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  
+  // Biometric States
+  const [isNative, setIsNative] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [enableBioToggle, setEnableBioToggle] = useState(false);
 
-  const loginUser = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Define performLogin first
+  const performLogin = useCallback(async (loginEmail: string, loginPass: string, isManual: boolean = false) => {
     try {
-      setLoading(true);
-      setError("");
-
       const res = await fetch("/api/auth/create-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: loginEmail, password: loginPass }),
       });
 
       const data = await res.json();
@@ -34,7 +43,26 @@ export default function SignInPage() {
         return;
       }
 
-      // 🛡️ ROLE-BASED REDIRECTION (Original logic)
+      // 🔐 If toggle is ON or was already enabled, save/update credentials
+      if (isManual && Capacitor.isNativePlatform() && enableBioToggle) {
+        try {
+          await Preferences.set({ key: "biometric_enabled", value: "true" });
+          await Preferences.set({ key: "user_email", value: loginEmail });
+          await Preferences.set({ key: "user_password", value: loginPass });
+        } catch (bioErr: any) {
+          console.error("Failed to enable biometrics:", bioErr);
+          setError(`Biometric Setup Error: ${bioErr.message || "Could not save credentials"}`);
+          setLoading(false);
+          return;
+        }
+      } else if (isManual && Capacitor.isNativePlatform() && !enableBioToggle) {
+        // If toggle is OFF manually, clear stored credentials
+        await Preferences.remove({ key: "biometric_enabled" });
+        await Preferences.remove({ key: "user_email" });
+        await Preferences.remove({ key: "user_password" });
+      }
+
+      // 🛡️ ROLE-BASED REDIRECTION
       const role = (data.role || "").toLowerCase();
       const ROLE_PATHS: Record<string, string> = {
         super_admin: "/dashboard/super-admin",
@@ -48,12 +76,80 @@ export default function SignInPage() {
 
       const destination = ROLE_PATHS[role] || "/dashboard/normal-user";
       window.location.href = destination;
-      
-    } catch (err: any) {
-      console.error("Login Error:", err);
+    } catch (err) {
+      console.error("Login Fetch Error:", err);
       setError("Unable to connect to the authentication server.");
       setLoading(false);
     }
+  }, [enableBioToggle]);
+
+  const handleBiometricLogin = useCallback(async () => {
+    try {
+      const { value: isEnabled } = await Preferences.get({ key: "biometric_enabled" });
+      if (isEnabled !== "true") return;
+
+      const { value: storedEmail } = await Preferences.get({ key: "user_email" });
+      const { value: storedPassword } = await Preferences.get({ key: "user_password" });
+
+      if (!storedEmail || !storedPassword) return;
+
+      setLoading(true);
+      setError("");
+
+      try {
+        await NativeBiometric.verifyIdentity({
+          reason: "Log in to your account",
+          title: "Biometric Login",
+          subtitle: "Welcome back!",
+          description: "Verify your identity to continue",
+        });
+        await performLogin(storedEmail, storedPassword);
+      } catch (err: any) {
+        console.error("Biometric Verification Error:", err);
+        setError(`Biometric Auth Failed: ${err.message || "User cancelled or not recognized"}`);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      console.error("Biometric Login Flow Error:", err);
+      setError(`Biometric System Error: ${err.message || "Unknown error"}`);
+      setLoading(false);
+    }
+  }, [performLogin]);
+
+  useEffect(() => {
+    const checkBiometrics = async () => {
+      const native = Capacitor.isNativePlatform();
+      setIsNative(native);
+
+      if (native) {
+        try {
+          const result = await NativeBiometric.isAvailable();
+          if (result.isAvailable) {
+            setBiometricAvailable(true);
+            const { value } = await Preferences.get({ key: "biometric_enabled" });
+            if (value === "true") {
+              setBiometricEnabled(true);
+              setEnableBioToggle(true);
+              // 🚀 Auto-trigger biometric login on load
+              setTimeout(() => {
+                handleBiometricLogin();
+              }, 800);
+            }
+          }
+        } catch (err: any) {
+          console.error("Biometric availability error:", err);
+          setError(`Biometric Availability Error: ${err.message || "Device check failed"}`);
+        }
+      }
+    };
+    checkBiometrics();
+  }, [handleBiometricLogin]);
+
+  const loginUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    await performLogin(email, password, true);
   };
 
   return (
@@ -151,6 +247,21 @@ export default function SignInPage() {
                   </div>
                </div>
 
+               {isNative && biometricAvailable && (
+                 <div className="flex items-center justify-between px-1 py-1">
+                   <div className="flex flex-col gap-0.5">
+                     <Label htmlFor="bio-toggle" className="text-[11px] font-bold text-slate-700">Remember with Fingerprint</Label>
+                     <p className="text-[9px] text-slate-400 font-medium">Auto-login on next app launch</p>
+                   </div>
+                   <Switch 
+                     id="bio-toggle" 
+                     checked={enableBioToggle} 
+                     onCheckedChange={setEnableBioToggle}
+                     className="data-[state=checked]:bg-blue-600"
+                   />
+                 </div>
+               )}
+
                {error && (
                  <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex items-start gap-3 text-red-700 text-xs font-medium animate-in fade-in slide-in-from-top-2">
                     <AlertCircle size={14} className="shrink-0 mt-0.5" /> 
@@ -158,13 +269,28 @@ export default function SignInPage() {
                  </div>
                )}
 
-               <Button 
-                 type="submit" 
-                 disabled={loading}
-                 className="w-full h-12 rounded-xl bg-[#0a2c4e] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs shadow-md active:scale-[0.98] transition-all"
-               >
-                 {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> <span>Validating...</span></> : "Sign In"}
-               </Button>
+               <div className="flex gap-2">
+                 <Button 
+                   type="submit" 
+                   disabled={loading}
+                   className="flex-1 h-12 rounded-xl bg-[#0a2c4e] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs shadow-md active:scale-[0.98] transition-all"
+                 >
+                   {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> <span>Validating...</span></> : "Sign In"}
+                 </Button>
+
+                 {isNative && biometricAvailable && biometricEnabled && (
+                   <Button
+                     type="button"
+                     onClick={handleBiometricLogin}
+                     disabled={loading}
+                     variant="outline"
+                     className="w-12 h-12 rounded-xl border-slate-200 flex items-center justify-center p-0 hover:bg-blue-50 hover:text-blue-600 transition-all active:scale-95"
+                     title="Login with Fingerprint"
+                   >
+                     <Fingerprint size={24} />
+                   </Button>
+                 )}
+               </div>
             </form>
 
             <div className="text-center text-[9px] font-bold text-slate-400 uppercase tracking-widest pt-4">

@@ -13,10 +13,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { uploadFileToStorage } from "@/lib/uploadHelper";
 import { addApplication } from "@/lib/applicationApi";
 import { locationData } from "@/components/location/location";
-import { CheckCircle2, PhoneForwarded, Plus, Smartphone, Trash2 } from "lucide-react";
+import { CheckCircle2, PhoneForwarded, Plus, Smartphone, Trash2, Camera, Image as ImageIcon, X } from "lucide-react";
+
+// Capacitor Imports
+import { Capacitor } from "@capacitor/core";
+import { Camera as CapCamera, CameraResultType, CameraSource } from "@capacitor/camera";
 
 type AddApplicationFormProps = {
   currentUser?: any;
@@ -26,6 +35,10 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // Image Picker States
+  const [showPicker, setShowPicker] = useState(false);
+  const [activeField, setActiveField] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     applicantName: "",
@@ -95,6 +108,42 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
     if (e.target.files && e.target.files[0]) {
       setFormData((prev) => ({ ...prev, [field]: e.target.files![0] }));
+    }
+  };
+
+  // 📸 CAPACITOR CAMERA / GALLERY LOGIC
+  const triggerPicker = (field: string) => {
+    if (Capacitor.isNativePlatform()) {
+      setActiveField(field);
+      setShowPicker(true);
+    }
+  };
+
+  const captureImage = async (source: CameraSource) => {
+    try {
+      const image = await CapCamera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.Base64,
+        source: source,
+      });
+
+      if (image && image.base64String && activeField) {
+        // Convert base64 to File object
+        const byteCharacters = atob(image.base64String);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: `image/${image.format}` });
+        const file = new File([blob], `captured_image.${image.format}`, { type: `image/${image.format}` });
+
+        setFormData((prev) => ({ ...prev, [activeField]: file }));
+        setShowPicker(false);
+      }
+    } catch (error) {
+      console.error("Camera Error:", error);
     }
   };
 
@@ -367,11 +416,35 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">Box Picture (Optional)</Label>
-                    <Input type="file" accept="image/*" onChange={(e) => handleFileChange(e, "boxPicture")} className="cursor-pointer" />
+                    {Capacitor.isNativePlatform() ? (
+                        <div 
+                          onClick={() => triggerPicker("boxPicture")}
+                          className="h-11 flex items-center justify-between px-4 rounded-xl border-slate-200 bg-slate-50/50 cursor-pointer hover:bg-slate-100 transition-all"
+                        >
+                            <span className="text-xs font-bold text-slate-600 truncate mr-2">
+                                {formData.boxPicture ? (formData.boxPicture as File).name : "Select Box Picture"}
+                            </span>
+                            <Camera size={18} className="text-slate-400 shrink-0" />
+                        </div>
+                    ) : (
+                        <Input type="file" accept="image/*" onChange={(e) => handleFileChange(e, "boxPicture")} className="cursor-pointer" />
+                    )}
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">Attested Application *</Label>
-                    <Input type="file" accept="image/*,application/pdf" onChange={(e) => handleFileChange(e, "attestedApplication")} required className="cursor-pointer" />
+                    {Capacitor.isNativePlatform() ? (
+                        <div 
+                          onClick={() => triggerPicker("attestedApplication")}
+                          className="h-11 flex items-center justify-between px-4 rounded-xl border-slate-200 bg-slate-50/50 cursor-pointer hover:bg-slate-100 transition-all"
+                        >
+                            <span className="text-xs font-bold text-slate-600 truncate mr-2">
+                                {formData.attestedApplication ? (formData.attestedApplication as File).name : "Select Attested Application"}
+                            </span>
+                            <Camera size={18} className="text-slate-400 shrink-0" />
+                        </div>
+                    ) : (
+                        <Input type="file" accept="image/*,application/pdf" onChange={(e) => handleFileChange(e, "attestedApplication")} required className="cursor-pointer" />
+                    )}
                 </div>
             </div>
         </section>
@@ -382,6 +455,38 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
             </Button>
         </div>
       </form>
+
+      {/* 📸 Image Source Picker Dialog */}
+      <Dialog open={showPicker} onOpenChange={setShowPicker}>
+        <DialogContent className="sm:max-w-[400px] rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl">
+            <div className="bg-[#0a2c4e] p-6 text-center text-white relative">
+                <button onClick={() => setShowPicker(false)} className="absolute top-4 right-4 text-white/60 hover:text-white"><X size={20} /></button>
+                <DialogTitle className="text-lg font-black uppercase tracking-tight">Select Image Source</DialogTitle>
+            </div>
+            <div className="p-6 grid grid-cols-2 gap-4">
+                <button 
+                  type="button"
+                  onClick={() => captureImage(CameraSource.Camera)}
+                  className="flex flex-col items-center justify-center gap-3 p-6 rounded-2xl bg-blue-50 hover:bg-blue-100 transition-all group"
+                >
+                    <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg group-active:scale-90 transition-transform">
+                        <Camera size={24} />
+                    </div>
+                    <span className="text-xs font-black uppercase text-blue-900">Camera</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => captureImage(CameraSource.Photos)}
+                  className="flex flex-col items-center justify-center gap-3 p-6 rounded-2xl bg-slate-50 hover:bg-slate-100 transition-all group"
+                >
+                    <div className="w-12 h-12 rounded-full bg-slate-600 text-white flex items-center justify-center shadow-lg group-active:scale-90 transition-transform">
+                        <ImageIcon size={24} />
+                    </div>
+                    <span className="text-xs font-black uppercase text-slate-900">Gallery</span>
+                </button>
+            </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
