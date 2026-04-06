@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { updateApplication, deleteApplication } from "@/lib/applicationApi";
 import { Search, Plus, Filter, RotateCcw, FileText, ChevronRight, CheckCircle2, ClipboardList, History, X, Smartphone, MapPin, User, ShieldCheck, Activity, Trash2, AlertTriangle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 import { locationData } from "@/components/location/location";
 
 function DetailRow({ label, value, icon: Icon }: { label: string; value: any; icon?: any }) {
@@ -58,7 +58,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
 
   useEffect(() => {
     async function fetchSession() {
-      const res = await fetch("/api/auth/create-session");
+      const res = await fetch(getApiUrl("/api/auth/create-session"));
       const data = await res.json();
       if (data.authenticated) setCurrentUser(data);
     }
@@ -81,7 +81,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
           params.period = "all";
       }
 
-      const res = await fetch(`/api/applications?${new URLSearchParams(params).toString()}`);
+      const res = await fetch(getApiUrl(`/api/applications?${new URLSearchParams(params).toString()}`));
       const data = await res.json();
       let apps = data.applications || [];
 

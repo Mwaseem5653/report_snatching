@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { ShieldCheck, Loader2, Download, Search } from "lucide-react";
 import { toast } from "sonner";
+import { getApiUrl } from "@/lib/utils";
 
 export default function PtaServicesClient() {
   const [input, setInput] = useState("");
@@ -22,7 +23,7 @@ export default function PtaServicesClient() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/tools/pta-lookup", {
+      const res = await fetch(getApiUrl("/api/tools/pta-lookup"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ numbers }),

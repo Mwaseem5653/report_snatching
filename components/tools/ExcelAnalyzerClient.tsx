@@ -10,7 +10,7 @@ import { FileSpreadsheet, Loader2, Download, AlertTriangle, Settings2, Terminal,
 import { toast } from "sonner";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/uploadHelper";
 import AlertModal from "@/components/ui/alert-modal";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 import JSZip from "jszip";
 
@@ -48,7 +48,7 @@ export default function ExcelAnalyzerClient() {
   useEffect(() => {
     const fetchSession = async () => {
       try {
-        const res = await fetch("/api/auth/create-session");
+        const res = await fetch(getApiUrl("/api/auth/create-session"));
         const data = await res.json();
         if (data.authenticated) {
           setSession(data);
@@ -118,7 +118,7 @@ export default function ExcelAnalyzerClient() {
 
     // 🚀 PROACTIVE CHECK: Fetch live session to check tokens before upload
     try {
-        const sRes = await fetch("/api/auth/create-session");
+        const sRes = await fetch(getApiUrl("/api/auth/create-session"));
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
             if ((sData.tokens || 0) < totalGeneralRequired) {
@@ -179,7 +179,7 @@ export default function ExcelAnalyzerClient() {
             formData.append("enable_intel", enableIntel.toString());
             formData.append("include_images", includeImages.toString());
 
-            const res = await fetch("/api/tools/analyze-excel", {
+            const res = await fetch(getApiUrl("/api/tools/analyze-excel"), {
                 method: "POST",
                 body: formData,
             });

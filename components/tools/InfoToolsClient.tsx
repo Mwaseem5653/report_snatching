@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Car, Smartphone, Search, Loader2, Download, AlertCircle, Copy, RotateCcw } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { cn, getApiUrl } from "@/lib/utils";
 import AlertModal from "@/components/ui/alert-modal";
 
 export default function InfoToolsClient() {
@@ -43,7 +44,7 @@ export default function InfoToolsClient() {
 
     // 🚀 PROACTIVE CHECK
     try {
-        const sRes = await fetch("/api/auth/create-session");
+        const sRes = await fetch(getApiUrl("/api/auth/create-session"));
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
             if ((sData.tokens || 0) < targets.length) {
@@ -61,7 +62,7 @@ export default function InfoToolsClient() {
     setLoadingSim(true);
     setSimResults([]);
     try {
-      const res = await fetch("/api/tools/sim-info", {
+      const res = await fetch(getApiUrl("/api/tools/sim-info"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone_numbers: targets }),
@@ -96,7 +97,7 @@ export default function InfoToolsClient() {
 
     // 🚀 PROACTIVE CHECK
     try {
-        const sRes = await fetch("/api/auth/create-session");
+        const sRes = await fetch(getApiUrl("/api/auth/create-session"));
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
             if ((sData.tokens || 0) < 1) {
@@ -114,7 +115,7 @@ export default function InfoToolsClient() {
     setLoadingVehicle(true);
     setVehicleResult(null);
     try {
-      const res = await fetch("/api/tools/vehicle-info", {
+      const res = await fetch(getApiUrl("/api/tools/vehicle-info"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reg_no: regNo, category }),

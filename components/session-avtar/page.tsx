@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, User, ChevronDown, Bell, Coins, Menu, X, Smartphone, ShieldCheck } from "lucide-react";
 import Image from "next/image";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 type Session = {
   authenticated: boolean;
@@ -34,7 +34,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
 
   const fetchSession = async () => {
     try {
-      const res = await fetch("/api/auth/create-session", { cache: "no-store" });
+      const res = await fetch(getApiUrl("/api/auth/create-session"), { cache: "no-store" });
       const data = await res.json();
       if (data.authenticated) {
           setSession(data);
@@ -51,7 +51,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
 
   const fetchNotifications = async () => {
     try {
-        const res = await fetch("/api/notifications/count");
+        const res = await fetch(getApiUrl("/api/notifications/count"));
         const data = await res.json();
         if (data.success) setNotifCount(data.count || 0);
     } catch (err) {}
@@ -81,7 +81,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
 
   const handleLogout = () => {
     window.location.href = "/";
-    fetch("/api/auth/logout", { method: "POST" });
+    fetch(getApiUrl("/api/auth/logout"), { method: "POST" });
   };
 
   const initials = (name?: string | null) => {

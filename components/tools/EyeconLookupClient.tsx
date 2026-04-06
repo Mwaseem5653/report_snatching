@@ -18,7 +18,7 @@ import {
   Plus
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -53,7 +53,7 @@ export default function EyeconLookupClient() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/tools/lookup/eyecon", {
+      const res = await fetch(getApiUrl("/api/tools/lookup/eyecon"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ numbers }),

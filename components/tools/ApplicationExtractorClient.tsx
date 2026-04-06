@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import ExcelJS from "exceljs/dist/exceljs.min.js";
 import AlertModal from "@/components/ui/alert-modal";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/uploadHelper";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 type ExtendedFile = File & {
   cloudinaryUrl?: string;
@@ -77,7 +77,7 @@ export default function ApplicationExtractorClient() {
     formData.append("action", "count");
     formData.append("cloudinaryPublicId", cloudinaryRef.publicId);
 
-    const res = await fetch("/api/tools/extract-application", { 
+    const res = await fetch(getApiUrl("/api/tools/extract-application"), { 
         method: "POST", 
         body: formData,
         signal: abortControllerRef.current?.signal 
@@ -96,7 +96,7 @@ export default function ApplicationExtractorClient() {
     formData.append("action", "process");
     formData.append("page", page.toString());
 
-    const res = await fetch("/api/tools/extract-application", {
+    const res = await fetch(getApiUrl("/api/tools/extract-application"), {
       method: "POST",
       body: formData,
       signal: abortControllerRef.current?.signal

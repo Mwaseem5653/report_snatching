@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 import ExcelJS from "exceljs/dist/exceljs.min.js";
 import { toast } from "sonner";
 
@@ -62,7 +62,7 @@ export default function AdvancedReportClient() {
             params.append("status", "all"); // We filter status in-memory or we can send it
             if (filterPs !== "all") params.append("ps", filterPs);
 
-            const resApps = await fetch(`/api/applications?${params.toString()}`);
+            const resApps = await fetch(getApiUrl(`/api/applications?${params.toString()}`));
             const dataApps = await resApps.json();
 
             if (dataApps.success) {
@@ -83,7 +83,7 @@ export default function AdvancedReportClient() {
             }
 
             // Fetch Officers for filter
-            const resOfficers = await fetch("/api/get-users?role=officer");
+            const resOfficers = await fetch(getApiUrl("/api/get-users?role=officer"));
             const dataOfficers = await resOfficers.json();
             if (dataOfficers.success) {
                 setOfficers(dataOfficers.users || []);

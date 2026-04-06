@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Coins, History, Plus, Lock, ShieldAlert, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 export default function TokenManagement() {
     const [isVerified, setIsVerified] = useState(false);
@@ -20,7 +20,7 @@ export default function TokenManagement() {
 
     const fetchData = useCallback(async () => {
         try {
-            const res = await fetch("/api/admin/system-tokens");
+            const res = await fetch(getApiUrl("/api/admin/system-tokens"));
             const data = await res.json();
             if (res.ok) {
                 setPool(data.pool);
@@ -42,7 +42,7 @@ export default function TokenManagement() {
     const handleVerify = async () => {
         setLoading(true);
         try {
-            const res = await fetch("/api/admin/system-tokens", {
+            const res = await fetch(getApiUrl("/api/admin/system-tokens"), {
                 method: "POST",
                 body: JSON.stringify({ password, action: "verify_only" })
             });
@@ -93,7 +93,7 @@ export default function TokenManagement() {
         
         setLoading(true);
         try {
-            const res = await fetch("/api/admin/system-tokens", {
+            const res = await fetch(getApiUrl("/api/admin/system-tokens"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ password, eyeconAmount: addEyecon, generalAmount: addGeneral, action: "add" })

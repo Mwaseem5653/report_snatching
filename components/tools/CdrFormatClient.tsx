@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import AlertModal from "@/components/ui/alert-modal";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 const TEMPLATES = [
   { name: "Jazz CDR 6 Month", file: "jazz cdr 6 MONTH.html", operatorKey: "Jazz" },
@@ -83,7 +83,7 @@ export default function CdrFormatClient() {
     if (useApiLookup) {
         // 🚀 PROACTIVE CHECK
         try {
-            const sRes = await fetch("/api/auth/create-session");
+            const sRes = await fetch(getApiUrl("/api/auth/create-session"));
             const sData = await sRes.json();
             if (sData.authenticated && sData.role !== "super_admin") {
                 if ((sData.tokens || 0) < 5) {
@@ -111,7 +111,7 @@ export default function CdrFormatClient() {
     }
 
     try {
-        const res = await fetch("/api/tools/pta-lookup", {
+        const res = await fetch(getApiUrl("/api/tools/pta-lookup"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ numbers }),
@@ -150,7 +150,7 @@ export default function CdrFormatClient() {
 
   const fetchInjectedHtml = async (templateFile: string, operatorKey: string) => {
     try {
-        const res = await fetch(`/templates/cdr/${templateFile}`);
+        const res = await fetch(getApiUrl(`/templates/cdr/${templateFile}`));
         if (!res.ok) return null;
         
         let html = await res.text();

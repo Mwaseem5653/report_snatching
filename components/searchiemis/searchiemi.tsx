@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { db } from "@/firebaseconfig";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { CheckCircle, XCircle, Search, Loader2 } from "lucide-react";
+import { getApiUrl } from "@/lib/utils";
 
 // Capacitor Notifications
 import { Capacitor } from "@capacitor/core";
@@ -63,7 +64,7 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
   // 🔍 Search via API (Server-Side)
   const searchIMEI = async (imeiInput: string): Promise<IMEIRecord | null> => {
     try {
-      const res = await fetch("/api/search-imei", {
+      const res = await fetch(getApiUrl("/api/search-imei"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imei: imeiInput }),

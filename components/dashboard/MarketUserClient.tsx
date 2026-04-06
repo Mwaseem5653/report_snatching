@@ -25,7 +25,7 @@ import {
   ChevronDown,
   MapPin
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 export default function MarketUserClient({ initialSession }: { initialSession: any }) {
   const [activeTab, setActiveTab] = useState<string>("search");
@@ -34,7 +34,7 @@ export default function MarketUserClient({ initialSession }: { initialSession: a
 
   useEffect(() => {
     async function refreshSession() {
-        const res = await fetch("/api/auth/create-session");
+        const res = await fetch(getApiUrl("/api/auth/create-session"));
         const data = await res.json();
         if (data.authenticated) setSession(data);
     }

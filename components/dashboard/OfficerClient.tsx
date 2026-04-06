@@ -45,7 +45,7 @@ import {
   Eye,
   FileDown
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 const MAIN_TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -62,7 +62,7 @@ export default function OfficerClient({ initialSession }: { initialSession: any 
 
   useEffect(() => {
     async function refreshSession() {
-        const res = await fetch("/api/auth/create-session");
+        const res = await fetch(getApiUrl("/api/auth/create-session"));
         const data = await res.json();
         if (data.authenticated) setSession(data);
     }

@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function UsageAnalyticsClient() {
@@ -68,7 +68,7 @@ export default function UsageAnalyticsClient() {
             if (filterRole !== "all") params.append("role", filterRole);
             if (filterTool !== "all") params.append("tool", filterTool);
 
-            const res = await fetch(`/api/admin/usage-stats?${params.toString()}`);
+            const res = await fetch(getApiUrl(`/api/admin/usage-stats?${params.toString()}`));
             const data = await res.json();
 
             if (data.success) {

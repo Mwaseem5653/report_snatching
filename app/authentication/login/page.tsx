@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { cn, getApiUrl } from "@/lib/utils";
 
 // Capacitor Imports
 import { Capacitor } from "@capacitor/core";
@@ -28,7 +29,8 @@ export default function SignInPage() {
 
   const performLogin = useCallback(async (loginEmail: string, loginPass: string, isManual: boolean = false) => {
     try {
-      const res = await fetch("/api/auth/create-session", {
+      const apiUrl = getApiUrl("/api/auth/create-session");
+      const res = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: loginEmail, password: loginPass }),

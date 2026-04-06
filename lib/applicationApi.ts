@@ -1,9 +1,10 @@
 // utils/applicationApi.ts
+import { getApiUrl } from "@/lib/utils";
 
 // ADD APPLICATION
 export async function addApplication(payload: any) {
   try {
-    const res = await fetch("/api/applications", {
+    const res = await fetch(getApiUrl("/api/applications"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -20,7 +21,7 @@ export async function addApplication(payload: any) {
 export async function getApplications(filters: { status?: string; city?: string } = {}) {
   try {
     const params = new URLSearchParams(filters as any).toString();
-    const res = await fetch(`/api/applications?${params}`, {
+    const res = await fetch(getApiUrl(`/api/applications?${params}`), {
       method: "GET",
     });
 
@@ -34,7 +35,7 @@ export async function getApplications(filters: { status?: string; city?: string 
 // UPDATE APPLICATION
 export async function updateApplication(payload: any) {
   try {
-    const res = await fetch("/api/applications", {
+    const res = await fetch(getApiUrl("/api/applications"), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -50,7 +51,7 @@ export async function updateApplication(payload: any) {
 // DELETE APPLICATION
 export async function deleteApplication(id: string) {
     try {
-        const res = await fetch(`/api/applications?id=${id}`, {
+        const res = await fetch(getApiUrl(`/api/applications?id=${id}`), {
             method: "DELETE",
         });
         return await res.json();

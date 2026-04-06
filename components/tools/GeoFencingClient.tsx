@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, Loader2, Download, History, Clock, FileSpreadsheet, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { getApiUrl } from "@/lib/utils";
 import AlertModal from "@/components/ui/alert-modal";
 
 export default function GeoFencingClient() {
@@ -39,7 +40,7 @@ export default function GeoFencingClient() {
 
     // 🚀 PROACTIVE CHECK
     try {
-        const sRes = await fetch("/api/auth/create-session");
+        const sRes = await fetch(getApiUrl("/api/auth/create-session"));
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
             if ((sData.tokens || 0) < 5) {
@@ -65,7 +66,7 @@ export default function GeoFencingClient() {
     formData.append("includeB", includeB.toString());
 
     try {
-      const res = await fetch("/api/tools/geo-fencing", {
+      const res = await fetch(getApiUrl("/api/tools/geo-fencing"), {
         method: "POST",
         body: formData,
       });

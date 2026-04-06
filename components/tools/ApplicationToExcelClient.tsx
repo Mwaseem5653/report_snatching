@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import ExcelJS from "exceljs/dist/exceljs.min.js";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Select, 
@@ -49,7 +49,7 @@ export default function ApplicationToExcelClient() {
 
   useEffect(() => {
     async function fetchSession() {
-      const res = await fetch("/api/auth/create-session");
+      const res = await fetch(getApiUrl("/api/auth/create-session"));
       const data = await res.json();
       if (data.authenticated) {
           setCurrentUser(data);
@@ -100,7 +100,7 @@ export default function ApplicationToExcelClient() {
       params.append("period", period);
       if (psName && psName !== "all") params.append("ps", psName);
 
-      const res = await fetch(`/api/applications?${params.toString()}`);
+      const res = await fetch(getApiUrl(`/api/applications?${params.toString()}`));
       const data = await res.json();
 
       if (!data.success) {

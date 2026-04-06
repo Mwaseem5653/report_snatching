@@ -1,6 +1,7 @@
 // lib/uploadHelper.ts
 
 import { supabase } from "./supabaseClient";
+import { getApiUrl } from "@/lib/utils";
 
 /**
  * 📁 Uploads a file directly to Supabase Storage.
@@ -36,7 +37,7 @@ export async function uploadFileToStorage(file: File, folder: string = "applicat
  */
 export async function deleteFileFromStorage(publicId: string): Promise<void> {
     try {
-        const res = await fetch("/api/upload/delete", {
+        const res = await fetch(getApiUrl("/api/upload/delete"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ publicId }),

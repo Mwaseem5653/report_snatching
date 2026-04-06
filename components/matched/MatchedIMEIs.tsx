@@ -23,7 +23,7 @@ import {
   History
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -73,7 +73,7 @@ export default function MatchedIMEIsView() {
   // 1. Fetch Session
   useEffect(() => {
     async function fetchSession() {
-      const res = await fetch("/api/auth/create-session");
+      const res = await fetch(getApiUrl("/api/auth/create-session"));
       const data = await res.json();
       if (data.authenticated) setCurrentUser(data);
     }
@@ -96,7 +96,7 @@ export default function MatchedIMEIsView() {
           params.append("status", filterStatus); // 🚀 Respect status filter
       }
 
-      const res = await fetch(`/api/matched-imeis?${params.toString()}`);
+      const res = await fetch(getApiUrl(`/api/matched-imeis?${params.toString()}`));
       const data = await res.json();
       if (data.success) {
         setMatches(data.matches || []);
@@ -133,7 +133,7 @@ export default function MatchedIMEIsView() {
 
     setUpdating(true);
     try {
-        const res = await fetch("/api/matched-imeis/update", {
+        const res = await fetch(getApiUrl("/api/matched-imeis/update"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ matchId: id, note, action })

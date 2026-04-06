@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, Clock } from "lucide-react";
+import { getApiUrl } from "@/lib/utils";
 
 interface OfficerStatsProps {
   uid: string;
@@ -49,7 +50,7 @@ export default function OfficerStats({ uid }: OfficerStatsProps) {
   useEffect(() => {
     async function fetchStats() {
       try {
-        const res = await fetch("/api/applications");
+        const res = await fetch(getApiUrl("/api/applications"));
         const data = await res.json();
         if (data.success) {
           const myApps = data.applications.filter((app: any) => app.processedBy?.uid === uid);

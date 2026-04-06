@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Users, Search, Plus, RotateCcw, ChevronRight, UserCog, Mail, Shield, AlertTriangle, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 import ConfirmModal from "@/components/ui/confirm-modal";
 import { locationData } from "@/components/location/location";
 
@@ -39,7 +39,7 @@ export default function UserManagement() {
   useEffect(() => {
     async function fetchSession() {
       try {
-        const res = await fetch("/api/auth/create-session");
+        const res = await fetch(getApiUrl("/api/auth/create-session"));
         const data = await res.json();
         if (data.authenticated) {
           setCurrentUser({
@@ -67,7 +67,7 @@ export default function UserManagement() {
       if (filters.role && filters.role !== "none") params.append("role", filters.role);
       if (filters.district && filters.district !== "all") params.append("district", filters.district);
 
-      const res = await fetch(`/api/get-users?${params.toString()}`);
+      const res = await fetch(getApiUrl(`/api/get-users?${params.toString()}`));
       const data = await res.json();
       setUsers(data.users || []);
     } catch (err) {
@@ -132,7 +132,7 @@ export default function UserManagement() {
   const handleAddUser = async (payload: any) => {
     setLoading(true);
     try {
-      const res = await fetch("/api/add-user", {
+      const res = await fetch(getApiUrl("/api/add-user"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -157,7 +157,7 @@ export default function UserManagement() {
   async function handleUpdateUser(updated: any) {
     setLoading(true);
     try {
-      const res = await fetch("/api/update-user", {
+      const res = await fetch(getApiUrl("/api/update-user"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updated),
@@ -181,7 +181,7 @@ export default function UserManagement() {
   async function handleDeleteUser(uid: string) {
     setLoading(true);
     try {
-      const res = await fetch("/api/update-user", {
+      const res = await fetch(getApiUrl("/api/update-user"), {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uid }),

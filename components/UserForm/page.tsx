@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { locationData } from "@/components/location/location";
 import { toast } from "sonner";
 import { User, Mail, Lock, Phone, BadgeHelp, MapPin, Building2, Store, Loader2, ShieldCheck, LockIcon, Wrench, Coins } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 export default function AddUserForm({
   onSave,
@@ -70,7 +70,7 @@ export default function AddUserForm({
   useEffect(() => {
     const fetchSession = async () => {
       try {
-        const res = await fetch("/api/auth/create-session");
+        const res = await fetch(getApiUrl("/api/auth/create-session"));
         const data = await res.json();
         if (data.authenticated && data.role) {
           setSessionRole(data.role);

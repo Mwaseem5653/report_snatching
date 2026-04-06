@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/uploadHelper";
 import { 
   Select, 
@@ -125,7 +125,7 @@ export default function MovementVisualizerClient() {
       const { secure_url, public_id } = await uploadFileToStorage(file, "movement-analysis");
       const formData = new FormData();
       formData.append("url", secure_url);
-      const res = await fetch("/api/tools/analyze-movement", { method: "POST", body: formData });
+      const res = await fetch(getApiUrl("/api/tools/analyze-movement"), { method: "POST", body: formData });
       const result = await res.json();
       if (public_id) deleteFileFromStorage(public_id);
       if (result.success) {

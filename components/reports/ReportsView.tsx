@@ -17,7 +17,7 @@ import {
 import { locationData } from "@/components/location/location";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 /* -------------------- Helper: Radial Progress -------------------- */
 const RadialProgress = ({ value, total, label, color, icon: Icon }: any) => {
@@ -65,7 +65,7 @@ export default function ReportsView({ officerUid: initialOfficerUid }: { officer
 
   useEffect(() => {
     async function fetchSession() {
-      const res = await fetch("/api/auth/create-session");
+      const res = await fetch(getApiUrl("/api/auth/create-session"));
       const data = await res.json();
       if (data.authenticated) {
           setCurrentUser(data);
@@ -90,7 +90,7 @@ export default function ReportsView({ officerUid: initialOfficerUid }: { officer
                 params.append("district", district);
             }
 
-            const res = await fetch(`/api/get-users?${params.toString()}`);
+            const res = await fetch(getApiUrl(`/api/get-users?${params.toString()}`));
             const data = await res.json();
             setOfficers(data.users || []);
         } catch (err) {
@@ -109,8 +109,8 @@ export default function ReportsView({ officerUid: initialOfficerUid }: { officer
       params.append("period", period);
       
       const [resApps, resMatched] = await Promise.all([
-          fetch(`/api/applications?${params.toString()}&status=all`),
-          fetch(`/api/matched-imeis?${params.toString()}`)
+          fetch(getApiUrl(`/api/applications?${params.toString()}&status=all`)),
+          fetch(getApiUrl(`/api/matched-imeis?${params.toString()}`))
       ]);
 
       const dataApps = await resApps.json();

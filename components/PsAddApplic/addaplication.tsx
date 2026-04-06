@@ -18,7 +18,7 @@ import {
 import AddApplicationForm from "../applicationform/applicationform";
 import { getApplications } from "@/lib/applicationApi";
 import { FileText, Search, Plus, RotateCcw, ChevronRight, Clock, MapPin, Calendar, User, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 export default function Psusersapplication() {
   const [applications, setApplications] = useState<any[]>([]);
@@ -31,7 +31,7 @@ export default function Psusersapplication() {
   useEffect(() => {
     async function fetchSession() {
       try {
-        const res = await fetch("/api/auth/create-session");
+        const res = await fetch(getApiUrl("/api/auth/create-session"));
         const data = await res.json();
         if (data.authenticated) {
           setCurrentUser({

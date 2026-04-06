@@ -44,7 +44,7 @@ import {
   FileDown,
   ChevronRight
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
 
 // 🚀 REORDERED TABS AS PER REQUEST
 const MAIN_TABS = [
@@ -66,7 +66,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
     window.addEventListener("resize", handleResize);
 
     const refreshSession = async () => {
-        const res = await fetch("/api/auth/create-session");
+        const res = await fetch(getApiUrl("/api/auth/create-session"));
         const data = await res.json();
         if (data.authenticated) setSession(data);
     };
