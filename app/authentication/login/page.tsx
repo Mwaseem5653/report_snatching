@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Loader2, Mail, Lock, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -14,6 +14,20 @@ export default function SignInPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // 🚀 Clear existing session on mount to prevent "Guest" state issues
+  useEffect(() => {
+    const clearSession = async () => {
+        try {
+            await fetch(getApiUrl("/api/auth/logout"), { method: "POST" });
+            // Reset any local header states
+            window.dispatchEvent(new Event('refresh-session'));
+        } catch (err) {
+            console.error("Failed to clear session:", err);
+        }
+    };
+    clearSession();
+  }, []);
 
   const performLogin = useCallback(async (loginEmail: string, loginPass: string) => {
     setLoading(true);
