@@ -28,21 +28,24 @@ export default function SignInPage() {
   const [enableBioToggle, setEnableBioToggle] = useState(false);
 
   const performLogin = useCallback(async (loginEmail: string, loginPass: string, isManual: boolean = false) => {
-    try {
-      const apiUrl = getApiUrl("/api/auth/create-session");
-      const res = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: loginEmail, password: loginPass }),
-      });
+      try {
+        const apiUrl = getApiUrl("/api/auth/create-session");
+        console.log("Attempting login at:", apiUrl);
+        
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: loginEmail, password: loginPass }),
+        });
 
-      const data = await res.json();
+        const data = await res.json();
+        console.log("Login response status:", res.status, data);
 
-      if (!res.ok) {
-        setError(data.error || "Authentication failed. Please check your credentials.");
-        setLoading(false);
-        return;
-      }
+        if (!res.ok) {
+          setError(data.error || `Error ${res.status}: Authentication failed.`);
+          setLoading(false);
+          return;
+        }
 
       // 🔐 If toggle is ON or was already enabled, save/update credentials
       if (isManual && Capacitor.isNativePlatform() && enableBioToggle) {
@@ -114,30 +117,34 @@ export default function SignInPage() {
 
   useEffect(() => {
     const checkBiometrics = async () => {
+      // Small delay to ensure bridge is ready
+      await new Promise(r => setTimeout(r, 1000));
+      
       const native = Capacitor.isNativePlatform();
       setIsNative(native);
 
       if (native) {
         try {
-          const result = await NativeBiometric.isAvailable();
-          console.log("Biometric Available:", result.isAvailable);
-          
-          if (result.isAvailable) {
-            setBiometricAvailable(true);
-            const { value } = await Preferences.get({ key: "biometric_enabled" });
-            if (value === "true") {
-              setBiometricEnabled(true);
-              setEnableBioToggle(true);
-              // Auto-trigger
-              handleBiometricLogin();
-            }
+          // Double check if plugin is actually available
+          if (Capacitor.isPluginAvailable("NativeBiometric")) {
+              const result = await NativeBiometric.isAvailable();
+              console.log("Biometric Available:", result.isAvailable);
+              
+              if (result.isAvailable) {
+                setBiometricAvailable(true);
+                const { value } = await Preferences.get({ key: "biometric_enabled" });
+                if (value === "true") {
+                  setBiometricEnabled(true);
+                  setEnableBioToggle(true);
+                  // Auto-trigger
+                  handleBiometricLogin();
+                }
+              }
+          } else {
+              console.warn("NativeBiometric plugin NOT available in Capacitor bridge.");
           }
         } catch (err: any) {
           console.error("Biometric check error:", err);
-          // Show error for debugging
-          if (Capacitor.isNativePlatform()) {
-             setError(`Plugin Error: ${err.message}`);
-          }
         }
       }
     };
