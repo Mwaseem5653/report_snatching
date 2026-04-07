@@ -55,6 +55,17 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Access denied: Official profile not found." }, { status: 403 });
     }
 
+    // 🚀 SINGLE SESSION POLICY: Prevent multiple logins
+    const nowMillis = Date.now();
+    const lastActiveMillis = userData.lastActive?.toMillis() || 0;
+    const isRecentlyActive = (nowMillis - lastActiveMillis) < 45000; // 45 seconds threshold
+
+    if (userData.currentSessionId && isRecentlyActive) {
+        return NextResponse.json({ 
+            error: "Only One User allowed. If you recently closed a tab, please wait 45 seconds." 
+        }, { status: 403 });
+    }
+
     const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
     const payload = {
@@ -74,14 +85,14 @@ export async function POST(req: Request) {
     };
 
     // Update session ID and Activity Timestamp in Firestore
-    // Use userDoc.id because it works for both UID and Email-based lookups
     await adminDb.collection("users").doc(userDoc.id).update({
         currentSessionId: sessionId,
         lastActive: admin.firestore.Timestamp.now(),
         lastLogin: admin.firestore.Timestamp.now()
     });
 
-    const sessionToken = jwt.sign(payload, SECRET, { expiresIn: `${MAX_AGE}s` });
+    // 🚀 Remove session time limit - Increase JWT expiry to 1 year
+    const sessionToken = jwt.sign(payload, SECRET, { expiresIn: "365d" });
 
     const cookieStore = await cookies();
     cookieStore.set({
@@ -91,7 +102,7 @@ export async function POST(req: Request) {
       path: "/",
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      maxAge: MAX_AGE,
+      // maxAge: MAX_AGE, // Omitting maxAge makes it a session cookie (removed when browser closes)
     });
 
     return NextResponse.json({ 
@@ -114,33 +125,36 @@ export async function GET() {
     const decoded: any = jwt.verify(token, SECRET);
     
     const userDoc = await adminDb.collection("users").doc(decoded.uid).get();
+    
+    if (!userDoc.exists) {
+        // User document deleted from DB
+        const res = NextResponse.json({ authenticated: false, reason: "user_deleted" });
+        res.cookies.delete("sessionToken");
+        return res;
+    }
+
     const liveData = userDoc.data();
     
     // 🚀 Security Check: Single Session Policy
-    // If JWT sessionId doesn't match currentSessionId in DB, logout user
     if (!liveData?.currentSessionId || (decoded.sessionId && decoded.sessionId !== liveData.currentSessionId)) {
         const res = NextResponse.json({ authenticated: false, reason: "duplicate_session" });
         res.cookies.delete("sessionToken");
         return res;
     }
 
-    if (userDoc.exists) {
-        // 🚀 HEARTBEAT: Update lastActive on every session check
-        await adminDb.collection("users").doc(decoded.uid).update({
-            lastActive: admin.firestore.Timestamp.now()
-        });
+    // 🚀 HEARTBEAT: Update lastActive on every session check
+    await adminDb.collection("users").doc(decoded.uid).update({
+        lastActive: admin.firestore.Timestamp.now()
+    });
 
-        return NextResponse.json({ 
-            authenticated: true, 
-            ...decoded,
-            tokens: liveData?.tokens || 0,
-            eyeconTokens: liveData?.eyeconTokens || 0,
-            role: liveData?.role || decoded.role,
-            permissions: liveData?.permissions || {} // 🚀 Fetch LIVE permissions
-        });
-    }
-
-    return NextResponse.json({ authenticated: true, ...decoded });
+    return NextResponse.json({ 
+        authenticated: true, 
+        ...decoded,
+        tokens: liveData?.tokens || 0,
+        eyeconTokens: liveData?.eyeconTokens || 0,
+        role: liveData?.role || decoded.role,
+        permissions: liveData?.permissions || {} // 🚀 Fetch LIVE permissions
+    });
   } catch (err) {
     return NextResponse.json({ authenticated: false });
   }

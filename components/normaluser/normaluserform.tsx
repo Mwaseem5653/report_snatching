@@ -263,7 +263,7 @@ export default function AddApplicationFormNormalUser() {
                         <Select value={formData.city} onValueChange={(val) => setFormData((prev) => ({ ...prev, city: val, district: "", psName: "" }))}>
                             <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14 font-bold"><SelectValue placeholder="Select City" /></SelectTrigger>
                             <SelectContent className="rounded-xl">
-                                {Object.keys(locationData).map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
+                                {Object.keys(locationData).map((c) => (<SelectItem key={c} value={c}>{c.toUpperCase()}</SelectItem>))}
                             </SelectContent>
                         </Select>
                     </div>

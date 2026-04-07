@@ -212,7 +212,20 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">City *</Label>
-                    <Input name="city" value={formData.city} onChange={handleChange} required className="rounded-xl border-slate-200 h-11 bg-slate-50/50 font-bold" />
+                    <Select 
+                        value={formData.city} 
+                        onValueChange={(val) => setFormData(prev => ({ ...prev, city: val, district: "", psName: "" }))}
+                        disabled={!!currentUser?.city && currentUser.role === "ps_user"}
+                    >
+                        <SelectTrigger className="rounded-xl h-11 bg-slate-50/50 font-bold border-slate-200">
+                            <SelectValue placeholder="Select City" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {Object.keys(locationData).map(c => (
+                                <SelectItem key={c} value={c}>{c.toUpperCase()}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
                 <div className="space-y-2">
                     <Label className="text-[11px] font-bold uppercase text-slate-500">District *</Label>

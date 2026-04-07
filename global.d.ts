@@ -3,3 +3,4 @@ interface Window {
 }
 
 declare module 'exceljs/dist/exceljs.min.js';
+declare module "*.css";

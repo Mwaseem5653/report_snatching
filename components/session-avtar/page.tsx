@@ -61,11 +61,52 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
     if (!initialSession) fetchSession();
     else fetchSession(); 
 
+    // 🚀 HEARTBEAT: Update lastActive every 25 seconds to stay "live"
+    const heartbeatInterval = setInterval(() => {
+        if (session?.authenticated) {
+            fetch(getApiUrl("/api/auth/create-session"), { cache: "no-store" })
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.authenticated) {
+                        // If heartbeat fails authentication, force logout
+                        window.location.href = "/authentication/login";
+                    }
+                })
+                .catch(() => {});
+        }
+    }, 25000);
+
+    // 🚀 INTEGRITY CHECK: Every 15 minutes, check if user still exists/valid
+    const integrityInterval = setInterval(() => {
+        if (session?.authenticated) {
+            fetch(getApiUrl("/api/auth/create-session"), { cache: "no-store" })
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.authenticated) {
+                        // Clear cache and move to login if user deleted/disabled
+                        localStorage.clear();
+                        sessionStorage.clear();
+                        window.location.href = "/authentication/login";
+                    }
+                });
+        }
+    }, 15 * 60 * 1000);
+
+    // 🚀 TAB CLOSE LOGOUT: Logout when tab is closed
+    const handleTabClose = () => {
+        if (session?.authenticated) {
+            // navigator.sendBeacon is more reliable for fire-and-forget on close
+            const url = getApiUrl("/api/auth/logout");
+            navigator.sendBeacon(url);
+        }
+    };
+
     const handleFocus = () => fetchNotifications();
     const handleRefresh = () => fetchSession();
 
     window.addEventListener("focus", handleFocus);
     window.addEventListener("refresh-session", handleRefresh);
+    window.addEventListener("beforeunload", handleTabClose);
 
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setOpen(false);
@@ -73,11 +114,14 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
     document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
+      clearInterval(heartbeatInterval);
+      clearInterval(integrityInterval);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("refresh-session", handleRefresh);
+      window.removeEventListener("beforeunload", handleTabClose);
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [initialSession]);
+  }, [initialSession, session?.authenticated]);
 
   const handleLogout = () => {
     window.location.href = "/";
