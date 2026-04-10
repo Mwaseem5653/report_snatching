@@ -124,15 +124,22 @@ export default function ApplicationToExcelClient() {
           { header: "DATE", key: "currentDate", width: 15 },
           { header: "Name OF Complaint", key: "Name", width: 25 },
           { header: "Cell No.", key: "Phone Number", width: 20 },
+          { header: "CNIC", key: "CNIC", width: 20 }, // New
+          { header: "City", key: "City", width: 15 }, // New
+          { header: "District", key: "District", width: 15 }, // New
           { header: "PS", key: "Police Station", width: 25 },
           { header: "PS Vide No.", key: "psVideNo", width: 15 },
           { header: "Properties", key: "Other Property", width: 30 },
-          { header: "Mobile Model", key: "Mobile Model", width: 25 },
-          { header: "Status", key: "Type", width: 15 },
-          { header: "DATE AND TIME OF OFFENCE", key: "Date Of Offence", width: 25 },
-          { header: "TIME", key: "Time Of Offence", width: 15 },
-          { header: "NO IN USE", key: "last Num Used", width: 20 },
-          { header: "Snatch/Theft IMEI", key: "IMEI Number", width: 35 }
+          { header: "Mobile Model(s)", key: "Mobile Model", width: 25 }, // Modified
+          { header: "Type", key: "Type", width: 15 },
+          { header: "DATE OF OFFENCE", key: "Date Of Offence", width: 18 }, // Modified
+          { header: "TIME OF OFFENCE", key: "Time Of Offence", width: 18 }, // Modified
+          { header: "OFFENCE ADDRESS", key: "Offence Address", width: 30 }, // New
+          { header: "INCIDENT NOTE", key: "Incident Note", width: 40 }, // New
+          { header: "LAST NUM USED", key: "last Num Used", width: 20 }, // Modified
+          { header: "ALL IMEIS", key: "IMEI Numbers", width: 40 }, // Modified
+          { header: "BOX PICTURE LINK", key: "boxPictureLink", width: 20 }, // New
+          { header: "ATTACHMENT LINK", key: "attestedAppLink", width: 20 }, // New
       ];
 
       worksheet.columns = columns;
@@ -161,23 +168,99 @@ export default function ApplicationToExcelClient() {
 
       // Add rows
       applications.forEach((app: any) => {
-          const imei1 = app.imei1 ? String(app.imei1).replace(/\//g, " ") : "";
-          const imei2 = app.imei2 ? String(app.imei2).replace(/\//g, " ") : "";
-          
-          worksheet.addRow({
+          // Common data for the application, regardless of devices
+          const commonRowData = {
               "currentDate": formatAppDate(app.createdAt),
-              "Name": app.applicantName ? " " + app.applicantName : " None",
+              "Name": app.applicantName || "",
               "Phone Number": formatMobile(app.applicantMobile || app.applicantPhone),
-              "Police Station": app.ps ? " " + app.ps : " None",
+              "CNIC": app.cnic || "",
+              "City": app.city || "",
+              "District": app.district || "",
+              "Police Station": app.ps || "",
               "psVideNo": app.psVideNo || "",
-              "Other Property": app.otherLostProperty ? " " + app.otherLostProperty : " None",
-              "Mobile Model": app.mobileModel ? " " + app.mobileModel : " None",
-              "Type": app.crimeHead ? " " + app.crimeHead : " None",
+              "Other Property": app.otherLostProperty || "",
+              "Type": app.crimeHead || "",
               "Date Of Offence": formatAppDate(app.offenceDate),
-              "Time Of Offence": app.offenceTime ? " " + app.offenceTime : " None",
-              "last Num Used": formatMobile(app.lastNumUsed),
-              "IMEI Number": imei1 ? ` ${imei1}${imei2 ? " " + imei2 : ""}` : " None"
-          });
+              "Time Of Offence": app.offenceTime || "",
+              "Offence Address": app.offenceAddress || "",
+              "Incident Note": app.note || "",
+              "boxPictureLink": app.pictureUrl || "",
+              "attestedAppLink": app.attachmentUrl || "",
+          };
+
+          // Handle applications with devices
+          if (app.devices && app.devices.length > 0) {
+              const hasMultipleDevices = app.devices.length > 1;
+
+              app.devices.forEach((device: any) => {
+                  const deviceImeis: string[] = [];
+                  if (device.imei1) deviceImeis.push(String(device.imei1).replace(/\//g, " "));
+                  if (device.imei2) deviceImeis.push(String(device.imei2).replace(/\//g, " "));
+                  const lastNumsUsed: string[] = [];
+                  if (device.lastNumUsed) lastNumsUsed.push(formatMobile(device.lastNumUsed));
+                  if (device.lastNumUsed2) lastNumsUsed.push(formatMobile(device.lastNumUsed2));
+
+                  const row = worksheet.addRow({
+                      ...commonRowData,
+                      "Mobile Model": device.mobileModel || "",
+                      "IMEI Numbers": deviceImeis.join(", "),
+                      "last Num Used": lastNumsUsed.join(", "),
+                  });
+
+                  // Apply yellow fill only if there are multiple devices for this application
+                  if (hasMultipleDevices) {
+                      row.eachCell((cell: any) => {
+                          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }; // Yellow
+                      });
+                  }
+
+                  // Add hyperlinks for pictureUrl and attachmentUrl to this row
+                  if (commonRowData.boxPictureLink) {
+                      const cell = row.getCell("boxPictureLink");
+                      cell.value = { text: "Image Link", hyperlink: commonRowData.boxPictureLink };
+                      cell.font = { color: { argb: 'FF0000FF' }, underline: true };
+                  }
+                  if (commonRowData.attestedAppLink) {
+                      const cell = row.getCell("attestedAppLink");
+                      cell.value = { text: "Attachment Link", hyperlink: commonRowData.attestedAppLink };
+                      cell.font = { color: { argb: 'FF0000FF' }, underline: true };
+                  }
+              });
+          } else {
+              // Handle applications with no devices array (backward compatibility)
+              const fallbackImeis: string[] = [];
+              if (app.imei1) fallbackImeis.push(String(app.imei1).replace(/\//g, " "));
+              if (app.imei2) fallbackImeis.push(String(app.imei2).replace(/\//g, " "));
+              
+              // If top-level IMEIs are missing, use allImeis
+              const finalImeis = fallbackImeis.length > 0 
+                ? fallbackImeis.join(", ") 
+                : (app.allImeis && app.allImeis.length > 0 ? Array.from(new Set(app.allImeis)).join(", ") : "None");
+
+              const fallbackNums: string[] = [];
+              if (app.lastNumUsed) fallbackNums.push(formatMobile(app.lastNumUsed));
+              if (app.lastNumUsed2) fallbackNums.push(formatMobile(app.lastNumUsed2));
+
+              const row = worksheet.addRow({
+                  ...commonRowData,
+                  "Mobile Model": app.mobileModel || "None",
+                  "IMEI Numbers": finalImeis,
+                  "last Num Used": fallbackNums.length > 0 ? fallbackNums.join(", ") : "None",
+              });
+              // No yellow highlight for single row with no device info
+
+              // Add hyperlinks for pictureUrl and attachmentUrl to this row
+              if (commonRowData.boxPictureLink) {
+                  const cell = row.getCell("boxPictureLink");
+                  cell.value = { text: "Image Link", hyperlink: commonRowData.boxPictureLink };
+                  cell.font = { color: { argb: 'FF0000FF' }, underline: true };
+              }
+              if (commonRowData.attestedAppLink) {
+                  const cell = row.getCell("attestedAppLink");
+                  cell.value = { text: "Attachment Link", hyperlink: commonRowData.attestedAppLink };
+                  cell.font = { color: { argb: 'FF0000FF' }, underline: true };
+              }
+          }
       });
 
       // Style Header (Matching AI Extractor style)

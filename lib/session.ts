@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 
-const SECRET = process.env.SESSION_JWT_SECRET!;
+const SECRET = process.env.SESSION_JWT_SECRET || "fallback_secret_change_me";
 
 export async function getServerSession() {
   try {

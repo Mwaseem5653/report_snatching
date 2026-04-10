@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, User, ChevronDown, Bell, Coins, Menu, X, Smartphone, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 import { cn, getApiUrl } from "@/lib/utils";
+import { jwtDecode } from 'jwt-decode'; // Import jwtDecode
 
 type Session = {
   authenticated: boolean;
@@ -16,6 +17,7 @@ type Session = {
   eyeconTokens?: number;
   hasToolsAccess?: boolean;
   permissions?: any;
+  exp?: number; // Add exp to session type
 };
 
 interface HeaderProps {
@@ -30,36 +32,89 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const sessionExpiryTimer = useRef<NodeJS.Timeout | null>(null); // Ref for the session expiry timer
   const router = useRouter();
 
-  const fetchSession = async () => {
+  const fetchNotifications = useCallback(async () => {
+    try {
+        const res = await fetch(getApiUrl("/api/notifications/count"));
+        const data = await res.json();
+        if (data.success) setNotifCount(data.count || 0);
+    } catch (err) {}
+  }, []);
+
+  const fetchSession = useCallback(async () => {
+    // Clear any existing proactive expiry timer
+    if (sessionExpiryTimer.current) {
+        clearTimeout(sessionExpiryTimer.current);
+        sessionExpiryTimer.current = null;
+    }
     try {
       const res = await fetch(getApiUrl("/api/auth/create-session"), { cache: "no-store" });
       const data = await res.json();
       if (data.authenticated) {
           setSession(data);
           fetchNotifications();
+
+          // 🚀 Proactive Redirect: Set timer to redirect 5 minutes before session expiry
+          if (data.exp) { // data.exp comes from JWT payload (seconds)
+            const expiresInMillis = data.exp * 1000 - Date.now(); // Remaining time in milliseconds
+            const redirectBeforeMillis = 5 * 60 * 1000; // Redirect 5 minutes before actual expiry (5 mins * 60 sec/min * 1000 ms/sec)
+            
+            if (expiresInMillis > redirectBeforeMillis) {
+                sessionExpiryTimer.current = setTimeout(() => {
+                    alert("Your session is about to expire. You will be redirected to the login page.");
+                    router.push("/authentication/login");
+                }, expiresInMillis - redirectBeforeMillis);
+            } else if (expiresInMillis > 0) {
+                // If less than 5 minutes remaining but still active, redirect after remaining time
+                sessionExpiryTimer.current = setTimeout(() => {
+                    router.push("/authentication/login");
+                }, expiresInMillis);
+            }
+          }
+
       } else {
           setSession({ authenticated: false });
+          // If not authenticated, ensure any timer is cleared and redirect if not already on login page
+          if (window.location.pathname !== "/authentication/login") {
+            router.push("/authentication/login");
+          }
       }
     } catch (err) {
       setSession({ authenticated: false });
+      if (window.location.pathname !== "/authentication/login") {
+        router.push("/authentication/login");
+      }
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchNotifications = async () => {
-    try {
-        const res = await fetch(getApiUrl("/api/notifications/count"));
-        const data = await res.json();
-        if (data.success) setNotifCount(data.count || 0);
-    } catch (err) {}
-  };
+  }, [fetchNotifications, router]);
 
   useEffect(() => {
-    if (!initialSession) fetchSession();
-    else fetchSession(); 
+    // Initialize session or fetch it if not provided
+    if (!initialSession) {
+        fetchSession();
+    } else {
+        // If initial session is provided, we still need to set up the proactive timer
+        setSession(initialSession);
+        fetchNotifications();
+        if (initialSession.exp) {
+            const expiresInMillis = initialSession.exp * 1000 - Date.now();
+            const redirectBeforeMillis = 5 * 60 * 1000;
+            
+            if (expiresInMillis > redirectBeforeMillis) {
+                sessionExpiryTimer.current = setTimeout(() => {
+                    alert("Your session is about to expire. You will be redirected to the login page.");
+                    router.push("/authentication/login");
+                }, expiresInMillis - redirectBeforeMillis);
+            } else if (expiresInMillis > 0) {
+                sessionExpiryTimer.current = setTimeout(() => {
+                    router.push("/authentication/login");
+                }, expiresInMillis);
+            }
+        }
+    }
 
     // 🚀 HEARTBEAT: Update lastActive every 25 seconds to stay "live"
     const heartbeatInterval = setInterval(() => {
@@ -69,7 +124,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                 .then(data => {
                     if (!data.authenticated) {
                         // If heartbeat fails authentication, force logout
-                        window.location.href = "/authentication/login";
+                        router.push("/authentication/login");
                     }
                 })
                 .catch(() => {});
@@ -86,7 +141,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                         // Clear cache and move to login if user deleted/disabled
                         localStorage.clear();
                         sessionStorage.clear();
-                        window.location.href = "/authentication/login";
+                        router.push("/authentication/login");
                     }
                 });
         }
@@ -106,7 +161,6 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
 
     window.addEventListener("focus", handleFocus);
     window.addEventListener("refresh-session", handleRefresh);
-    window.addEventListener("beforeunload", handleTabClose);
 
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setOpen(false);
@@ -116,15 +170,20 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
     return () => {
       clearInterval(heartbeatInterval);
       clearInterval(integrityInterval);
+      if (sessionExpiryTimer.current) clearTimeout(sessionExpiryTimer.current); // Clear proactive timer on unmount
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("refresh-session", handleRefresh);
-      window.removeEventListener("beforeunload", handleTabClose);
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [initialSession, session?.authenticated]);
+  }, [initialSession, session?.authenticated, fetchNotifications, fetchSession, router]);
 
   const handleLogout = () => {
-    window.location.href = "/";
+    // Clear proactive timer on manual logout
+    if (sessionExpiryTimer.current) {
+        clearTimeout(sessionExpiryTimer.current);
+        sessionExpiryTimer.current = null;
+    }
+    router.push("/"); // Redirect after logout
     fetch(getApiUrl("/api/auth/logout"), { method: "POST" });
   };
 

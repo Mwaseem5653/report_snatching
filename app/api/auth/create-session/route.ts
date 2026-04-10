@@ -4,7 +4,7 @@ import { adminDb, adminAuth } from "@/firebaseAdmin";
 import * as admin from "firebase-admin";
 import jwt from "jsonwebtoken";
 
-const SECRET = process.env.SESSION_JWT_SECRET!;
+const SECRET = process.env.SESSION_JWT_SECRET || "fallback_secret_change_me";
 const MAX_AGE = parseInt(process.env.SESSION_MAX_AGE || "3600", 10);
 const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
@@ -55,17 +55,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Access denied: Official profile not found." }, { status: 403 });
     }
 
-    // 🚀 SINGLE SESSION POLICY: Prevent multiple logins
-    const nowMillis = Date.now();
-    const lastActiveMillis = userData.lastActive?.toMillis() || 0;
-    const isRecentlyActive = (nowMillis - lastActiveMillis) < 45000; // 45 seconds threshold
-
-    if (userData.currentSessionId && isRecentlyActive) {
-        return NextResponse.json({ 
-            error: "Only One User allowed. If you recently closed a tab, please wait 45 seconds." 
-        }, { status: 403 });
-    }
-
     const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
     const payload = {
@@ -91,8 +80,8 @@ export async function POST(req: Request) {
         lastLogin: admin.firestore.Timestamp.now()
     });
 
-    // 🚀 Remove session time limit - Increase JWT expiry to 1 year
-    const sessionToken = jwt.sign(payload, SECRET, { expiresIn: "365d" });
+    // 🚀 Session expiry set to 3 hours
+    const sessionToken = jwt.sign(payload, SECRET, { expiresIn: "3h" });
 
     const cookieStore = await cookies();
     cookieStore.set({
@@ -102,7 +91,7 @@ export async function POST(req: Request) {
       path: "/",
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      // maxAge: MAX_AGE, // Omitting maxAge makes it a session cookie (removed when browser closes)
+      maxAge: 3 * 60 * 60, // 3 hours
     });
 
     return NextResponse.json({ 
@@ -135,9 +124,10 @@ export async function GET() {
 
     const liveData = userDoc.data();
     
-    // 🚀 Security Check: Single Session Policy
-    if (!liveData?.currentSessionId || (decoded.sessionId && decoded.sessionId !== liveData.currentSessionId)) {
-        const res = NextResponse.json({ authenticated: false, reason: "duplicate_session" });
+    // The previous single-session check related to currentSessionId is fully removed to allow multiple logins.
+    // However, we still check if the user document exists.
+    if (!userDoc.exists) {
+        const res = NextResponse.json({ authenticated: false, reason: "user_deleted" });
         res.cookies.delete("sessionToken");
         return res;
     }
@@ -156,6 +146,9 @@ export async function GET() {
         permissions: liveData?.permissions || {} // 🚀 Fetch LIVE permissions
     });
   } catch (err) {
-    return NextResponse.json({ authenticated: false });
+    // If JWT is expired, it will throw an error and fall here.
+    const res = NextResponse.json({ authenticated: false, reason: "session_expired" });
+    res.cookies.delete("sessionToken"); // Clear expired cookie
+    return res;
   }
 }
