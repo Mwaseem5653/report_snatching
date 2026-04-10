@@ -125,6 +125,7 @@ export default function MovementVisualizerClient() {
       const { secure_url, public_id } = await uploadFileToStorage(file, "movement-analysis");
       const formData = new FormData();
       formData.append("url", secure_url);
+      formData.append("fileName", file.name);
       const res = await fetch(getApiUrl("/api/tools/analyze-movement"), { method: "POST", body: formData });
       const result = await res.json();
       if (public_id) deleteFileFromStorage(public_id);

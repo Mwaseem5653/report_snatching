@@ -101,6 +101,8 @@ function formatDate(d: Date): string {
     return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
 }
 
+import { Readable } from "stream";
+
 export async function POST(req: NextRequest) {
     try {
         const cookieStore = await cookies();
@@ -110,6 +112,7 @@ export async function POST(req: NextRequest) {
 
         const formData = await req.formData();
         const fileUrl = formData.get("url") as string;
+        const fileName = formData.get("fileName") as string || "file.xlsx";
         
         if (!fileUrl) return NextResponse.json({ error: "No file URL provided" }, { status: 400 });
 
@@ -125,7 +128,15 @@ export async function POST(req: NextRequest) {
         const buffer = await fileRes.arrayBuffer();
         
         const wb = new ExcelJS.Workbook();
-        await wb.xlsx.load(buffer);
+        const isCsv = fileName.toLowerCase().endsWith(".csv");
+
+        if (isCsv) {
+            const stream = Readable.from(Buffer.from(buffer));
+            await wb.csv.read(stream);
+        } else {
+            await wb.xlsx.load(buffer);
+        }
+
         const ws = wb.worksheets[0];
 
         const rawRows: any[][] = [];

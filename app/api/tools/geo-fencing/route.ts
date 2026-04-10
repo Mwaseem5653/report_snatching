@@ -136,33 +136,43 @@ function findColumn(headers: string[], candidates: string[]): string | null {
     return null;
 }
 
+import { Readable } from "stream";
+
 export async function POST(req: NextRequest) {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("sessionToken")?.value;
-    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const decoded: any = jwt.verify(token, SECRET);
-
-    // 🚀 LOG USAGE
-    await logToolUsage(decoded, "Geo Fencing");
-
-    const formData = await req.formData();    const file = formData.get("file") as File;
-    const fromTime = formData.get("fromTime") as string;
-    const fromPeriod = formData.get("fromPeriod") as string;
-    const toTime = formData.get("toTime") as string;
-    const toPeriod = formData.get("toPeriod") as string;
-            const includeB = formData.get("includeB") === "true";
-    
-            if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    
-    // 🚀 Deduct 10 General Tokens
-    const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, 10);
-    if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
-
-    const buffer = await file.arrayBuffer();
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buffer);
-    const ws = wb.worksheets[0];
+    try {
+      const cookieStore = await cookies();
+      const token = cookieStore.get("sessionToken")?.value;
+      if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const decoded: any = jwt.verify(token, SECRET);
+  
+      // 🚀 LOG USAGE
+      await logToolUsage(decoded, "Geo Fencing");
+  
+      const formData = await req.formData();    const file = formData.get("file") as File;
+      const fromTime = formData.get("fromTime") as string;
+      const fromPeriod = formData.get("fromPeriod") as string;
+      const toTime = formData.get("toTime") as string;
+      const toPeriod = formData.get("toPeriod") as string;
+              const includeB = formData.get("includeB") === "true";
+      
+              if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+      
+      // 🚀 Deduct 10 General Tokens
+      const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, 10);
+      if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
+  
+      const buffer = await file.arrayBuffer();
+      const wb = new ExcelJS.Workbook();
+      const isCsv = file.name.toLowerCase().endsWith(".csv");
+  
+      if (isCsv) {
+          const stream = Readable.from(Buffer.from(buffer));
+          await wb.csv.read(stream);
+      } else {
+          await wb.xlsx.load(buffer);
+      }
+  
+      const ws = wb.worksheets[0];
     
     const rawRows: any[][] = [];
     ws.eachRow({ includeEmpty: true }, (row) => {

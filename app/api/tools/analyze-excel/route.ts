@@ -255,11 +255,22 @@ function makeUniqueKeys(headers: string[]) {
     });
 }
 
+import { Readable } from "stream";
+
 async function processSingleFile(buffer: ArrayBuffer, options: any) {
-    const { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages } = options;
+    const { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages, fileName } = options;
     
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buffer);
+    const isCsv = fileName?.toLowerCase().endsWith(".csv");
+
+    if (isCsv) {
+        // ExcelJS csv.read accepts a stream
+        const stream = Readable.from(Buffer.from(buffer));
+        await wb.csv.read(stream);
+    } else {
+        await wb.xlsx.load(buffer);
+    }
+
     const ws = wb.worksheets[0];
 
     const rawRows: any[][] = [];
@@ -955,7 +966,7 @@ export async function POST(req: NextRequest) {
             if (!res.ok) throw new Error(`Failed to download ${fileName} from Cloudinary`);
             const buffer = await res.arrayBuffer();
             
-            const reportBuffer = await processSingleFile(buffer, { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages });
+            const reportBuffer = await processSingleFile(buffer, { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages, fileName });
             if (reportBuffer) {
                 const outFileName = fileName.split('.').slice(0, -1).join('.') + "_Analyzed.xlsx";
                 zip.file(outFileName, reportBuffer);
