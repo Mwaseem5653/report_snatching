@@ -79,7 +79,8 @@ export const locationData: LocationData = {
           "Al‑Falah",
           "Khokhrapar",
           "Zaman Town",
-          "Shah Faisal"
+          "Shah Faisal",
+          "Saudabad"
         ],
         markets: ["Korangi Mobile Market", "Landhi Phone Shops"],
       },
