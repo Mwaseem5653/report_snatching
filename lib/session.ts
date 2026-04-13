@@ -23,7 +23,8 @@ export async function getServerSession() {
       ps: decoded.ps,
       mobile: decoded.mobile,
       hasToolsAccess: !!decoded.hasToolsAccess,
-      tokens: decoded.tokens || 0
+      tokens: decoded.tokens || 0,
+      exp: decoded.exp // 🚀 Pass JWT expiration time for countdown
     };
   } catch (err) {
     return null;

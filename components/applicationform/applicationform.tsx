@@ -101,8 +101,8 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.city || !formData.district || !formData.psName) {
-        alert("❌ Error: City, District, and Police Station selection is mandatory.");
+    if (!formData.city || !formData.district || !formData.psName || !formData.crimeHead) {
+        alert("❌ Error: City, District, Police Station, and Crime Category are mandatory.");
         return;
     }
 

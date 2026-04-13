@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, User, ChevronDown, Bell, Coins, Menu, X, Smartphone, ShieldCheck } from "lucide-react";
+import { LogOut, User, ChevronDown, Bell, Coins, Menu, X, Clock } from "lucide-react";
 import Image from "next/image";
 import { cn, getApiUrl } from "@/lib/utils";
-import { jwtDecode } from 'jwt-decode'; // Import jwtDecode
+import { toast } from "sonner"; // For a better logout notification
 
 type Session = {
   authenticated: boolean;
@@ -17,7 +17,7 @@ type Session = {
   eyeconTokens?: number;
   hasToolsAccess?: boolean;
   permissions?: any;
-  exp?: number; // Add exp to session type
+  exp?: number;
 };
 
 interface HeaderProps {
@@ -31,9 +31,17 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
   const [open, setOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const sessionExpiryTimer = useRef<NodeJS.Timeout | null>(null); // Ref for the session expiry timer
   const router = useRouter();
+
+  const handleLogout = useCallback(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    toast.error("Session expired. Logging out...");
+    router.push("/authentication/login");
+    fetch(getApiUrl("/api/auth/logout"), { method: "POST" });
+  }, [router]);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -44,117 +52,75 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
   }, []);
 
   const fetchSession = useCallback(async () => {
-    // Clear any existing proactive expiry timer
-    if (sessionExpiryTimer.current) {
-        clearTimeout(sessionExpiryTimer.current);
-        sessionExpiryTimer.current = null;
-    }
     try {
       const res = await fetch(getApiUrl("/api/auth/create-session"), { cache: "no-store" });
       const data = await res.json();
       if (data.authenticated) {
           setSession(data);
           fetchNotifications();
-
-          // 🚀 Proactive Redirect: Set timer to redirect 5 minutes before session expiry
-          if (data.exp) { // data.exp comes from JWT payload (seconds)
-            const expiresInMillis = data.exp * 1000 - Date.now(); // Remaining time in milliseconds
-            const redirectBeforeMillis = 5 * 60 * 1000; // Redirect 5 minutes before actual expiry (5 mins * 60 sec/min * 1000 ms/sec)
-            
-            if (expiresInMillis > redirectBeforeMillis) {
-                sessionExpiryTimer.current = setTimeout(() => {
-                    alert("Your session is about to expire. You will be redirected to the login page.");
-                    router.push("/authentication/login");
-                }, expiresInMillis - redirectBeforeMillis);
-            } else if (expiresInMillis > 0) {
-                // If less than 5 minutes remaining but still active, redirect after remaining time
-                sessionExpiryTimer.current = setTimeout(() => {
-                    router.push("/authentication/login");
-                }, expiresInMillis);
-            }
-          }
-
       } else {
           setSession({ authenticated: false });
-          // If not authenticated, ensure any timer is cleared and redirect if not already on login page
           if (window.location.pathname !== "/authentication/login") {
-            router.push("/authentication/login");
+            handleLogout();
           }
       }
     } catch (err) {
       setSession({ authenticated: false });
       if (window.location.pathname !== "/authentication/login") {
-        router.push("/authentication/login");
+        handleLogout();
       }
     } finally {
       setLoading(false);
     }
-  }, [fetchNotifications, router]);
+  }, [fetchNotifications, handleLogout]);
+
+  // 🚀 PROACTIVE COUNTDOWN: Automatically logout when session expires
+  useEffect(() => {
+    if (!session?.exp) return;
+
+    const updateTimer = () => {
+        const secondsRemaining = Math.floor((session.exp! * 1000 - Date.now()) / 1000);
+        if (secondsRemaining <= 0) {
+            setTimeLeft(0);
+            handleLogout();
+        } else {
+            setTimeLeft(secondsRemaining);
+        }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [session?.exp, handleLogout]);
 
   useEffect(() => {
-    // Initialize session or fetch it if not provided
     if (!initialSession) {
         fetchSession();
     } else {
-        // If initial session is provided, we still need to set up the proactive timer
         setSession(initialSession);
         fetchNotifications();
-        if (initialSession.exp) {
-            const expiresInMillis = initialSession.exp * 1000 - Date.now();
-            const redirectBeforeMillis = 5 * 60 * 1000;
-            
-            if (expiresInMillis > redirectBeforeMillis) {
-                sessionExpiryTimer.current = setTimeout(() => {
-                    alert("Your session is about to expire. You will be redirected to the login page.");
-                    router.push("/authentication/login");
-                }, expiresInMillis - redirectBeforeMillis);
-            } else if (expiresInMillis > 0) {
-                sessionExpiryTimer.current = setTimeout(() => {
-                    router.push("/authentication/login");
-                }, expiresInMillis);
-            }
-        }
     }
 
-    // 🚀 HEARTBEAT: Update lastActive every 25 seconds to stay "live"
     const heartbeatInterval = setInterval(() => {
         if (session?.authenticated) {
             fetch(getApiUrl("/api/auth/create-session"), { cache: "no-store" })
                 .then(res => res.json())
                 .then(data => {
-                    if (!data.authenticated) {
-                        // If heartbeat fails authentication, force logout
-                        router.push("/authentication/login");
-                    }
+                    if (!data.authenticated) handleLogout();
                 })
                 .catch(() => {});
         }
     }, 25000);
 
-    // 🚀 INTEGRITY CHECK: Every 15 minutes, check if user still exists/valid
     const integrityInterval = setInterval(() => {
         if (session?.authenticated) {
             fetch(getApiUrl("/api/auth/create-session"), { cache: "no-store" })
                 .then(res => res.json())
                 .then(data => {
-                    if (!data.authenticated) {
-                        // Clear cache and move to login if user deleted/disabled
-                        localStorage.clear();
-                        sessionStorage.clear();
-                        router.push("/authentication/login");
-                    }
+                    if (!data.authenticated) handleLogout();
                 });
         }
     }, 15 * 60 * 1000);
-
-    // 🚀 TAB CLOSE LOGOUT: Logout when tab is closed
-    const handleTabClose = () => {
-        if (session?.authenticated) {
-            // navigator.sendBeacon is more reliable for fire-and-forget on close
-            const url = getApiUrl("/api/auth/logout");
-            navigator.sendBeacon(url);
-        }
-    };
 
     const handleFocus = () => fetchNotifications();
     const handleRefresh = () => fetchSession();
@@ -170,22 +136,11 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
     return () => {
       clearInterval(heartbeatInterval);
       clearInterval(integrityInterval);
-      if (sessionExpiryTimer.current) clearTimeout(sessionExpiryTimer.current); // Clear proactive timer on unmount
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("refresh-session", handleRefresh);
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [initialSession, session?.authenticated, fetchNotifications, fetchSession, router]);
-
-  const handleLogout = () => {
-    // Clear proactive timer on manual logout
-    if (sessionExpiryTimer.current) {
-        clearTimeout(sessionExpiryTimer.current);
-        sessionExpiryTimer.current = null;
-    }
-    router.push("/"); // Redirect after logout
-    fetch(getApiUrl("/api/auth/logout"), { method: "POST" });
-  };
+  }, [initialSession, session?.authenticated, fetchNotifications, fetchSession, handleLogout]);
 
   const initials = (name?: string | null) => {
     if (!name) return "U";
@@ -193,8 +148,19 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
     return parts.length === 1 ? parts[0].charAt(0).toUpperCase() : (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
   };
 
+  const formatTime = (seconds: number | null) => {
+    if (seconds === null || seconds < 0) return "00:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
   const hasTools = session?.role === "super_admin" || 
                   (session?.permissions && Object.values(session.permissions).some(v => v === true));
+
+  // Threshold for "Urgent" warning (e.g., red color)
+  // Set to 5 minutes (300 seconds) for a 3-hour session.
+  const URGENT_THRESHOLD = 300; 
 
   return (
     <header className="w-full bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200 sticky top-0 z-50">
@@ -218,13 +184,25 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
           </div>
         </div>
 
-        {/* 🔹 Center: Navigation (Desktop Only - CSS Hidden to stop flickering) */}
+        {/* 🔹 Center: Navigation */}
         <div className="hidden lg:flex flex-1 justify-center overflow-x-auto no-scrollbar">
            {children}
         </div>
 
-        {/* 🔹 Right: User Profile & Alerts */}
+        {/* 🔹 Right: User Profile & Timer */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0" ref={dropdownRef}>
+          
+          {/* 🚀 SESSION TIMER (Header) - Now visible on mobile too */}
+          {timeLeft !== null && (
+            <div className={cn(
+                "flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-full text-[10px] md:text-[11px] font-black border transition-all",
+                timeLeft < URGENT_THRESHOLD ? "bg-red-50 text-red-600 border-red-200 animate-pulse" : "bg-blue-50 text-blue-700 border-blue-100"
+            )}>
+                <Clock size={12} className={cn(timeLeft < URGENT_THRESHOLD ? "animate-spin" : "")} />
+                <span>{formatTime(timeLeft)}</span>
+            </div>
+          )}
+
           <button
             onClick={() => setOpen((v) => !v)}
             className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full border border-slate-200 hover:bg-slate-50 transition-all relative"
@@ -254,7 +232,18 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
             <div className="absolute right-4 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
               <div className="p-4 bg-slate-50 border-b border-slate-100">
                 <p className="text-sm font-bold text-slate-800 truncate">{session?.name ?? "Guest"}</p>
-                <p className="text-xs text-slate-500 truncate">{session?.email ?? "No email"}</p>
+                <div className="flex items-center justify-between gap-2 mt-1">
+                    <p className="text-[10px] text-slate-500 truncate">{session?.email ?? "No email"}</p>
+                    {timeLeft !== null && (
+                        <span className={cn(
+                            "text-[10px] font-black px-1.5 py-0.5 rounded",
+                            timeLeft < URGENT_THRESHOLD ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
+                        )}>
+                            {formatTime(timeLeft)}
+                        </span>
+                    )}
+                </div>
+
                 {!["ps_user", "market_user"].includes(session?.role || "") && (session?.role === "super_admin" || 
                   (["admin", "officer", "advanced_tool"].includes(session?.role || "") && hasTools) ||
                   session?.permissions?.token_pool
@@ -318,8 +307,12 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                   </>
                 )}
                 <div className="h-px bg-slate-100 my-1"></div>
-                <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 rounded-xl hover:bg-red-50 transition-colors font-bold">
-                  <LogOut size={16} /> Sign Out
+                <button onClick={handleLogout} className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-red-600 rounded-xl hover:bg-red-50 transition-colors font-black">
+                  <div className="flex items-center gap-3">
+                    <LogOut size={16} /> 
+                    <span>Sign Out</span>
+                  </div>
+                  {timeLeft !== null && <span className={cn("text-[10px]", timeLeft < URGENT_THRESHOLD ? "text-red-700 animate-pulse" : "opacity-60")}>{formatTime(timeLeft)}</span>}
                 </button>
               </div>
             </div>
@@ -334,7 +327,6 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                 className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9998] lg:hidden animate-in fade-in duration-300"
                 onClick={() => setMobileMenuOpen(false)}
             />
-            {/* 🚀 FIXED HEIGHT: Added h-screen and min-h-screen to ensure full sidebar visibility */}
             <div className="fixed left-0 top-0 bottom-0 w-[280px] h-screen min-h-screen bg-white z-[9999] lg:hidden shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 border-r border-slate-200">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-blue-900 text-white shrink-0">
                     <div className="flex items-center gap-3">
@@ -349,18 +341,38 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-white">
+                    {/* 🚀 MOBILE TIMER (Prominent) */}
+                    {timeLeft !== null && (
+                        <div className={cn(
+                            "mb-4 p-4 rounded-xl flex items-center justify-between text-xs font-black border transition-all",
+                            timeLeft < URGENT_THRESHOLD ? "bg-red-50 text-red-600 border-red-200 animate-pulse" : "bg-blue-50 text-blue-700 border-blue-100"
+                        )}>
+                            <div className="flex items-center gap-2">
+                                <Clock size={16} className={cn(timeLeft < URGENT_THRESHOLD ? "animate-spin" : "")} />
+                                <span>Session Security</span>
+                            </div>
+                            <span className="text-sm">{formatTime(timeLeft)}</span>
+                        </div>
+                    )}
+
                     <div className="space-y-4 pb-20">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Navigation Menu</p>
                         <div 
                             className="flex flex-col gap-2" 
                             onClick={(e) => {
-                                // 🚀 Only close sidebar if clicking a direct link (button without collapsible data attr)
                                 if ((e.target as HTMLElement).closest('button:not([data-collapsible])')) {
                                     setTimeout(() => setMobileMenuOpen(false), 300);
                                 }
                             }}
                         >
                             {children}
+                        </div>
+                        
+                        <div className="pt-4 border-t border-slate-100">
+                            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-600 font-black hover:bg-red-50 rounded-xl transition-colors">
+                                <LogOut size={18} />
+                                <span>Sign Out System</span>
+                            </button>
                         </div>
                     </div>
                 </div>
