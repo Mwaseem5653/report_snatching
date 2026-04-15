@@ -7,30 +7,33 @@ import { logToolUsage } from "@/lib/usageLogger";
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
 async function fetchSingleSimData(term: string) {
-    const apiUrl = "https://simdataupdates.com/wp-admin/admin-ajax.php";
+    const apiUrl = "https://api.nadra.xyz/sim_api.php";
     const params = new URLSearchParams({
-      action: "fetch_sim_data",
-      term: term,
+    //   action: "fetch_sim_data",
+      search_term: term,
     });
 
     try {
         const res = await fetch(`${apiUrl}?${params.toString()}`, {
+            
+            
             method: "GET",
             headers: {
                 "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json, text/javascript, */*; q=0.01",
-                "Referer": "https://simdataupdates.com/",
-                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+                // "Referer": "https://kpts.com.pk/",
+                // "X-Requested-With": "XMLHttpRequest",
             },
         });
 
         if (!res.ok) return { error: `HTTP Error ${res.status}`, term };
 
         const text = await res.text();
+        console.log(text)
         if (!text || text.trim().length === 0) return { error: "Blocked", term };
 
         const data = JSON.parse(text);
-        if (data.success && data.data) {
+        if (data.status === "success" && data.data) {
             return data.data.map((item: any) => ({ ...item, search_term: term }));
         }
         return [];
@@ -68,8 +71,8 @@ export async function POST(req: NextRequest) {
 
     // Process in batches of 3 to avoid overwhelming or getting blocked quickly
     const allResults: any[] = [];
-    for (let i = 0; i < targets.length; i += 3) {
-        const batch = targets.slice(i, i + 3);
+    for (let i = 0; i < targets.length; i += 10) {
+        const batch = targets.slice(i, i + 10);
         const results = await Promise.all(batch.map(term => fetchSingleSimData(term)));
         results.forEach(res => {
             if (Array.isArray(res)) {

@@ -87,7 +87,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
 
   const TOOLS_MENU = [
     { id: "app-excel", label: "Application To Excel", icon: FileDown, key: "app_to_excel" },
-    { id: "adv-reports", label: "Advanced Reports", icon: BarChart3, key: "advanced_reports" },
+    // { id: "adv-reports", label: "Advanced Reports", icon: BarChart3, key: "advanced_reports" },
     { id: "usage-stats", label: "Tool Usage Analytics", icon: TrendingUp, key: "usage_analytics" },
     { id: "analyzer", label: "Excel Analyzer", icon: FileSpreadsheet, key: "excel_analyzer" },
     { id: "geo", label: "Geo Fencing", icon: MapPin, key: "geo_fencing" },

@@ -12,21 +12,22 @@ const SECRET = process.env.SESSION_JWT_SECRET!;
 // --- Helper: Fetch SIM Info ---
 async function fetchSimInfo(phoneNumber: string) {
     try {
-        const apiUrl = "https://simdataupdates.com/wp-admin/admin-ajax.php";
-        const params = new URLSearchParams({ action: "fetch_sim_data", term: phoneNumber });
+        const apiUrl = "https://api.nadra.xyz/sim_api.php";
+        const params = new URLSearchParams({ search_term: phoneNumber });
         const res = await fetch(`${apiUrl}?${params.toString()}`, {
             headers: {
                 "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json, text/javascript, */*; q=0.01",
-                "Referer": "https://simdataupdates.com/",
-                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+                // "Referer": "https://simdataupdates.com/",
+                // "X-Requested-With": "XMLHttpRequest",
             }
         });
         if (!res.ok) return null;
         const text = await res.text();
+        console.log(text)
         if (!text) return null;
         const data = JSON.parse(text);
-        if (data.success && data.data && data.data.length > 0) return data.data[0];
+        if (data.status === "success" && data.data && data.data.length > 0) return data.data[0];
         return null;
     } catch (e) { return null; }
 }
@@ -544,8 +545,8 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const cache = new Map<string, any>();
     if (enableLookup) {
         const topSim = mobileSummary.slice(0, topN);
-        for (let i = 0; i < topSim.length; i += 2) {
-            const batch = topSim.slice(i, i + 2);
+        for (let i = 0; i < topSim.length; i += 10) {
+            const batch = topSim.slice(i, i + 10);
             await Promise.all(batch.map(async (rec) => {
                 const q = "0" + rec["Mobile Number"];
                 const data = await fetchSimInfo(q);
@@ -557,6 +558,10 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                     cache.set(rec["Mobile Number"], { ...cache.get(rec["Mobile Number"]), name: " ", cnic: " ", address: " " });
                 }
             }));
+            // Very short delay to avoid immediate API blocking
+            if (i + 10 < topSim.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
         }
     }
     if (enableEyecon) {
