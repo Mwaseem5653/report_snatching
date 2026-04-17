@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { FileSpreadsheet, Loader2, Download, AlertTriangle, Settings2, Terminal, Cpu, Clock, Layers, CheckCircle2, Zap, Trash2 } from "lucide-react";
+import { FileSpreadsheet, Loader2, Download, AlertTriangle, Settings2, Terminal, Cpu, Clock, Layers, CheckCircle2, Zap, Trash2, FileArchive } from "lucide-react";
 import { toast } from "sonner";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/uploadHelper";
 import AlertModal from "@/components/ui/alert-modal";
@@ -235,17 +235,14 @@ export default function ExcelAnalyzerClient() {
                 </Button>
             )}
             {!loading ? (
-                <Button onClick={handleAnalyze} disabled={files.length === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-6 font-black shadow-lg shadow-emerald-600/20 uppercase tracking-tight">Start Analysis</Button>
+                <Button onClick={handleAnalyze} disabled={files.length === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-6 font-black shadow-lg shadow-emerald-600/20 uppercase tracking-tight">
+                    {resultUrl ? "Restart Analysis" : "Start Analysis"}
+                </Button>
             ) : (
                 <div className="flex items-center gap-2 px-4 h-10 bg-slate-100 rounded-xl">
                     <Loader2 size={16} className="animate-spin text-emerald-600" />
                     <span className="text-[10px] font-black text-slate-500 uppercase">Processing...</span>
                 </div>
-            )}
-            {resultUrl && (
-                <a href={resultUrl} download={`Analysis_Package_${Date.now()}.zip`} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-6 font-black shadow-lg shadow-indigo-600/20 uppercase tracking-tight text-xs">
-                    <Download size={16} /> Download ZIP
-                </a>
             )}
         </div>
       </div>
@@ -290,7 +287,7 @@ export default function ExcelAnalyzerClient() {
               {/* Settings Column */}
               <div className="md:col-span-1 flex flex-col min-h-fit">
                 <Card className="flex-1 shadow-sm border-slate-200 rounded-3xl overflow-hidden flex flex-col">
-                    <CardHeader className="pb-3 shrink-0">
+                    <CardHeader className="pb-3 shrink-0 border-b border-slate-50">
                         <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-slate-500"><Settings2 size={14} /> Analysis Settings</CardTitle>
                     </CardHeader>
                     <CardContent className="overflow-y-visible p-3 md:p-6 space-y-4">
@@ -358,7 +355,7 @@ export default function ExcelAnalyzerClient() {
 
               {/* Upload Column */}
               <div className="md:col-span-2 flex flex-col min-h-[300px]">
-                <Card className="flex-1 shadow-md border-emerald-100 bg-emerald-50/10 rounded-3xl overflow-hidden flex flex-col">
+                <Card className="flex-1 shadow-md border-emerald-100 bg-emerald-50/10 rounded-3xl overflow-hidden flex flex-col relative">
                     <CardContent className="flex-1 flex flex-col h-full p-6 overflow-hidden">
                         {files.length === 0 ? (
                             <div className="relative flex-1 flex flex-col items-center justify-center border-2 border-dashed border-emerald-200 rounded-3xl hover:bg-emerald-50/50 transition-colors group">
@@ -383,11 +380,24 @@ export default function ExcelAnalyzerClient() {
                                         </div>
                                     ))}
                                 </div>
+                                
                                 {resultUrl && (
                                     <div className="shrink-0 pt-4 space-y-3 animate-in fade-in slide-in-from-bottom-2">
-                                        <div className="p-4 bg-emerald-600 text-white rounded-2xl flex items-center gap-3 shadow-lg shadow-emerald-600/20">
-                                            <CheckCircle2 size={24} className="shrink-0" />
-                                            <div><p className="text-xs font-black uppercase tracking-tight leading-none">Process Complete</p><p className="text-[10px] opacity-80 font-bold uppercase mt-1">Report combined & optimized</p></div>
+                                        <div className="p-4 bg-emerald-600 text-white rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg shadow-emerald-600/20">
+                                            <div className="flex items-center gap-3 w-full md:w-auto">
+                                                <CheckCircle2 size={32} className="shrink-0 text-emerald-200" />
+                                                <div>
+                                                    <p className="text-sm font-black uppercase tracking-tight leading-none">Process Complete</p>
+                                                    <p className="text-[10px] opacity-80 font-bold uppercase mt-1">Reports Analyzed & Combined</p>
+                                                </div>
+                                            </div>
+                                            <a 
+                                                href={resultUrl} 
+                                                download={`Analysis_Package_${Date.now()}.zip`}
+                                                className="w-full md:w-auto flex items-center justify-center gap-2 bg-white text-emerald-700 px-6 h-12 rounded-xl font-black uppercase text-xs shadow-md hover:bg-slate-50 transition-colors"
+                                            >
+                                                <FileArchive size={18} /> Download Results (ZIP)
+                                            </a>
                                         </div>
                                     </div>
                                 )}
