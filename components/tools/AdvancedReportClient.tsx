@@ -301,15 +301,15 @@ export default function AdvancedReportClient() {
                         <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Analytical Overview & Counts</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                     <Button onClick={fetchData} variant="outline" className="flex-1 md:flex-none rounded-xl h-10 border-slate-200" disabled={loading}>
                         {loading ? <Loader2 size={18} className="animate-spin" /> : <RefreshCcw size={18} />}
                     </Button>
-                    <Button onClick={exportToExcel} className="flex-[2] md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 shadow-lg shadow-emerald-600/20 text-xs font-bold uppercase tracking-tight">
-                        <Download size={16} className="mr-2" /> Export Excel
+                    <Button onClick={exportToExcel} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 shadow-lg shadow-emerald-600/20 text-[10px] md:text-xs font-bold uppercase tracking-tight px-3 md:px-4">
+                        <Download size={16} className="md:mr-2" /> <span className="hidden xs:inline">Export Excel</span>
                     </Button>
-                    <Button onClick={exportToPDF} className="flex-[2] md:flex-none bg-red-600 hover:bg-red-700 text-white rounded-xl h-10 shadow-lg shadow-red-600/20 text-xs font-bold uppercase tracking-tight">
-                        <FileText size={16} className="mr-2" /> Download PDF
+                    <Button onClick={exportToPDF} className="flex-1 md:flex-none bg-red-600 hover:bg-red-700 text-white rounded-xl h-10 shadow-lg shadow-red-600/20 text-[10px] md:text-xs font-bold uppercase tracking-tight px-3 md:px-4">
+                        <FileText size={16} className="md:mr-2" /> <span className="hidden xs:inline">Download PDF</span>
                     </Button>
                 </div>
             </div>
