@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { locationData } from "@/components/location/location";
 import { toast } from "sonner";
-import { User, Mail, Lock, Phone, BadgeHelp, MapPin, Building2, Store, Loader2, ShieldCheck, LockIcon, Wrench, Coins } from "lucide-react";
+import { User, Mail, Lock, Phone, BadgeHelp, MapPin, Building2, Store, Loader2, ShieldCheck, LockIcon, Wrench, Coins, Calendar } from "lucide-react";
 import { cn, getApiUrl } from "@/lib/utils";
 
 export default function AddUserForm({
@@ -33,8 +33,6 @@ export default function AddUserForm({
   const [district, setDistrict] = useState<string | null>(null);
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [ps, setPs] = useState<string | null>(null);
-  const [tokens, setTokens] = useState(0);
-  const [eyeconTokens, setEyeconTokens] = useState(0);
 
   // 🚀 Detailed Permissions
   const [permissions, setPermissions] = useState({
@@ -132,8 +130,8 @@ export default function AddUserForm({
       district: role === "admin" ? selectedDistricts : district,
       ps, 
       permissions, // 🚀 Send detailed permissions
-      tokens,
-      eyeconTokens
+      tokens: 0,
+      eyeconTokens: 0
     };
 
     onSave(payload);
@@ -153,7 +151,6 @@ export default function AddUserForm({
 
   // 🚀 Logic: Can this user assign tools to others?
   const canAssignTools = sessionRole === "super_admin" || sessionPermissions?.can_delegate;
-  const canAssignTokens = sessionRole === "super_admin" || sessionPermissions?.can_delegate;
 
   const ALL_TOOLS = [
     { key: 'excel_analyzer', label: 'Excel Analyzer' },
@@ -181,13 +178,13 @@ export default function AddUserForm({
     <div className="p-8 md:p-10 bg-white">
       <form onSubmit={handleSubmit} className="space-y-8">
         
-        {/* 1. Account Role & Credits */}
+        {/* 1. Account Role */}
         <section className="space-y-4">
           <div className="flex items-center gap-2 text-slate-800 border-b border-slate-100 pb-2">
              <ShieldCheck size={20} className="text-blue-600" />
-             <h3 className="font-bold uppercase tracking-wider text-xs">Assign System Role & Credits</h3>
+             <h3 className="font-bold uppercase tracking-wider text-xs">Assign System Role</h3>
           </div>
-          <div className={cn("grid grid-cols-1 gap-6 items-end", !canAssignTokens ? "md:grid-cols-1" : "md:grid-cols-3")}>
+          <div className="grid grid-cols-1 gap-6 items-end">
             <div className="space-y-2">
                 <Label className="text-slate-600 text-xs font-bold uppercase">User Access Level</Label>
                 <Select onValueChange={setRole}>
@@ -203,29 +200,6 @@ export default function AddUserForm({
                 </SelectContent>
                 </Select>
             </div>
-
-            {canAssignTokens && (
-                <>
-                    <div className="space-y-2">
-                        <Label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Coins size={12}/> General Tokens</Label>
-                        <Input 
-                            type="number" 
-                            value={tokens} 
-                            onChange={(e) => setTokens(parseInt(e.target.value) || 0)}
-                            className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Coins size={12}/> Eyecon Tokens</Label>
-                        <Input 
-                            type="number" 
-                            value={eyeconTokens} 
-                            onChange={(e) => setEyeconTokens(parseInt(e.target.value) || 0)}
-                            className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900"
-                        />
-                    </div>
-                </>
-            )}
           </div>
         </section>
 

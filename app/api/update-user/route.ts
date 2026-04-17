@@ -72,6 +72,16 @@ export async function POST(req: Request) {
     if (role) firestoreUpdates.role = role;
     if (metadata.tokens !== undefined) firestoreUpdates.tokens = parseInt(metadata.tokens) || 0;
     if (metadata.eyeconTokens !== undefined) firestoreUpdates.eyeconTokens = parseInt(metadata.eyeconTokens) || 0;
+    
+    // Update Expiry if expiryDays is provided
+    if (metadata.expiryDays !== undefined) {
+        const days = parseInt(metadata.expiryDays) || 30;
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + days);
+        firestoreUpdates.expiresAt = expiresAt;
+        delete firestoreUpdates.expiryDays; // Cleanup
+    }
+
     if (metadata.hasToolsAccess !== undefined) firestoreUpdates.hasToolsAccess = !!metadata.hasToolsAccess;
     
     // We don't store passwords in Firestore anymore (managed by Firebase Auth)

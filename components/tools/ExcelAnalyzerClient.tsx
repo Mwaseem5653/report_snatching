@@ -368,13 +368,22 @@ export default function ExcelAnalyzerClient() {
                                     <p className="text-[9px] text-slate-400 font-bold uppercase">Fetch Name/CNIC/Address</p>
                                 </div>
                             </div>
-                            {enableLookup && session?.role !== "officer" && (
+                            {enableLookup && (
                                 <div className="pl-6 space-y-1 animate-in slide-in-from-top-1">
-                                    <Label className="text-[9px] text-slate-400 font-bold uppercase">Top Records Limit</Label>
+                                    <Label className="text-[9px] text-slate-400 font-bold uppercase">
+                                        Top Records Limit {session?.role !== "super_admin" && "(Max 50)"}
+                                    </Label>
                                     <Input 
                                         type="number" 
                                         value={topN} 
-                                        onChange={(e) => setTopN(parseInt(e.target.value) || 15)}
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value) || 0;
+                                            if (session?.role === "super_admin") {
+                                                setTopN(val);
+                                            } else {
+                                                setTopN(val > 50 ? 50 : val);
+                                            }
+                                        }}
                                         className="h-8 text-[11px] font-black rounded-lg border-slate-200"
                                     />
                                 </div>

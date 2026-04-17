@@ -30,6 +30,8 @@ import { Input } from "@/components/ui/input";
 import { cn, getApiUrl } from "@/lib/utils";
 import ExcelJS from "exceljs/dist/exceljs.min.js";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function AdvancedReportClient() {
     const [loading, setLoading] = useState(false);
@@ -67,35 +69,42 @@ export default function AdvancedReportClient() {
     const psSummary = useMemo(() => {
         const summary: Record<string, { snatched: number; theft: number; lost: number; total: number }> = {};
 
-        // Initialize with all PS from location file to ensure 0s are shown
+        // Initialize with all PS from location file
         allPS.forEach(ps => {
             summary[ps] = { snatched: 0, theft: 0, lost: 0, total: 0 };
         });
 
-        // Add N/A if there's data without a valid PS
-        if (applications.some(a => !a.ps || !allPS.includes(a.ps))) {
-            summary["N/A"] = { snatched: 0, theft: 0, lost: 0, total: 0 };
-        }
-
+        // Loop through applications and increment counts
         applications.forEach((app) => {
-            const psName = app.ps || "N/A";
-            if (summary[psName]) {
-                if (app.crimeHead === "snatched") summary[psName].snatched++;
-                else if (app.crimeHead === "theft") summary[psName].theft++;
-                else if (app.crimeHead === "lost") summary[psName].lost++;
-                summary[psName].total++;
+            const psName = app.ps;
+            // If PS exists in our list, use it. Otherwise, use N/A
+            const targetPs = (psName && allPS.includes(psName)) ? psName : "N/A";
+            
+            if (!summary[targetPs]) {
+                summary[targetPs] = { snatched: 0, theft: 0, lost: 0, total: 0 };
             }
+
+            if (app.crimeHead === "snatched") summary[targetPs].snatched++;
+            else if (app.crimeHead === "theft") summary[targetPs].theft++;
+            else if (app.crimeHead === "lost") summary[targetPs].lost++;
+            summary[targetPs].total++;
         });
 
         let results = Object.entries(summary)
             .map(([ps, counts]) => ({ ps, ...counts }));
 
-        // If a specific PS is filtered, show only that one
+        // Only show N/A if it has actual data
+        results = results.filter(r => r.ps !== "N/A" || r.total > 0);
+
         if (filterPs !== "all") {
             results = results.filter(r => r.ps === filterPs);
         }
 
-        return results.sort((a, b) => b.total - a.total || a.ps.localeCompare(b.ps));
+        return results.sort((a, b) => {
+            if (a.ps === "N/A") return 1;
+            if (b.ps === "N/A") return -1;
+            return b.total - a.total || a.ps.localeCompare(b.ps);
+        });
     }, [applications, allPS, filterPs]);
 
     const fetchData = async () => {
@@ -187,6 +196,99 @@ export default function AdvancedReportClient() {
         a.click();
     };
 
+    const exportToPDF = () => {
+        if (psSummary.length === 0) {
+            toast.error("No data to export");
+            return;
+        }
+
+        const doc = new jsPDF();
+        
+        // Header
+        doc.setFontSize(18);
+        doc.setFont("helvetica", "bold");
+        doc.text("PS Report For Application Entry and Record", 105, 15, { align: "center" });
+        
+        // Date Range Detail
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        
+        let dateRangeText = "";
+        const now = new Date();
+        const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+        if (filterPeriod === "custom") {
+            dateRangeText = `Record From: ${fromDate ? formatDate(new Date(fromDate)) : "Start"} TO ${toDate ? formatDate(new Date(toDate)) : "End"}`;
+        } else if (filterPeriod === "today") {
+            dateRangeText = `Record For: ${formatDate(now)}`;
+        } else if (filterPeriod === "15days") {
+            const start = new Date();
+            start.setDate(start.getDate() - 15);
+            dateRangeText = `Record From: ${formatDate(start)} TO ${formatDate(now)}`;
+        } else if (filterPeriod === "1month") {
+            const start = new Date();
+            start.setMonth(start.getMonth() - 1);
+            dateRangeText = `Record From: ${formatDate(start)} TO ${formatDate(now)}`;
+        } else if (filterPeriod === "3months") {
+            const start = new Date();
+            start.setMonth(start.getMonth() - 3);
+            dateRangeText = `Record From: ${formatDate(start)} TO ${formatDate(now)}`;
+        } else {
+            dateRangeText = "Record Period: All Time";
+        }
+
+        doc.text(dateRangeText, 105, 22, { align: "center" });
+
+        // Table Data Preparation
+        const tableData = psSummary.map(item => [
+            item.ps !== "N/A" ? `PS ${item.ps}` : item.ps,
+            item.snatched.toString(),
+            item.theft.toString(),
+            item.lost.toString(),
+            item.total.toString()
+        ]);
+
+        // Calculate Grand Totals
+        const grandTotal = psSummary.reduce((acc, curr) => ({
+            snatched: acc.snatched + curr.snatched,
+            theft: acc.theft + curr.theft,
+            lost: acc.lost + curr.lost,
+            total: acc.total + curr.total
+        }), { snatched: 0, theft: 0, lost: 0, total: 0 });
+
+        // Add Grand Total Row
+        tableData.push([
+            'GRAND TOTAL',
+            grandTotal.snatched.toString(),
+            grandTotal.theft.toString(),
+            grandTotal.lost.toString(),
+            grandTotal.total.toString()
+        ]);
+
+        autoTable(doc, {
+            head: [['Police Station', 'Snatched', 'Theft', 'Lost', 'Total']],
+            body: tableData,
+            startY: 30,
+            theme: 'grid',
+            headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontSize: 10, halign: 'center' },
+            bodyStyles: { fontSize: 9, halign: 'center', textColor: [0, 0, 0] },
+            columnStyles: {
+                0: { halign: 'left', fontStyle: 'bold' },
+                4: { fontStyle: 'bold' }
+            },
+            didParseCell: (data) => {
+                // Style the Grand Total row
+                if (data.row.index === tableData.length - 1) {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [241, 245, 249]; // slate-50
+                }
+            },
+            margin: { top: 30 }
+        });
+
+        doc.save(`PS_Summary_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border border-slate-200 shadow-sm shrink-0">
@@ -205,6 +307,9 @@ export default function AdvancedReportClient() {
                     </Button>
                     <Button onClick={exportToExcel} className="flex-[2] md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 shadow-lg shadow-emerald-600/20 text-xs font-bold uppercase tracking-tight">
                         <Download size={16} className="mr-2" /> Export Excel
+                    </Button>
+                    <Button onClick={exportToPDF} className="flex-[2] md:flex-none bg-red-600 hover:bg-red-700 text-white rounded-xl h-10 shadow-lg shadow-red-600/20 text-xs font-bold uppercase tracking-tight">
+                        <FileText size={16} className="mr-2" /> Download PDF
                     </Button>
                 </div>
             </div>
@@ -328,7 +433,7 @@ export default function AdvancedReportClient() {
                 ))}
             </div>
 
-            {/* List View */}
+            {/* PS Summary Table View */}
             <div className="flex justify-center">
                 <Card className="w-full lg:w-[70%] border-slate-200 rounded-none shadow-sm overflow-hidden bg-white border">
                     <CardHeader className="bg-slate-50 border-b border-slate-100 flex flex-row items-center justify-between p-2 md:p-3">
@@ -357,10 +462,10 @@ export default function AdvancedReportClient() {
                                             <td className="px-4 md:px-6 py-1 text-[10px] md:text-xs font-bold text-slate-700 uppercase border-r border-slate-100">
                                                 {item.ps !== "N/A" ? `PS ${item.ps}` : item.ps}
                                             </td>
-                                            <td className="px-4 md:px-6 py-1 text-sm md:text-base  text-black text-center border-r border-slate-100">{item.snatched}</td>
-                                            <td className="px-4 md:px-6 py-1 text-sm md:text-base text-black text-center border-r border-slate-100">{item.theft}</td>
-                                            <td className="px-4 md:px-6 py-1 text-sm md:text-base  text-black text-center border-r border-slate-100">{item.lost}</td>
-                                            <td className="px-4 md:px-6 py-1 text-sm md:text-base  text-black text-center bg-slate-50/30 font-mono">{item.total}</td>
+                                            <td className="px-4 md:px-6 py-1 text-sm md:text-base font-black text-black text-center border-r border-slate-100">{item.snatched}</td>
+                                            <td className="px-4 md:px-6 py-1 text-sm md:text-base font-black text-black text-center border-r border-slate-100">{item.theft}</td>
+                                            <td className="px-4 md:px-6 py-1 text-sm md:text-base font-black text-black text-center border-r border-slate-100">{item.lost}</td>
+                                            <td className="px-4 md:px-6 py-1 text-sm md:text-base font-black text-black text-center bg-slate-50/30 font-mono">{item.total}</td>
                                         </tr>
                                     )) : (
                                         <tr>

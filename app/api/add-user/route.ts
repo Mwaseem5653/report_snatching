@@ -27,9 +27,7 @@ export async function POST(req: Request) {
       rank,
       buckle,
       enrolledBy,
-      tokens,
-      eyeconTokens,
-      permissions // 🚀 Capture new permissions object
+      permissions
     } = body;
 
     // 1. Basic Validation
@@ -39,13 +37,6 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-
-    const tAmount = parseInt(tokens) || 0;
-    const eAmount = parseInt(eyeconTokens) || 0;
-
-    // 🚀 Check and Deduct from Pool
-    if (tAmount > 0) await deductFromPool(tAmount, "general");
-    if (eAmount > 0) await deductFromPool(eAmount, "eyecon");
 
     // 2. Create User in Firebase Native Authentication
     let userRecord;
@@ -88,16 +79,14 @@ export async function POST(req: Request) {
       rank: rank || null,
       buckle: buckle || null,
       enrolledBy: enrolledBy || null,
-      tokens: tAmount,
-      eyeconTokens: eAmount,
-      permissions: permissions || {} // 🚀 Store in Firestore
+      tokens: 0,
+      eyeconTokens: 0,
+      tokensExpiry: null,
+      eyeconTokensExpiry: null,
+      permissions: permissions || {}
     };
 
     await adminDb.collection("users").doc(uid).set(userData);
-
-    // 🚀 Log Transaction
-    if (tAmount > 0) await logTokenTransaction({ from: "Pool", toEmail: email, amount: tAmount, type: "general", action: "issue", adminEmail });
-    if (eAmount > 0) await logTokenTransaction({ from: "Pool", toEmail: email, amount: eAmount, type: "eyecon", action: "issue", adminEmail });
 
     return NextResponse.json({
       success: true,

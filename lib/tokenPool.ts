@@ -22,7 +22,7 @@ export async function logTokenTransaction(data: {
     toEmail: string;
     amount: number;
     type: "eyecon" | "general";
-    action: "issue" | "add_to_pool";
+    action: "issue" | "add_to_pool" | "reset_pool" | "issue_to_user";
     adminEmail: string;
 }) {
     await adminDb.collection("token_logs").add({

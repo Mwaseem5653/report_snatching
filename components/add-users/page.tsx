@@ -384,29 +384,6 @@ export default function UserManagement() {
                 {/* 🚀 SUPER ADMIN & DELEGATORS: TOOLS & DETAILED PERMISSIONS */}
                 {(currentUser?.role === "super_admin" || currentUser?.permissions?.can_delegate) && (
                     <div className="col-span-full space-y-4">
-                        {(currentUser?.role === "super_admin" || currentUser?.permissions?.token_pool) && (
-                            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-500 uppercase">General Tokens</label>
-                                    <Input 
-                                        type="number" 
-                                        value={selectedUser.tokens || 0} 
-                                        onChange={(e) => setSelectedUser({...selectedUser, tokens: parseInt(e.target.value) || 0})}
-                                        className="rounded-xl border-slate-300 h-11 bg-white text-slate-900"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-500 uppercase">Eyecon Tokens</label>
-                                    <Input 
-                                        type="number" 
-                                        value={selectedUser.eyeconTokens || 0} 
-                                        onChange={(e) => setSelectedUser({...selectedUser, eyeconTokens: parseInt(e.target.value) || 0})}
-                                        className="rounded-xl border-slate-300 h-11 bg-white text-slate-900"
-                                    />
-                                </div>
-                            </div>
-                        )}
-
                         {selectedUser.role !== "ps_user" && selectedUser.role !== "market_user" && (
                             <div className="p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
                                 <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">

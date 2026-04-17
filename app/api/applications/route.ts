@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
     let applications = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
 
     // 3. In-Memory Filters
-    if (period !== "all") {
+    if (period !== "all" && period !== "custom") {
       const now = new Date();
       let limitDate = new Date();
       if (period === "today") {
