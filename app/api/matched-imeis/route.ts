@@ -46,15 +46,11 @@ export async function GET(req: NextRequest) {
     // Status Filter (Crucial for 'unseen' inbox logic)
     if (statusFilter && statusFilter !== "all") {
         if (statusFilter === "new") {
-            // "New" / "Unseen" Logic
-            if (role === "super_admin") {
-                matches = matches.filter((m: any) => !m.superAdminCleared);
-            } else if (role === "admin") {
-                // Show items not acknowledged by Admin, but ONLY if they are New or Processed.
-                // This hides globally 'cleared' items from the default inbox even if Admin hasn't clicked ack.
-                matches = matches.filter((m: any) => !m.adminCleared && (m.status === "new" || m.status === "processed"));
+            // Admins/Super Admins see all items that are NOT recovered
+            if (role === "super_admin" || role === "admin") {
+                matches = matches.filter((m: any) => m.status !== "recovered");
             } else {
-                // Officer or others: Standard status check
+                // Officers/Others see only 'new' items
                 matches = matches.filter((m: any) => m.status === "new");
             }
         } 

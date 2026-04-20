@@ -43,38 +43,51 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Search for ACTIVE reports using the 'allImeis' array field
-    // A match is only valid if at least one report is NOT 'complete'
-    // This includes 'pending' and 'processed' statuses.
     const snapshot = await query.get();
-    
     const allReports = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
     const activeReport = allReports.find((report: any) => report.status !== "complete");
 
     const isMatch = !!activeReport;
     const applicationId = activeReport ? activeReport.id : null;
 
+    // Check existing match status in 'matched_imeis'
+    let status = "match_found";
+    if (isMatch) {
+        const matchSnap = await adminDb.collection("matched_imeis")
+            .where("applicationId", "==", applicationId)
+            .where("imei", "==", searchLabel)
+            .limit(1)
+            .get();
+            
+        if (!matchSnap.empty) {
+            const matchData = matchSnap.docs[0].data();
+            if (matchData.status === "recovered") {
+                status = "recovered_device";
+            }
+        }
+    }
+
     // 3. LOG THE RECOVERY MATCH (Only for Active/Stolen devices)
-    // Only store data if the IMEI matched an active report
     const restrictedRoles = ["super_admin", "admin", "officer"];
     if (isMatch && currentUser && !restrictedRoles.includes(currentUser.role)) {
-        await adminDb.collection("matched_imeis").add({
-            imei: searchLabel,
-            applicationId,
-            applicantName: activeReport?.applicantName || "N/A",
-            crimeHead: activeReport?.crimeHead || "N/A",
-            originalPs: activeReport?.ps || "N/A",
-            originalDistrict: activeReport?.district || "N/A",
-            foundBy: {
-                uid: currentUser.uid,
-                name: currentUser.name || "Unknown",
-                email: currentUser.email,
-                role: currentUser.role,
-                district: currentUser.district || "N/A",
-                ps: currentUser.ps || "N/A",
-            },
-            matchedAt: admin.firestore.Timestamp.now(),
-            status: "new"
-        });
+        // Only log if not already recovered
+        if (status === "match_found") {
+            await adminDb.collection("matched_imeis").add({
+                imei: searchLabel,
+                applicationId,
+                applicantName: activeReport?.applicantName || "N/A",
+                crimeHead: activeReport?.crimeHead || "N/A",
+                originalPs: activeReport?.ps || "N/A",
+                originalDistrict: activeReport?.district || "N/A",
+                foundBy: {
+                    uid: currentUser.uid,
+                    name: currentUser.name || "Unknown",
+                    role: currentUser.role,
+                },
+                matchedAt: admin.firestore.Timestamp.now(),
+                status: "new"
+            });
+        }
     }
 
     // 4. Response logic
@@ -87,7 +100,7 @@ export async function POST(req: NextRequest) {
       data: {
         ps: activeReport?.ps || "Unknown",
         crimeHead: activeReport?.crimeHead || "Unknown",
-        status: "founded",
+        status: status,
       },
     });
   } catch (error: any) {

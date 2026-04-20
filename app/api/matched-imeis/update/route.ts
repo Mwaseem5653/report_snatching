@@ -33,37 +33,26 @@ export async function POST(req: NextRequest) {
 
     if (action === "officer_view") {
         updateData.officerNote = note || "";
+        updateData.status = "processed"; // Just processed
         updateData.viewedBy = {
             uid: currentUser.uid,
             name: currentUser.name,
             role: currentUser.role,
             at: admin.firestore.Timestamp.now()
         };
-        // Only update status to processed if it's currently new, to avoid overriding cleared/other states if we use them
-        if (matchDoc.data()?.status === "new") {
-             updateData.status = "processed"; 
-        }
     } 
     else if (action === "admin_acknowledge") {
-        const timestamp = admin.firestore.Timestamp.now();
-        const acknowledgeData = {
+        updateData.status = "recovered";
+        updateData.acknowledgedBy = {
             uid: currentUser.uid,
             name: currentUser.name,
             role: currentUser.role,
-            at: timestamp
+            at: admin.firestore.Timestamp.now()
         };
-
-        if (currentUser.role === "super_admin") {
-            updateData.superAdminCleared = true;
-            updateData.superAdminAcknowledgedBy = acknowledgeData;
-        } else {
-            updateData.adminCleared = true;
-            updateData.adminAcknowledgedBy = acknowledgeData;
-            // Legacy support: We might still want to mark global status as cleared if Admin does it, 
-            // OR we stop using global status for clearing entirely. 
-            // Given the requirement "admin pass all unseen show ho... super admin jub tak seen na kare...",
-            // it's safer to decouple. We WON'T set global status to 'cleared' to avoid hiding it from Super Admin if they rely on it.
-        }
+    } 
+    else if (action === "not_clear") {
+        updateData.status = "processed"; // Reset to processed, not new
+        updateData.acknowledgedBy = admin.firestore.FieldValue.delete();
     }
 
     await matchRef.update(updateData);

@@ -67,7 +67,7 @@ export default function MatchedIMEIsView() {
 
   // Filter States
   const [searchImei, setSearchImei] = useState("");
-  const [filterPeriod, setFilterPeriod] = useState("1month"); 
+  const [filterPeriod, setFilterPeriod] = useState("all"); // 🚀 Changed to 'all'
   const [filterStatus, setFilterStatus] = useState("new"); // 🚀 New: Default to 'new'
 
   // 1. Fetch Session
@@ -349,6 +349,7 @@ export default function MatchedIMEIsView() {
                     <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-1">
                         <InfoRow icon={User} label="Officer Name" value={selectedMatch.foundBy?.name} />
                         <InfoRow icon={Mail} label="Official Email" value={selectedMatch.foundBy?.email} />
+                        <InfoRow icon={Phone} label="Officer Mobile" value={selectedMatch.foundBy?.mobile || "—"} />
                         <InfoRow icon={Building2} label="Current Assignment" value={selectedMatch.foundBy?.ps || selectedMatch.foundBy?.district} />
                         <InfoRow icon={Calendar} label="Matched On" value={new Date(selectedMatch.matchedAt?._seconds * 1000 || Date.now()).toLocaleString()} />
                     </div>
@@ -362,45 +363,49 @@ export default function MatchedIMEIsView() {
                   <div className="space-y-6">
                       <div className="space-y-3">
                           <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Case Status / Process Note</Label>
-                          {selectedMatch.status === "new" && currentUser?.role === "officer" ? (
-                              <div className="space-y-3">
-                                  <Textarea 
-                                    placeholder="Describe current process or action taken..."
-                                    value={note}
-                                    onChange={(e) => setNote(e.target.value)}
-                                    className="rounded-xl border-slate-200 bg-white min-h-[100px] focus:ring-blue-500 font-sans"
-                                  />
+                          {selectedMatch.status !== "recovered" && (
+                          <div className="space-y-3">
+                              <Textarea 
+                                placeholder="Describe current process or action taken..."
+                                value={note}
+                                onChange={(e) => setNote(e.target.value)}
+                                className="rounded-xl border-slate-200 bg-white min-h-[100px] focus:ring-blue-500 font-sans"
+                              />
+                              <div className="grid grid-cols-2 gap-3">
+                                  <Button 
+                                    onClick={() => handleAction("admin_acknowledge")}
+                                    disabled={updating}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-11 shadow-lg shadow-emerald-600/20 uppercase font-bold tracking-widest text-[10px]"
+                                  >
+                                    {updating ? <Loader2 className="animate-spin" /> : "Submit Note & Clear Status"}
+                                  </Button>
                                   <Button 
                                     onClick={() => handleAction("officer_view")}
                                     disabled={updating}
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-11 shadow-lg shadow-blue-600/20 uppercase font-bold tracking-widest text-xs"
+                                    className="bg-slate-600 hover:bg-slate-700 text-white rounded-xl h-11 shadow-lg shadow-slate-600/20 uppercase font-bold tracking-widest text-[10px]"
                                   >
-                                    {updating ? <Loader2 className="animate-spin" /> : <><Send size={16} className="mr-2"/> Submit Process Note</>}
+                                    {updating ? <Loader2 className="animate-spin" /> : "Submit Report Not Clear"}
                                   </Button>
                               </div>
-                          ) : (
-                              <div className="p-4 bg-white rounded-2xl border border-slate-100">
-                                  <p className="text-sm text-slate-700 leading-relaxed italic">
-                                      {selectedMatch.officerNote || "No process notes added yet."}
-                                  </p>
-                                  {selectedMatch.viewedBy && (
-                                      <p className="mt-2 text-[10px] text-slate-400 font-bold uppercase">
-                                          Logged by {selectedMatch.viewedBy.name} • {new Date(selectedMatch.viewedBy.at?._seconds * 1000).toLocaleString()}
-                                      </p>
-                                  )}
-                              </div>
-                          )}
+                          </div>
+                      )}
                       </div>
 
-                      {(currentUser?.role === "admin" || currentUser?.role === "super_admin") && !isClearedForUser(selectedMatch) && (
+                      {(currentUser?.role === "admin" || currentUser?.role === "super_admin") && (
                           <div className="pt-4 border-t border-slate-200">
-                              <p className="text-[11px] text-slate-500 mb-3 text-center">Admin action required to clear the system alert.</p>
                               <Button 
-                                onClick={() => handleAction("admin_acknowledge")}
+                                onClick={() => handleAction(selectedMatch.status === "recovered" ? "not_clear" : "admin_acknowledge")}
                                 disabled={updating}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-11 shadow-lg shadow-emerald-600/20 font-black uppercase tracking-[0.2em] text-xs"
+                                className={cn(
+                                    "w-full h-11 rounded-xl shadow-lg font-black uppercase tracking-[0.2em] text-xs transition-all",
+                                    selectedMatch.status === "recovered" 
+                                        ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/20" 
+                                        : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
+                                )}
                               >
-                                {updating ? <Loader2 className="animate-spin" /> : <><CheckCircle size={18} className="mr-2"/> Acknowledge & Clear Alert</>}
+                                {updating ? <Loader2 className="animate-spin" /> : (
+                                    selectedMatch.status === "recovered" ? "Not Clear Status" : "Clear Device Status"
+                                )}
                               </Button>
                           </div>
                       )}
