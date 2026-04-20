@@ -122,7 +122,7 @@ export default function MatchedIMEIsView() {
   };
 
   // 3. Handle Update Action
-  const handleAction = async (action: "officer_view" | "admin_acknowledge", targetId?: string) => {
+  const handleAction = async (action: "officer_view" | "admin_acknowledge" | "not_clear", targetId?: string) => {
     const id = targetId || selectedMatch?.id;
     if (!id) return;
 
