@@ -40,8 +40,21 @@ export async function GET(req: NextRequest) {
 
     let queryRef: any = adminDb.collection("applications");
 
-    // 0. Date Range Filter (via Timestamp)
-    if (fromDate && toDate) {
+    // 0. Server-Side Date Range Filter
+    const now = new Date();
+    let limitDate = new Date();
+    if (period === "today") {
+        limitDate.setHours(0, 0, 0, 0);
+        limitDate.setMilliseconds(0);
+    } else if (period === "15days") limitDate.setDate(now.getDate() - 15);
+    else if (period === "1month") limitDate.setMonth(now.getMonth() - 1);
+    else if (period === "3months") limitDate.setMonth(now.getMonth() - 3);
+    else if (period === "6months") limitDate.setMonth(now.getMonth() - 6);
+    else if (period === "1year") limitDate.setFullYear(now.getFullYear() - 1);
+
+    if (period && period !== "all" && period !== "custom") {
+        queryRef = queryRef.where("createdAt", ">=", admin.firestore.Timestamp.fromDate(limitDate));
+    } else if (fromDate && toDate) {
         const start = admin.firestore.Timestamp.fromDate(new Date(`${fromDate}T00:00:00`));
         const end = admin.firestore.Timestamp.fromDate(new Date(`${toDate}T23:59:59`));
         queryRef = queryRef.where("createdAt", ">=", start).where("createdAt", "<=", end);
