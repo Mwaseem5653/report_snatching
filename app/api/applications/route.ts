@@ -48,7 +48,9 @@ export async function GET(req: NextRequest) {
     }
 
     // 1. Security: District Boundaries
-    if (role === "admin" || role === "officer") {
+    const hasAdvancedAccess = decoded.permissions?.advanced_reports === true;
+
+    if ((role === "admin" || role === "officer") && !hasAdvancedAccess) {
         if (Array.isArray(requesterDistrict)) {
             if (requestedDistrict && requestedDistrict !== "all") {
                 if (requesterDistrict.includes(requestedDistrict)) {
@@ -58,15 +60,19 @@ export async function GET(req: NextRequest) {
                 }
             } else {
                 if (requesterDistrict.length > 0) queryRef = queryRef.where("district", "in", requesterDistrict);
-                else return NextResponse.json({ applications: [] });
+                else return NextResponse.json({ success: true, applications: [] });
             }
         } else if (requesterDistrict) {
             queryRef = queryRef.where("district", "==", requesterDistrict);
         } else {
-            return NextResponse.json({ applications: [] });
+            // If no district assigned and NO advanced access, return empty
+            return NextResponse.json({ success: true, applications: [] });
         }
-    } else if (role === "super_admin" && requestedDistrict && requestedDistrict !== "all") {
-        queryRef = queryRef.where("district", "==", requestedDistrict);
+    } else if (role === "super_admin" || hasAdvancedAccess) {
+        // Super Admin or Users with Advanced Report Permission can see everything or filter by choice
+        if (requestedDistrict && requestedDistrict !== "all") {
+            queryRef = queryRef.where("district", "==", requestedDistrict);
+        }
     } else if (role === "ps_user") {
         // 🔒 STRICT DB LEVEL FILTER
         if (requesterPs) {
