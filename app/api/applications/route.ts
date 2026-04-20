@@ -92,9 +92,13 @@ export async function GET(req: NextRequest) {
         // Convert Firestore Timestamp/Seconds to JS Date
         const appDate = app.createdAt.toDate ? app.createdAt.toDate() : (app.createdAt.seconds ? new Date(app.createdAt.seconds * 1000) : new Date(app.createdAt));
         
-        // Today comparison: Only date part
+        // Today comparison: UTC Date (Day/Month/Year)
         if (period === "today") {
-            return appDate.toDateString() === now.toDateString();
+            return (
+                appDate.getUTCDate() === now.getUTCDate() &&
+                appDate.getUTCMonth() === now.getUTCMonth() &&
+                appDate.getUTCFullYear() === now.getUTCFullYear()
+            );
         }
 
         // Other periods
