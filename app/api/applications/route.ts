@@ -108,7 +108,9 @@ export async function GET(req: NextRequest) {
       else if (period === "6months") limitDate.setMonth(now.getMonth() - 6);
       else if (period === "1year") limitDate.setFullYear(now.getFullYear() - 1);
 
-      const limitTime = limitDate.getTime();
+      // 🚀 Explicitly handle today to ensure hours don't shift
+      const limitTime = period === "today" ? new Date().setHours(0,0,0,0) : limitDate.getTime();
+      
       applications = applications.filter((app: any) => {
         const createdTime = app.createdAt?.toMillis ? app.createdAt.toMillis() : 0;
         return createdTime >= limitTime;
