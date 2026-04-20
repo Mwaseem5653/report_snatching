@@ -11,6 +11,9 @@ import { toast } from "sonner";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/uploadHelper";
 import AlertModal from "@/components/ui/alert-modal";
 import { cn, getApiUrl } from "@/lib/utils";
+import { Capacitor } from "@capacitor/core";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 
 import JSZip from "jszip";
 
@@ -206,6 +209,45 @@ export default function ExcelAnalyzerClient() {
     setLoading(false);
   };
 
+  const handleDownload = async () => {
+    if (!resultUrl) return;
+    const fileName = `Analysis_Package_${Date.now()}.zip`;
+
+    if (Capacitor.isNativePlatform()) {
+        try {
+            toast.loading("Preparing for mobile download...");
+            const response = await fetch(resultUrl);
+            const blob = await response.blob();
+            
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = async () => {
+                const base64Data = (reader.result as string).split(',')[1];
+                const savedFile = await Filesystem.writeFile({
+                    path: fileName,
+                    data: base64Data,
+                    directory: Directory.Cache
+                });
+                await Share.share({
+                    title: 'Download Excel Results',
+                    url: savedFile.uri,
+                    dialogTitle: 'Save Analysis Package'
+                });
+                toast.dismiss();
+            };
+        } catch (err) {
+            toast.error("Mobile download failed");
+        }
+    } else {
+        const a = document.createElement("a");
+        a.href = resultUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+  };
+
   return (
     <div className="h-auto lg:h-[calc(100vh-100px)] flex flex-col space-y-4 overflow-y-auto lg:overflow-hidden pb-10 lg:pb-0 custom-scrollbar">
       <AlertModal 
@@ -391,13 +433,12 @@ export default function ExcelAnalyzerClient() {
                                                     <p className="text-[10px] opacity-80 font-bold uppercase mt-1">Reports Analyzed & Combined</p>
                                                 </div>
                                             </div>
-                                            <a 
-                                                href={resultUrl} 
-                                                download={`Analysis_Package_${Date.now()}.zip`}
+                                            <Button 
+                                                onClick={handleDownload}
                                                 className="w-full md:w-auto flex items-center justify-center gap-2 bg-white text-emerald-700 px-6 h-12 rounded-xl font-black uppercase text-xs shadow-md hover:bg-slate-50 transition-colors"
                                             >
-                                                <FileArchive size={18} /> Download Results (ZIP)
-                                            </a>
+                                                <Download size={18} /> Download Results (ZIP)
+                                            </Button>
                                         </div>
                                     </div>
                                 )}
