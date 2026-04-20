@@ -23,13 +23,11 @@ export async function GET(req: NextRequest) {
     const fromDate = searchParams.get("fromDate");
     const toDate = searchParams.get("toDate");
     
-    // For non-ps users, allow filtering by PS via query param
     let ps = searchParams.get("ps")?.toLowerCase();
 
-    // 🔒 SECURITY: Strict PS User Loophole Fix
     if (role === "ps_user") {
         if (!requesterPs) return NextResponse.json({ success: true, applications: [] });
-        ps = requesterPs.toLowerCase(); // Force their assigned PS, ignore query param
+        ps = requesterPs.toLowerCase();
     }
 
     let period = searchParams.get("period");
@@ -37,30 +35,14 @@ export async function GET(req: NextRequest) {
     else if (!period) period = "all";
     
     const search = searchParams.get("search")?.toLowerCase();
-
     let queryRef: any = adminDb.collection("applications");
 
-    // 0. Server-Side Date Range Filter
-    const now = new Date();
-    let limitDate = new Date();
-    if (period === "today") {
-        limitDate.setHours(0, 0, 0, 0);
-        limitDate.setMilliseconds(0);
-    } else if (period === "15days") limitDate.setDate(now.getDate() - 15);
-    else if (period === "1month") limitDate.setMonth(now.getMonth() - 1);
-    else if (period === "3months") limitDate.setMonth(now.getMonth() - 3);
-    else if (period === "6months") limitDate.setMonth(now.getMonth() - 6);
-    else if (period === "1year") limitDate.setFullYear(now.getFullYear() - 1);
-
-    if (period && period !== "all" && period !== "custom") {
-        queryRef = queryRef.where("createdAt", ">=", admin.firestore.Timestamp.fromDate(limitDate));
-    } else if (fromDate && toDate) {
+    if (fromDate && toDate) {
         const start = admin.firestore.Timestamp.fromDate(new Date(`${fromDate}T00:00:00`));
         const end = admin.firestore.Timestamp.fromDate(new Date(`${toDate}T23:59:59`));
         queryRef = queryRef.where("createdAt", ">=", start).where("createdAt", "<=", end);
     }
 
-    // 1. Security: District Boundaries
     const hasAdvancedAccess = decoded.permissions?.advanced_reports === true;
 
     if ((role === "admin" || role === "officer") && !hasAdvancedAccess) {
@@ -78,24 +60,17 @@ export async function GET(req: NextRequest) {
         } else if (requesterDistrict) {
             queryRef = queryRef.where("district", "==", requesterDistrict);
         } else {
-            // If no district assigned and NO advanced access, return empty
             return NextResponse.json({ success: true, applications: [] });
         }
     } else if (role === "super_admin" || hasAdvancedAccess) {
-        // Super Admin or Users with Advanced Report Permission can see everything or filter by choice
         if (requestedDistrict && requestedDistrict !== "all") {
             queryRef = queryRef.where("district", "==", requestedDistrict);
         }
     } else if (role === "ps_user") {
-        // 🔒 STRICT DB LEVEL FILTER
-        if (requesterPs) {
-            queryRef = queryRef.where("ps", "==", requesterPs);
-        } else {
-            return NextResponse.json({ success: true, applications: [] });
-        }
+        if (requesterPs) queryRef = queryRef.where("ps", "==", requesterPs);
+        else return NextResponse.json({ success: true, applications: [] });
     }
 
-    // 2. Status Filter
     if (status && status !== "none" && status !== "all") {
         if (status.includes(",")) {
             const statusArray = status.split(",");
@@ -108,25 +83,19 @@ export async function GET(req: NextRequest) {
     const snap = await queryRef.get();
     let applications = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
 
-    // 3. In-Memory Filters
-    if (period !== "all" && period !== "custom") {
+    if (period && period !== "all" && period !== "custom") {
       const now = new Date();
       let limitDate = new Date();
-      if (period === "today") {
-          limitDate.setHours(0, 0, 0, 0);
-      }
+      if (period === "today") limitDate.setHours(0, 0, 0, 0);
       else if (period === "15days") limitDate.setDate(now.getDate() - 15);
       else if (period === "1month") limitDate.setMonth(now.getMonth() - 1);
       else if (period === "3months") limitDate.setMonth(now.getMonth() - 3);
       else if (period === "6months") limitDate.setMonth(now.getMonth() - 6);
       else if (period === "1year") limitDate.setFullYear(now.getFullYear() - 1);
 
-      // 🚀 Explicitly handle today to ensure hours don't shift
-      const limitTime = period === "today" ? new Date().setHours(0,0,0,0) : limitDate.getTime();
-      
       applications = applications.filter((app: any) => {
-        const createdTime = app.createdAt?.toMillis ? app.createdAt.toMillis() : 0;
-        return createdTime >= limitTime;
+        const createdTime = app.createdAt?.toMillis ? app.createdAt.toMillis() : (app.createdAt?.seconds ? app.createdAt.seconds * 1000 : 0);
+        return createdTime >= limitDate.getTime();
       });
     }
 
@@ -135,7 +104,7 @@ export async function GET(req: NextRequest) {
         app.applicantName?.toLowerCase().includes(search) ||
         app.cnic?.includes(search) ||
         app.allImeis?.some((imei: string) => imei.includes(search)) ||
-        app.imei1?.includes(search) // Backward compatibility
+        app.imei1?.includes(search)
       );
     }
 
@@ -159,7 +128,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const appsRef = adminDb.collection("applications");
 
-    // Extract all IMEIs for duplicate check and indexing
     let allImeis: string[] = [];
     if (body.devices && Array.isArray(body.devices)) {
         body.devices.forEach((d: any) => {
@@ -172,14 +140,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (allImeis.length > 0) {
-        // Check if any of these IMEIs already exist (Note: 'array-contains-any' is useful here)
         const duplicateCheck = await appsRef.where("allImeis", "array-contains-any", allImeis).limit(1).get();
         if (!duplicateCheck.empty) {
             return NextResponse.json({ success: false, message: "One or more IMEI numbers already exist in the system." }, { status: 400 });
         }
     }
 
-    // 🕒 CONVERT DATE STRING TO TIMESTAMP FOR DATABASE CONSISTENCY
     let finalOffenceDate: any = body.offenceDate || null;
     if (body.offenceDate && typeof body.offenceDate === "string") {
         const d = new Date(body.offenceDate);
@@ -190,7 +156,7 @@ export async function POST(req: NextRequest) {
 
     const newApp = { 
         ...body, 
-        allImeis: allImeis, // For easy indexing/searching
+        allImeis: allImeis, 
         offenceDate: finalOffenceDate,
         status: "pending", 
         createdAt: admin.firestore.Timestamp.now() 
@@ -203,7 +169,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// 🚀 UPDATED: Secure Application Processing Logic
 export async function PUT(req: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -224,7 +189,6 @@ export async function PUT(req: NextRequest) {
     const appData: any = appDoc.data();
     const currentStatus = appData.status;
 
-    // 1. Move from PENDING to PROCESSED
     if (status === "processed" && currentStatus === "pending") {
         await appRef.update({
             status: "processed",
@@ -240,14 +204,11 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ success: true, message: "Application marked as processed" });
     }
 
-    // 2. Move from PROCESSED to COMPLETE
     if (status === "complete" && currentStatus === "processed") {
-        // 🔒 Verify: Only the SAME officer can complete the case
         if (appData.processedBy?.uid !== currentUser.uid) {
             return NextResponse.json({ error: "Only the processing officer can mark this case as complete." }, { status: 403 });
         }
 
-        // 🔒 Verify: Remarks (comments) are mandatory
         if (!comments || comments.trim().length < 5) {
             return NextResponse.json({ error: "Final remarks/comments are mandatory to complete the case." }, { status: 400 });
         }
@@ -267,8 +228,6 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ success: true, message: "Application marked as complete" });
     }
 
-    // 3. Fallback for other role updates (Admin/Super Admin) if needed
-    // Allow Admins to override or update other metadata
     if (currentUser.role === "admin" || currentUser.role === "super_admin") {
         const { id, ...updates } = body;
         await appRef.update(updates);
