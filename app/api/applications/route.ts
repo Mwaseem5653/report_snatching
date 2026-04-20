@@ -83,19 +83,29 @@ export async function GET(req: NextRequest) {
     const snap = await queryRef.get();
     let applications = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
 
+    // 3. Robust In-Memory Period Filter
     if (period && period !== "all" && period !== "custom") {
       const now = new Date();
-      let limitDate = new Date();
-      if (period === "today") limitDate.setHours(0, 0, 0, 0);
-      else if (period === "15days") limitDate.setDate(now.getDate() - 15);
-      else if (period === "1month") limitDate.setMonth(now.getMonth() - 1);
-      else if (period === "3months") limitDate.setMonth(now.getMonth() - 3);
-      else if (period === "6months") limitDate.setMonth(now.getMonth() - 6);
-      else if (period === "1year") limitDate.setFullYear(now.getFullYear() - 1);
-
       applications = applications.filter((app: any) => {
-        const createdTime = app.createdAt?.toMillis ? app.createdAt.toMillis() : (app.createdAt?.seconds ? app.createdAt.seconds * 1000 : 0);
-        return createdTime >= limitDate.getTime();
+        if (!app.createdAt) return false;
+        
+        // Convert Firestore Timestamp/Seconds to JS Date
+        const appDate = app.createdAt.toDate ? app.createdAt.toDate() : (app.createdAt.seconds ? new Date(app.createdAt.seconds * 1000) : new Date(app.createdAt));
+        
+        // Today comparison: Only date part
+        if (period === "today") {
+            return appDate.toDateString() === now.toDateString();
+        }
+
+        // Other periods
+        let limitDate = new Date();
+        if (period === "15days") limitDate.setDate(now.getDate() - 15);
+        else if (period === "1month") limitDate.setMonth(now.getMonth() - 1);
+        else if (period === "3months") limitDate.setMonth(now.getMonth() - 3);
+        else if (period === "6months") limitDate.setMonth(now.getMonth() - 6);
+        else if (period === "1year") limitDate.setFullYear(now.getFullYear() - 1);
+        
+        return appDate >= limitDate;
       });
     }
 
