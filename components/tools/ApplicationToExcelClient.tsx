@@ -168,10 +168,15 @@ export default function ApplicationToExcelClient() {
 
       // Add rows
       applications.forEach((app: any) => {
+          // 🚀 DATA CLEANING: Extract name before S/O, D/O, W/O
+          let rawName = app.applicantName || "";
+          const nameMatch = rawName.split(/S\/O|D\/O|W\/O/i)[0];
+          const cleanedName = nameMatch ? nameMatch.trim() : rawName;
+
           // Common data for the application, regardless of devices
           const commonRowData = {
               "currentDate": formatAppDate(app.createdAt),
-              "Name": app.applicantName || "",
+              "Name": cleanedName, // Using the cleaned name here
               "Phone Number": formatMobile(app.applicantMobile || app.applicantPhone),
               "CNIC": app.cnic || "",
               "City": app.city || "",
