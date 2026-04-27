@@ -98,7 +98,7 @@ export default function ApplicationToExcelClient() {
       }
       
       params.append("period", period);
-      if (psName && psName !== "all") params.append("ps", psName);
+      if (psNames.length > 0) params.append("ps", psNames.join(","));
 
       const res = await fetch(getApiUrl(`/api/applications?${params.toString()}`));
       const data = await res.json();
@@ -396,22 +396,29 @@ export default function ApplicationToExcelClient() {
                 </div>
             </div>
 
+  const [psNames, setPsNames] = useState<string[]>([]);
+
+  const togglePs = (ps: string) => {
+    setPsNames(prev => prev.includes(ps) ? prev.filter(p => p !== ps) : [...prev, ps]);
+  };
+
+  // ... (inside the return JSX)
             {/* PS Filter */}
-            <div className="space-y-2">
-                <label className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Police Station Name (Optional)</label>
-                <div className="relative">
-                    <Select value={psName} onValueChange={setPsName}>
-                        <SelectTrigger className="w-full h-12 md:h-14 rounded-xl md:rounded-2xl border-slate-200 focus:ring-emerald-500 font-bold bg-white pl-10 md:pl-12 relative overflow-hidden">
-                            <Search className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10" size={16} />
-                            <SelectValue placeholder="Select Police Station" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                            <SelectItem value="all">All Police Stations</SelectItem>
-                            {allPS.map((ps) => (
-                                <SelectItem key={ps} value={ps} className="text-xs uppercase">{ps}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+            <div className="space-y-3">
+                <label className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Police Stations (Select Multiple)</label>
+                <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 max-h-[300px] overflow-y-auto custom-scrollbar">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {allPS.map((ps) => (
+                            <div key={ps} className="flex items-center space-x-2 bg-white p-2 rounded-lg border border-slate-100">
+                                <Checkbox 
+                                    id={ps} 
+                                    checked={psNames.includes(ps)} 
+                                    onCheckedChange={() => togglePs(ps)} 
+                                />
+                                <label htmlFor={ps} className="text-[10px] font-bold uppercase cursor-pointer text-slate-700 truncate">{ps}</label>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
 

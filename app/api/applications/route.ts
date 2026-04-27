@@ -119,10 +119,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    if (ps) {
-      applications = applications.filter((app: any) => 
-        app.ps?.toLowerCase().includes(ps)
-      );
+    // Handle multiple PS filter
+    const psParam = searchParams.get("ps"); 
+    
+    if (psParam) {
+        const psArray = psParam.toLowerCase().split(",");
+        applications = applications.filter((app: any) => 
+            app.ps && psArray.includes(app.ps.toLowerCase())
+        );
     }
 
     applications.sort((a: any, b: any) => (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0) - (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0));
