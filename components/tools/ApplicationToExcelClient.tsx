@@ -11,8 +11,6 @@ import {
   Loader2, 
   CheckCircle2, 
   AlertCircle,
-  FileText,
-  Search,
   Filter,
   History,
   Check
@@ -34,7 +32,7 @@ export default function ApplicationToExcelClient() {
   const [loading, setLoading] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [psName, setPsName] = useState("all");
+  const [psNames, setPsNames] = useState<string[]>([]);
 
   // Extract all PS names from locationData
   const allPS = Object.values(locationData).flatMap(city => 
@@ -66,6 +64,10 @@ export default function ApplicationToExcelClient() {
     );
   };
 
+  const togglePs = (ps: string) => {
+    setPsNames(prev => prev.includes(ps) ? prev.filter(p => p !== ps) : [...prev, ps]);
+  };
+
   const setAllStatuses = (checked: boolean) => {
     if (checked) {
       setSelectedStatuses(["pending", "processed", "complete"]);
@@ -75,7 +77,6 @@ export default function ApplicationToExcelClient() {
   };
 
   const downloadExcel = async () => {
-    // Check if at least one status is selected
     if (selectedStatuses.length === 0) {
       toast.error("Please select at least one status.");
       return;
@@ -87,13 +88,9 @@ export default function ApplicationToExcelClient() {
       if (fromDate) params.append("fromDate", fromDate);
       if (toDate) params.append("toDate", toDate);
       
-      // If all are selected, we can send "all", otherwise we might need to handle multiple
-      // For now, let's send a comma-separated list or just "all"
       if (selectedStatuses.length === 3) {
           params.append("status", "all");
       } else {
-          // Note: The backend currently only handles one status. 
-          // We will update the backend to handle comma-separated or multiple status parameters.
           params.append("status", selectedStatuses.join(","));
       }
       
@@ -119,27 +116,26 @@ export default function ApplicationToExcelClient() {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Applications Data");
 
-      // Define columns (Matching AI Extractor Pattern)
       const columns = [
           { header: "DATE", key: "currentDate", width: 15 },
           { header: "Name OF Complaint", key: "Name", width: 25 },
           { header: "Cell No.", key: "Phone Number", width: 20 },
-          { header: "CNIC", key: "CNIC", width: 20 }, // New
-          { header: "City", key: "City", width: 15 }, // New
-          { header: "District", key: "District", width: 15 }, // New
+          { header: "CNIC", key: "CNIC", width: 20 },
+          { header: "City", key: "City", width: 15 },
+          { header: "District", key: "District", width: 15 },
           { header: "PS", key: "Police Station", width: 25 },
           { header: "PS Vide No.", key: "psVideNo", width: 15 },
           { header: "Properties", key: "Other Property", width: 30 },
-          { header: "Mobile Model(s)", key: "Mobile Model", width: 25 }, // Modified
+          { header: "Mobile Model(s)", key: "Mobile Model", width: 25 },
           { header: "Type", key: "Type", width: 15 },
-          { header: "DATE OF OFFENCE", key: "Date Of Offence", width: 18 }, // Modified
-          { header: "TIME OF OFFENCE", key: "Time Of Offence", width: 18 }, // Modified
-          { header: "OFFENCE ADDRESS", key: "Offence Address", width: 30 }, // New
-          { header: "INCIDENT NOTE", key: "Incident Note", width: 40 }, // New
-          { header: "LAST NUM USED", key: "last Num Used", width: 20 }, // Modified
-          { header: "ALL IMEIS", key: "IMEI Numbers", width: 40 }, // Modified
-          { header: "BOX PICTURE LINK", key: "boxPictureLink", width: 20 }, // New
-          { header: "ATTACHMENT LINK", key: "attestedAppLink", width: 20 }, // New
+          { header: "DATE OF OFFENCE", key: "Date Of Offence", width: 18 },
+          { header: "TIME OF OFFENCE", key: "Time Of Offence", width: 18 },
+          { header: "OFFENCE ADDRESS", key: "Offence Address", width: 30 },
+          { header: "INCIDENT NOTE", key: "Incident Note", width: 40 },
+          { header: "LAST NUM USED", key: "last Num Used", width: 20 },
+          { header: "ALL IMEIS", key: "IMEI Numbers", width: 40 },
+          { header: "BOX PICTURE LINK", key: "boxPictureLink", width: 20 },
+          { header: "ATTACHMENT LINK", key: "attestedAppLink", width: 20 },
       ];
 
       worksheet.columns = columns;
@@ -166,17 +162,14 @@ export default function ApplicationToExcelClient() {
         } catch (e) { return "None"; }
       };
 
-      // Add rows
       applications.forEach((app: any) => {
-          // 🚀 DATA CLEANING: Extract name before S/O, D/O, W/O
           let rawName = app.applicantName || "";
           const nameMatch = rawName.split(/S\/O|D\/O|W\/O/i)[0];
           const cleanedName = nameMatch ? nameMatch.trim() : rawName;
 
-          // Common data for the application, regardless of devices
           const commonRowData = {
               "currentDate": formatAppDate(app.createdAt),
-              "Name": cleanedName, // Using the cleaned name here
+              "Name": cleanedName,
               "Phone Number": formatMobile(app.applicantMobile || app.applicantPhone),
               "CNIC": app.cnic || "",
               "City": app.city || "",
@@ -193,10 +186,8 @@ export default function ApplicationToExcelClient() {
               "attestedAppLink": app.attachmentUrl || "",
           };
 
-          // Handle applications with devices
           if (app.devices && app.devices.length > 0) {
               const hasMultipleDevices = app.devices.length > 1;
-
               app.devices.forEach((device: any) => {
                   const deviceImeis: string[] = [];
                   if (device.imei1) deviceImeis.push(String(device.imei1).replace(/\//g, " "));
@@ -211,15 +202,7 @@ export default function ApplicationToExcelClient() {
                       "IMEI Numbers": deviceImeis.join(", "),
                       "last Num Used": lastNumsUsed.join(", "),
                   });
-
-                  // Apply yellow fill only if there are multiple devices for this application
-                  if (hasMultipleDevices) {
-                      row.eachCell((cell: any) => {
-                          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }; // Yellow
-                      });
-                  }
-
-                  // Add hyperlinks for pictureUrl and attachmentUrl to this row
+                  if (hasMultipleDevices) row.eachCell((cell: any) => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }; });
                   if (commonRowData.boxPictureLink) {
                       const cell = row.getCell("boxPictureLink");
                       cell.value = { text: "Image Link", hyperlink: commonRowData.boxPictureLink };
@@ -232,16 +215,10 @@ export default function ApplicationToExcelClient() {
                   }
               });
           } else {
-              // Handle applications with no devices array (backward compatibility)
               const fallbackImeis: string[] = [];
               if (app.imei1) fallbackImeis.push(String(app.imei1).replace(/\//g, " "));
               if (app.imei2) fallbackImeis.push(String(app.imei2).replace(/\//g, " "));
-              
-              // If top-level IMEIs are missing, use allImeis
-              const finalImeis = fallbackImeis.length > 0 
-                ? fallbackImeis.join(", ") 
-                : (app.allImeis && app.allImeis.length > 0 ? Array.from(new Set(app.allImeis)).join(", ") : "None");
-
+              const finalImeis = fallbackImeis.length > 0 ? fallbackImeis.join(", ") : (app.allImeis && app.allImeis.length > 0 ? Array.from(new Set(app.allImeis)).join(", ") : "None");
               const fallbackNums: string[] = [];
               if (app.lastNumUsed) fallbackNums.push(formatMobile(app.lastNumUsed));
               if (app.lastNumUsed2) fallbackNums.push(formatMobile(app.lastNumUsed2));
@@ -252,9 +229,6 @@ export default function ApplicationToExcelClient() {
                   "IMEI Numbers": finalImeis,
                   "last Num Used": fallbackNums.length > 0 ? fallbackNums.join(", ") : "None",
               });
-              // No yellow highlight for single row with no device info
-
-              // Add hyperlinks for pictureUrl and attachmentUrl to this row
               if (commonRowData.boxPictureLink) {
                   const cell = row.getCell("boxPictureLink");
                   cell.value = { text: "Image Link", hyperlink: commonRowData.boxPictureLink };
@@ -268,21 +242,11 @@ export default function ApplicationToExcelClient() {
           }
       });
 
-      // Style Header (Matching AI Extractor style)
       const headerRow = worksheet.getRow(1);
       headerRow.eachCell((cell: any) => {
-          cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFB9D297' }
-          };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB9D297' } };
           cell.font = { bold: true, color: { argb: 'FF000000' } };
-          cell.border = {
-              top: { style: 'thin' },
-              left: { style: 'thin' },
-              bottom: { style: 'thin' },
-              right: { style: 'thin' }
-          };
+          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
           cell.alignment = { horizontal: 'center' };
       });
 
@@ -354,7 +318,6 @@ export default function ApplicationToExcelClient() {
             </div>
           </CardHeader>
           <CardContent className="p-6 md:p-8 space-y-6 md:space-y-8">
-            {/* Status Selection */}
             <div className="space-y-4">
                 <div className="flex items-center justify-between">
                     <label className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Application Status</label>
@@ -396,13 +359,6 @@ export default function ApplicationToExcelClient() {
                 </div>
             </div>
 
-  const [psNames, setPsNames] = useState<string[]>([]);
-
-  const togglePs = (ps: string) => {
-    setPsNames(prev => prev.includes(ps) ? prev.filter(p => p !== ps) : [...prev, ps]);
-  };
-
-  // ... (inside the return JSX)
             {/* PS Filter */}
             <div className="space-y-3">
                 <label className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Police Stations (Select Multiple)</label>
