@@ -81,6 +81,7 @@ export async function POST(req: Request) {
       city: finalData.city || null,
       district: finalData.district || null,
       ps: finalData.ps || null,
+      mobile: finalData.mobile || null,
       tokens: finalData.tokens || 0,
       eyeconTokens: finalData.eyeconTokens || 0,
       tokensExpiry: finalData.tokensExpiry || null,

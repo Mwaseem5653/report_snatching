@@ -237,7 +237,7 @@ export default function AddApplicationFormNormalUser() {
                     </div>
                     <div className="space-y-1.5">
                         <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">Mobile Number <span className="text-red-500">*</span></Label>
-                        <Input placeholder="0300-XXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required minLength={11} maxLength={11} className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14 font-bold" />
+                        <Input placeholder="0300-XXXXXXX" name="mobileNumber" value={formData.mobileNumber} onChange={handleChange} required minLength={12} maxLength={12} className="rounded-xl border-slate-200 bg-slate-50/50 h-12 md:h-14 font-bold" />
                     </div>
                     <div className="space-y-1.5">
                         <Label className="text-[10px] md:text-[11px] font-black uppercase tracking-wider text-slate-500">CNIC Number <span className="text-slate-400">(Optional)</span></Label>

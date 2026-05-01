@@ -38,15 +38,25 @@ export async function POST(req: NextRequest) {
             uid: currentUser.uid,
             name: currentUser.name,
             role: currentUser.role,
+            email: currentUser.email || "",
+            mobile: currentUser.mobile || "",
+            ps: currentUser.ps || "",
+            district: currentUser.district || "",
             at: admin.firestore.Timestamp.now()
         };
     } 
     else if (action === "admin_acknowledge") {
-        updateData.status = "recovered";
+        updateData.status = "cleared";
+        updateData.superAdminCleared = true;
+        updateData.adminCleared = true;
         updateData.acknowledgedBy = {
             uid: currentUser.uid,
             name: currentUser.name,
             role: currentUser.role,
+            email: currentUser.email || "",
+            mobile: currentUser.mobile || "",
+            ps: currentUser.ps || "",
+            district: currentUser.district || "",
             at: admin.firestore.Timestamp.now()
         };
     } 

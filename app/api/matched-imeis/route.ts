@@ -46,9 +46,9 @@ export async function GET(req: NextRequest) {
     // Status Filter (Crucial for 'unseen' inbox logic)
     if (statusFilter && statusFilter !== "all") {
         if (statusFilter === "new") {
-            // Admins/Super Admins see all items that are NOT recovered
+            // Admins/Super Admins see all items that are NOT cleared
             if (role === "super_admin" || role === "admin") {
-                matches = matches.filter((m: any) => m.status !== "recovered");
+                matches = matches.filter((m: any) => m.status !== "cleared");
             } else {
                 // Officers/Others see only 'new' items
                 matches = matches.filter((m: any) => m.status === "new");
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
             } else if (role === "admin") {
                 matches = matches.filter((m: any) => m.adminCleared === true);
             } else {
-                matches = matches.filter((m: any) => m.status === "cleared"); // Legacy fallback
+                matches = matches.filter((m: any) => m.status === "cleared"); 
             }
         }
     }

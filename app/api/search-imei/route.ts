@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
             
         if (!matchSnap.empty) {
             const matchData = matchSnap.docs[0].data();
-            if (matchData.status === "recovered") {
+            if (matchData.status === "cleared") {
                 status = "recovered_device";
             }
         }
@@ -83,6 +83,10 @@ export async function POST(req: NextRequest) {
                     uid: currentUser.uid,
                     name: currentUser.name || "Unknown",
                     role: currentUser.role,
+                    email: currentUser.email || "",
+                    mobile: currentUser.mobile || "",
+                    ps: currentUser.ps || "",
+                    district: currentUser.district || ""
                 },
                 matchedAt: admin.firestore.Timestamp.now(),
                 status: "new"

@@ -7,38 +7,82 @@ import { logToolUsage } from "@/lib/usageLogger";
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
 async function fetchSingleSimData(term: string) {
-    const apiUrl = "https://api.nadra.xyz/sim_api.php";
-    const params = new URLSearchParams({
-    //   action: "fetch_sim_data",
-      search_term: term,
-    });
+    const API_URL = "https://simsdatabases.com/apis/simsNumber.php";
+    const CHECK_URL = "https://simsdatabases.com/apis/number_check.php";
+    const APP_KEY = "1ce86630892e2dca9a8543fdb8ed8e22";
+
+    // Clean number: remove leading 0 if present (convert 0303... to 303...)
+    const cleanNumber = term.startsWith('0') ? term.substring(1) : term;
+
+    const fetchFromApi = async (url: string, num: string) => {
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': 'Dart/3.1 (dart:io)',
+                    'Accept': 'application/json',
+                },
+                body: new URLSearchParams({
+                    'number': num,
+                    'appkey': APP_KEY
+                })
+            });
+            if (!res.ok) return null;
+            const text = await res.text();
+            return JSON.parse(text);
+        } catch (e) {
+            return null;
+        }
+    };
 
     try {
-        const res = await fetch(`${apiUrl}?${params.toString()}`, {
+        /* 
+        // --- OLD LOGIC (Primary API) ---
+        let data = await fetchFromApi(API_URL, cleanNumber);
+
+        // If primary fails or returns error, try fallback
+        if (!data || data.error === "Invalid contacts") {
+            data = await fetchFromApi(CHECK_URL, cleanNumber);
+        }
+        */
+
+        // --- NEW LOGIC (Direct Fallback) ---
+        let data = await fetchFromApi(CHECK_URL, cleanNumber);
+
+        if (data && !data.error) {
+            const results: any[] = [];
             
-            
-            method: "GET",
-            headers: {
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json",
-                // "Referer": "https://kpts.com.pk/",
-                // "X-Requested-With": "XMLHttpRequest",
-            },
-        });
+            // 1. Check for indexed structure ("0", "1", "2"...)
+            Object.keys(data).forEach(key => {
+                if (!isNaN(parseInt(key))) {
+                    const item = data[key];
+                    results.push({
+                        name: item.name || item.Name || item.NAME || "N/A",
+                        number: item.number || item.Number || term,
+                        cnic: item.cnic || item.Cnic || item.CNIC || "N/A",
+                        address: item.address || item.Address || item.ADDRESS || "N/A",
+                        search_term: term
+                    });
+                }
+            });
 
-        if (!res.ok) return { error: `HTTP Error ${res.status}`, term };
+            // 2. Fallback for flat structure (if no indexed items found)
+            if (results.length === 0 && (data.name || data.Name || data.NAME)) {
+                results.push({
+                    name: data.name || data.Name || data.NAME || "N/A",
+                    number: data.number || data.Number || term,
+                    cnic: data.cnic || data.Cnic || data.CNIC || "N/A",
+                    address: data.address || data.Address || data.ADDRESS || "N/A",
+                    search_term: term
+                });
+            }
 
-        const text = await res.text();
-        console.log(text)
-        if (!text || text.trim().length === 0) return { error: "Blocked", term };
-
-        const data = JSON.parse(text);
-        if (data.status === "success" && data.data) {
-            return data.data.map((item: any) => ({ ...item, search_term: term }));
+            return results;
         }
         return [];
     } catch (e: any) {
-        return { error: e.message, term };
+        return [];
     }
 }
 
@@ -77,9 +121,6 @@ export async function POST(req: NextRequest) {
         results.forEach(res => {
             if (Array.isArray(res)) {
                 allResults.push(...res);
-            } else {
-                // Keep track of errors if needed, or just skip
-                console.error(`Lookup error for ${res.term}: ${res.error}`);
             }
         });
         // Small delay between batches

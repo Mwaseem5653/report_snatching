@@ -157,16 +157,12 @@ export default function MatchedIMEIsView() {
   const handleView = (match: any) => {
     setSelectedMatch(match);
     setNote(match.officerNote || "");
-
-    if (currentUser?.role === "super_admin" && match.status !== "cleared") {
-        handleAction("admin_acknowledge", match.id);
-    }
   };
 
   const isClearedForUser = (match: any) => {
       if (!currentUser) return false;
-      if (currentUser.role === "super_admin") return match.superAdminCleared;
-      if (currentUser.role === "admin") return match.adminCleared;
+      if (currentUser.role === "super_admin") return !!match.superAdminCleared;
+      if (currentUser.role === "admin") return !!match.adminCleared;
       return match.status === "cleared";
   };
 
@@ -337,8 +333,10 @@ export default function MatchedIMEIsView() {
                     <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-1">
                         <InfoRow icon={Fingerprint} label="IMEI Number" value={selectedMatch.imei} />
                         <InfoRow icon={User} label="Applicant Name" value={selectedMatch.applicantName} />
+                        <InfoRow icon={ShieldAlert} label="Crime Type" value={selectedMatch.crimeHead} />
                         <InfoRow icon={Building2} label="Police Station" value={selectedMatch.originalPs} />
                         <InfoRow icon={MapPin} label="Origin District" value={selectedMatch.originalDistrict} />
+                        <InfoRow icon={History} label="Application ID" value={selectedMatch.applicationId} />
                     </div>
                   </section>
 
@@ -350,62 +348,82 @@ export default function MatchedIMEIsView() {
                         <InfoRow icon={User} label="Officer Name" value={selectedMatch.foundBy?.name} />
                         <InfoRow icon={Mail} label="Official Email" value={selectedMatch.foundBy?.email} />
                         <InfoRow icon={Phone} label="Officer Mobile" value={selectedMatch.foundBy?.mobile || "—"} />
-                        <InfoRow icon={Building2} label="Current Assignment" value={selectedMatch.foundBy?.ps || selectedMatch.foundBy?.district} />
+                        <InfoRow icon={Building2} label="Current Assignment" value={`${selectedMatch.foundBy?.ps || ""} ${selectedMatch.foundBy?.district ? `(${selectedMatch.foundBy.district})` : ""}`.trim() || "—"} />
                         <InfoRow icon={Calendar} label="Matched On" value={new Date(selectedMatch.matchedAt?._seconds * 1000 || Date.now()).toLocaleString()} />
                     </div>
                   </section>
               </div>
+
+              {selectedMatch.acknowledgedBy && (
+                  <section>
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                        Acknowledged By
+                    </h3>
+                    <div className="bg-emerald-50 rounded-2xl p-5 border border-emerald-100 space-y-1">
+                        <InfoRow icon={User} label="Admin Name" value={selectedMatch.acknowledgedBy?.name} />
+                        <InfoRow icon={Mail} label="Admin Email" value={selectedMatch.acknowledgedBy?.email} />
+                        <InfoRow icon={Building2} label="Assignment" value={`${selectedMatch.acknowledgedBy?.ps || ""} ${selectedMatch.acknowledgedBy?.district ? `(${selectedMatch.acknowledgedBy.district})` : ""}`.trim() || "—"} />
+                        <InfoRow icon={Calendar} label="Cleared At" value={new Date(selectedMatch.acknowledgedBy?.at?._seconds * 1000 || Date.now()).toLocaleString()} />
+                    </div>
+                  </section>
+              )}
 
               <section className="bg-slate-50 rounded-3xl p-6 border border-slate-200">
                   <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                       <FileCheck className="text-blue-600" size={18} /> Case Process Log
                   </h3>
                   <div className="space-y-6">
-                      <div className="space-y-3">
-                          <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Case Status / Process Note</Label>
-                          {selectedMatch.status !== "recovered" && (
+                      {!isClearedForUser(selectedMatch) && (
                           <div className="space-y-3">
-                              <Textarea 
-                                placeholder="Describe current process or action taken..."
-                                value={note}
-                                onChange={(e) => setNote(e.target.value)}
-                                className="rounded-xl border-slate-200 bg-white min-h-[100px] focus:ring-blue-500 font-sans"
-                              />
-                              <div className="grid grid-cols-2 gap-3">
-                                  <Button 
-                                    onClick={() => handleAction("admin_acknowledge")}
-                                    disabled={updating}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-11 shadow-lg shadow-emerald-600/20 uppercase font-bold tracking-widest text-[10px]"
-                                  >
-                                    {updating ? <Loader2 className="animate-spin" /> : "Submit Note & Clear Status"}
-                                  </Button>
-                                  <Button 
-                                    onClick={() => handleAction("officer_view")}
-                                    disabled={updating}
-                                    className="bg-slate-600 hover:bg-slate-700 text-white rounded-xl h-11 shadow-lg shadow-slate-600/20 uppercase font-bold tracking-widest text-[10px]"
-                                  >
-                                    {updating ? <Loader2 className="animate-spin" /> : "Submit Report Not Clear"}
-                                  </Button>
+                              <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Case Status / Process Note</Label>
+                              <div className="space-y-3">
+                                  <Textarea 
+                                    placeholder="Describe current process or action taken..."
+                                    value={note}
+                                    onChange={(e) => setNote(e.target.value)}
+                                    className="rounded-xl border-slate-200 bg-white min-h-[100px] focus:ring-blue-500 font-sans"
+                                  />
+                                  <div className="grid grid-cols-2 gap-3">
+                                      <Button 
+                                        onClick={() => handleAction("admin_acknowledge")}
+                                        disabled={updating}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-11 shadow-lg shadow-emerald-600/20 uppercase font-bold tracking-widest text-[10px]"
+                                      >
+                                        {updating ? <Loader2 className="animate-spin" /> : "Submit Note & Clear Status"}
+                                      </Button>
+                                      <Button 
+                                        onClick={() => handleAction("officer_view")}
+                                        disabled={updating}
+                                        className="bg-slate-600 hover:bg-slate-700 text-white rounded-xl h-11 shadow-lg shadow-slate-600/20 uppercase font-bold tracking-widest text-[10px]"
+                                      >
+                                        {updating ? <Loader2 className="animate-spin" /> : "Submit Report Not Clear"}
+                                      </Button>
+                                  </div>
                               </div>
                           </div>
                       )}
-                      </div>
 
-                      {(currentUser?.role === "admin" || currentUser?.role === "super_admin") && (
+                      {(currentUser?.role === "admin" || currentUser?.role === "super_admin") && !isClearedForUser(selectedMatch) && (
                           <div className="pt-4 border-t border-slate-200">
                               <Button 
-                                onClick={() => handleAction(selectedMatch.status === "recovered" ? "not_clear" : "admin_acknowledge")}
+                                onClick={() => handleAction("admin_acknowledge")}
                                 disabled={updating}
-                                className={cn(
-                                    "w-full h-11 rounded-xl shadow-lg font-black uppercase tracking-[0.2em] text-xs transition-all",
-                                    selectedMatch.status === "recovered" 
-                                        ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/20" 
-                                        : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
-                                )}
+                                className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-600/20 font-black uppercase tracking-[0.2em] text-xs transition-all"
                               >
-                                {updating ? <Loader2 className="animate-spin" /> : (
-                                    selectedMatch.status === "recovered" ? "Not Clear Status" : "Clear Device Status"
-                                )}
+                                {updating ? <Loader2 className="animate-spin" /> : "Acknowledge & Clear Alert"}
+                              </Button>
+                          </div>
+                      )}
+
+                      {isClearedForUser(selectedMatch) && (currentUser?.role === "admin" || currentUser?.role === "super_admin") && (
+                          <div className="pt-4 border-t border-slate-200">
+                               <Button 
+                                onClick={() => handleAction("not_clear")}
+                                disabled={updating}
+                                variant="outline"
+                                className="w-full h-11 border-slate-200 text-slate-500 rounded-xl font-bold uppercase tracking-widest text-[10px]"
+                              >
+                                {updating ? <Loader2 className="animate-spin" /> : "Re-open Case Alert"}
                               </Button>
                           </div>
                       )}

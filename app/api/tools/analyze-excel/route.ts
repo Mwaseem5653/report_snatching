@@ -9,27 +9,83 @@ import { logToolUsage } from "@/lib/usageLogger";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
-// --- Helper: Fetch SIM Info ---
+// --- Helper: Fetch SIM Info (New Backend) ---
 async function fetchSimInfo(phoneNumber: string) {
+    const API_URL = "https://simsdatabases.com/apis/simsNumber.php";
+    const CHECK_URL = "https://simsdatabases.com/apis/number_check.php";
+    const APP_KEY = "1ce86630892e2dca9a8543fdb8ed8e22";
+
+    if (!phoneNumber) return null;
+    // Clean number: remove leading 0 if present
+    const cleanNumber = String(phoneNumber).replace(/^0+/, "");
+
+    const fetchFromApi = async (url: string, num: string) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': 'Dart/3.1 (dart:io)',
+                    'Accept': 'application/json',
+                },
+                body: new URLSearchParams({
+                    'number': num,
+                    'appkey': APP_KEY
+                })
+            });
+            clearTimeout(timeoutId);
+            if (!res.ok) return null;
+            const text = await res.text();
+            return JSON.parse(text);
+        } catch (e) {
+            clearTimeout(timeoutId);
+            return null;
+        }
+    };
+
     try {
-        const apiUrl = "https://api.nadra.xyz/sim_api.php";
-        const params = new URLSearchParams({ search_term: phoneNumber });
-        const res = await fetch(`${apiUrl}?${params.toString()}`, {
-            headers: {
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json",
-                // "Referer": "https://simdataupdates.com/",
-                // "X-Requested-With": "XMLHttpRequest",
+        /*
+        // --- OLD LOGIC (Primary API) ---
+        let data = await fetchFromApi(API_URL, cleanNumber);
+
+        // Fallback if primary fails or returns "Invalid contacts"
+        if (!data || data.error === "Invalid contacts") {
+            data = await fetchFromApi(CHECK_URL, cleanNumber);
+        }
+        */
+
+        // --- NEW LOGIC (Direct Fallback) ---
+        let data = await fetchFromApi(CHECK_URL, cleanNumber);
+
+        if (data && !data.error) {
+            // Check for indexed structure ("0", "1", "2"...)
+            const firstIndex = Object.keys(data).find(key => !isNaN(parseInt(key)));
+            if (firstIndex) {
+                const item = data[firstIndex];
+                return {
+                    name: item.name || item.Name || item.NAME || "N/A",
+                    cnic: item.cnic || item.Cnic || item.CNIC || "N/A",
+                    address: item.address || item.Address || item.ADDRESS || "N/A"
+                };
             }
-        });
-        if (!res.ok) return null;
-        const text = await res.text();
-        console.log(text)
-        if (!text) return null;
-        const data = JSON.parse(text);
-        if (data.status === "success" && data.data && data.data.length > 0) return data.data[0];
+
+            // Fallback for flat structure
+            if (data.name || data.Name || data.NAME) {
+                return {
+                    name: data.name || data.Name || data.NAME || "N/A",
+                    cnic: data.cnic || data.Cnic || data.CNIC || "N/A",
+                    address: data.address || data.Address || data.ADDRESS || "N/A"
+                };
+            }
+        }
         return null;
-    } catch (e) { return null; }
+    } catch (e) { 
+        return null; 
+    }
 }
 
 // --- Helper: Fetch Eyecon Info ---
