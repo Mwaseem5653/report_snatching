@@ -9,7 +9,11 @@ const SECRET = process.env.SESSION_JWT_SECRET!;
 async function fetchSingleSimData(term: string) {
     const API_URL = "https://simsdatabases.com/apis/simsNumber.php";
     const CHECK_URL = "https://simsdatabases.com/apis/number_check.php";
-    const APP_KEY = "1ce86630892e2dca9a8543fdb8ed8e22";
+    const APP_KEY = process.env.SIMINFO;
+
+
+
+    if (!APP_KEY) return [];
 
     // Clean number: remove leading 0 if present (convert 0303... to 303...)
     const cleanNumber = term.startsWith('0') ? term.substring(1) : term;

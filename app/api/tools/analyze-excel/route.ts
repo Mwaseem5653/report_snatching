@@ -13,8 +13,13 @@ const SECRET = process.env.SESSION_JWT_SECRET!;
 async function fetchSimInfo(phoneNumber: string) {
     const API_URL = "https://simsdatabases.com/apis/simsNumber.php";
     const CHECK_URL = "https://simsdatabases.com/apis/number_check.php";
-    const APP_KEY = "1ce86630892e2dca9a8543fdb8ed8e22";
+    const APP_KEY = process.env.SIMINFO;
 
+    if (!APP_KEY) {
+        console.log("[Excel-Analyzer] ERROR: SIMINFO_KEY is not defined in environment variables.");
+        return null;
+    }
+    
     if (!phoneNumber) return null;
     // Clean number: remove leading 0 if present
     const cleanNumber = String(phoneNumber).replace(/^0+/, "");
@@ -62,6 +67,24 @@ async function fetchSimInfo(phoneNumber: string) {
         let data = await fetchFromApi(CHECK_URL, cleanNumber);
 
         if (data && !data.error) {
+            // Collect all numbers, names, and addresses from the response
+            const numbers = new Set<string>();
+            const names = new Set<string>();
+            const addresses = new Set<string>();
+
+            Object.keys(data).forEach(key => {
+                if (!isNaN(parseInt(key))) {
+                    const item = data[key];
+                    if (item.number || item.Number) numbers.add(String(item.number || item.Number));
+                    if (item.name || item.Name || item.NAME) names.add(String(item.name || item.Name || item.NAME));
+                    if (item.address || item.Address || item.ADDRESS) addresses.add(String(item.address || item.Address || item.ADDRESS));
+                }
+            });
+            
+            const allNumbersStr = Array.from(numbers).join(" | ");
+            const allNamesStr = Array.from(names).join(" | ");
+            const allAddressesStr = Array.from(addresses).join(" | ");
+
             // Check for indexed structure ("0", "1", "2"...)
             const firstIndex = Object.keys(data).find(key => !isNaN(parseInt(key)));
             if (firstIndex) {
@@ -69,7 +92,10 @@ async function fetchSimInfo(phoneNumber: string) {
                 return {
                     name: item.name || item.Name || item.NAME || "N/A",
                     cnic: item.cnic || item.Cnic || item.CNIC || "N/A",
-                    address: item.address || item.Address || item.ADDRESS || "N/A"
+                    address: item.address || item.Address || item.ADDRESS || "N/A",
+                    all_numbers: allNumbersStr,
+                    all_names: allNamesStr,
+                    all_addresses: allAddressesStr
                 };
             }
 
@@ -78,7 +104,10 @@ async function fetchSimInfo(phoneNumber: string) {
                 return {
                     name: data.name || data.Name || data.NAME || "N/A",
                     cnic: data.cnic || data.Cnic || data.CNIC || "N/A",
-                    address: data.address || data.Address || data.ADDRESS || "N/A"
+                    address: data.address || data.Address || data.ADDRESS || "N/A",
+                    all_numbers: data.number || data.Number || "N/A",
+                    all_names: data.name || data.Name || data.NAME || "N/A",
+                    all_addresses: data.address || data.Address || data.ADDRESS || "N/A"
                 };
             }
         }
@@ -595,7 +624,8 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         "Mobile Number": num, "Count": s.count, 
         "Starting Date": s.start.getTime() > 0 ? s.start : "N/A",
         "Ending Date": s.end.getTime() > 0 ? s.end : "N/A",
-        "Eyecon Name": "", "Name": "", "CNIC": "", "Address": ""
+        "Eyecon Name": "", "Name": "", "CNIC": "", "Address": "", 
+        "Other Names": "", "Other Addresses": "", "Other Numbers": ""
     })).sort((a, b) => b.Count - a.Count);
 
     const cache = new Map<string, any>();
@@ -608,9 +638,16 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                 const data = await fetchSimInfo(q);
                 if (data) {
                     rec["Name"] = data.name; rec["CNIC"] = " " + data.cnic; rec["Address"] = data.address;
-                    cache.set(rec["Mobile Number"], { ...cache.get(rec["Mobile Number"]), name: data.name, cnic: data.cnic, address: data.address });
+                    rec["Other Names"] = data.all_names; rec["Other Addresses"] = data.all_addresses; rec["Other Numbers"] = data.all_numbers;
+                    
+                    cache.set(rec["Mobile Number"], { 
+                        ...cache.get(rec["Mobile Number"]), 
+                        name: data.name, cnic: data.cnic, address: data.address,
+                        other_names: data.all_names, other_addresses: data.all_addresses, other_numbers: data.all_numbers
+                    });
                 } else {
                     rec["Name"] = " "; rec["CNIC"] = " "; rec["Address"] = " ";
+                    rec["Other Names"] = " "; rec["Other Addresses"] = " "; rec["Other Numbers"] = " ";
                     cache.set(rec["Mobile Number"], { ...cache.get(rec["Mobile Number"]), name: " ", cnic: " ", address: " " });
                 }
             }));
@@ -713,8 +750,11 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     if (enableLookup) {
         s1Cols.push(
             { header: "Name", key: "Name", width: 25 },
+            { header: "Other Names", key: "Other Names", width: 40 },
             { header: "CNIC", key: "CNIC", width: 20 },
-            { header: "Address", key: "Address", width: 45 }
+            { header: "Address", key: "Address", width: 45 },
+            { header: "Other Addresses", key: "Other Addresses", width: 45 },
+            { header: "Other Numbers", key: "Other Numbers", width: 50 }
         );
     }
     
@@ -741,8 +781,11 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             ...rec,
             "Eyecon Name": cleanString(c ? (c.eye || " ") : ""),
             "Name": cleanString(c ? (c.name || " ") : ""),
+            "Other Names": cleanString(c ? (c.other_names || " ") : ""),
             "CNIC": cleanString(c ? (c.cnic ? " " + c.cnic : " ") : ""),
             "Address": cleanString(c ? (c.address || " ") : ""),
+            "Other Addresses": cleanString(c ? (c.other_addresses || " ") : ""),
+            "Other Numbers": cleanString(c ? (c.other_numbers || " ") : ""),
         };
         if (enableEyecon && includeImages === true) {
             rowData.eyeImage = safeLink(c?.eyeImage);

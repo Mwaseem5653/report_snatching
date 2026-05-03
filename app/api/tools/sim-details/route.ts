@@ -9,7 +9,11 @@ export async function POST(req: NextRequest) {
     }
 
     const API_URL = "https://simsdatabases.com/apis/simsNumber.php";
-    const APP_KEY = "1ce86630892e2dca9a8543fdb8ed8e22";
+    const APP_KEY = process.env.SIMINFO;
+
+    if (!APP_KEY) {
+      return NextResponse.json({ error: 'Server configuration error: SIMINFO_KEY missing' }, { status: 500 });
+    }
 
     const response = await fetch(API_URL, {
       method: 'POST',
