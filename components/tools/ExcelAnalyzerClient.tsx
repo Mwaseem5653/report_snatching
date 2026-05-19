@@ -367,7 +367,7 @@ export default function ExcelAnalyzerClient() {
                             </div>
 
                             {/* Eyecon Lookup */}
-                            {(session?.role === "super_admin" || (session?.permissions?.eyecon_access && (session?.role === "admin" || session?.role === "officer"))) && (
+                            {(session?.role === "super_admin" || session?.permissions?.eyecon_access) && (
                                 <div className={cn("flex flex-col space-y-2 border p-2 md:p-3 rounded-xl md:rounded-2xl bg-slate-50 border-slate-100 transition-all", enableEyecon ? "ring-2 ring-indigo-500/20 shadow-sm" : "")}>
                                     <div className="flex items-center space-x-2">
                                         <Checkbox id="eyecon" checked={enableEyecon} onCheckedChange={(c) => setEnableEyecon(!!c)} />
@@ -380,7 +380,7 @@ export default function ExcelAnalyzerClient() {
                                         <div className="md:pl-6 space-y-2 animate-in slide-in-from-top-1 col-span-1 md:col-auto">
                                             <div className="space-y-1">
                                                 <Label className="text-[7px] md:text-[9px] text-slate-400 font-bold uppercase">Limit</Label>
-                                                <Input type="number" value={eyeconTopN} onChange={(e) => setEyeconTopN(parseInt(e.target.value) || 5)} className="h-6 md:h-8 text-[9px] md:text-[11px] font-black rounded-lg border-slate-200 bg-white" disabled={session?.role === "officer"} />
+                                                <Input type="number" value={eyeconTopN} onChange={(e) => setEyeconTopN(parseInt(e.target.value) || 5)} className="h-6 md:h-8 text-[9px] md:text-[11px] font-black rounded-lg border-slate-200 bg-white" disabled={session?.role === "officer" || session?.role === "advanced_tool"} />
                                             </div>
                                             <div className="flex items-center space-x-1 md:space-x-2">
                                                 <Checkbox id="includeImages" checked={includeImages} onCheckedChange={(c) => setIncludeImages(!!c)} />
@@ -404,7 +404,7 @@ export default function ExcelAnalyzerClient() {
                                 <input type="file" accept=".xlsx, .csv" multiple onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
                                 <div className="p-5 bg-white rounded-2xl shadow-sm mb-4 group-hover:scale-110 transition-transform text-emerald-500"><FileSpreadsheet size={48} /></div>
                                 <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Drop Excel Files</h3>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Maximum 10 CDRs / Reports</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Maximum 20 CDRs / Reports</p>
                             </div>
                         ) : (
                             <div className="flex-1 flex flex-col gap-4 overflow-hidden">

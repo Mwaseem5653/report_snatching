@@ -395,14 +395,14 @@ export default function UserManagement() {
                                         { key: 'geo_fencing', label: 'Geo Fencing' },
                                         { key: 'movement_visualizer', label: 'Movement Visualizer' },
                                         { key: 'lac_cell_converter', label: 'LAC/Cell Converter' },
-                                        { key: 'eyecon_lookup', label: 'Eyecon Lookup' },
+                                        { key: 'eyecon_lookup', label: 'Eyecon Lookup (Standalone)' },
                                         { key: 'ai_extractor', label: 'AI Extractor' },
                                         { key: 'usage_analytics', label: 'Usage Analytics' },
                                         { key: 'app_to_excel', label: 'App To Excel' },
                                         { key: 'info_tools', label: 'Info Tools' },
                                         { key: 'cdr_generator', label: 'CDR Generator' },
                                         { key: 'rapid_api', label: 'RapidAPI Hub' },
-                                        { key: 'eyecon_access', label: 'Eyecon Access' },
+                                        { key: 'eyecon_access', label: 'Eyecon Access (In Analyzer)' },
                                     ].map((p) => (
                                         <div key={p.key} className="flex items-center space-x-2 p-2 bg-white rounded-lg border border-indigo-100 shadow-sm">
                                             <Checkbox 

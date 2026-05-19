@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Car, Smartphone, Search, Loader2, Download, AlertCircle, Copy, RotateCcw } from "lucide-react";
+import { User, Car, Smartphone, Search, Loader2, Download, AlertCircle, Copy, RotateCcw, ShieldCheck, Mail, MapPin, Phone, Globe } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { cn, getApiUrl } from "@/lib/utils";
@@ -172,7 +172,7 @@ export default function InfoToolsClient() {
       </div>
 
       <Tabs defaultValue="sim" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2 bg-slate-100 p-1 rounded-xl">
+        <TabsList className="grid w-full max-w-sm grid-cols-2 bg-slate-100 p-1 rounded-xl">
           <TabsTrigger value="sim" className="rounded-lg font-bold"><Smartphone size={16} className="mr-2"/> SIM Info</TabsTrigger>
           <TabsTrigger value="vehicle" className="rounded-lg font-bold"><Car size={16} className="mr-2"/> Vehicle Info</TabsTrigger>
         </TabsList>

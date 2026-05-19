@@ -24,6 +24,7 @@ export async function getServerSession() {
       mobile: decoded.mobile,
       hasToolsAccess: !!decoded.hasToolsAccess,
       tokens: decoded.tokens || 0,
+      permissions: decoded.permissions || {},
       exp: decoded.exp // 🚀 Pass JWT expiration time for countdown
     };
   } catch (err) {

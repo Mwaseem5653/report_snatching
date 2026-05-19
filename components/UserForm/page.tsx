@@ -157,7 +157,7 @@ export default function AddUserForm({
     { key: 'geo_fencing', label: 'Geo Fencing' },
     { key: 'movement_visualizer', label: 'Movement Visualizer' },
     { key: 'lac_cell_converter', label: 'LAC/Cell ID Converter' },
-    { key: 'eyecon_lookup', label: 'Eyecon Lookup' },
+    { key: 'eyecon_lookup', label: 'Eyecon Lookup (Standalone)' },
     { key: 'ai_extractor', label: 'AI Application Extractor' },
     { key: 'advanced_reports', label: 'Advanced Reports' },
     { key: 'usage_analytics', label: 'Usage Analytics' },
@@ -165,7 +165,7 @@ export default function AddUserForm({
     { key: 'info_tools', label: 'Info & Lookup Tools' },
     { key: 'cdr_generator', label: 'CDR Generator' },
     { key: 'rapid_api', label: 'RapidAPI Hub' },
-    { key: 'eyecon_access', label: 'Eyecon Access' },
+    { key: 'eyecon_access', label: 'Eyecon Access (In Analyzer)' },
   ];
 
   // 🚀 Filter tools: Delegators only see what they own. 

@@ -8,7 +8,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'Mobile number is missing' }, { status: 400 });
     }
 
-    const API_URL = "https://simsdatabases.com/apis/simsNumber.php";
+    // 🚀 CLEAN NUMBER: Remove leading '0' or '92'
+    let cleanNumber = number.replace(/\D/g, ""); // Remove non-digits
+    if (cleanNumber.startsWith("92")) {
+        cleanNumber = cleanNumber.substring(2);
+    } else if (cleanNumber.startsWith("0")) {
+        cleanNumber = cleanNumber.substring(1);
+    }
+
+    // 🚀 USE WORKING ENDPOINT
+    const API_URL = "https://simsdatabases.com/apis/number_check.php";
     const APP_KEY = process.env.SIMINFO;
 
     if (!APP_KEY) {
@@ -19,12 +28,12 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Dart/3.1 (dart:io)', // Mimics the app
+        'User-Agent': 'Dart/3.1 (dart:io)', 
         'Accept': 'application/json',
       },
-      // The API expects URL encoded body
+    
       body: new URLSearchParams({
-        'number': number,
+        'number': cleanNumber,
         'appkey': APP_KEY
       })
     });

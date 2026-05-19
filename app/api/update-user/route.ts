@@ -52,6 +52,8 @@ export async function POST(req: Request) {
     }
 
     // 3. Token Logic (Deduct from Pool if increased)
+    const newPermissions = metadata.permissions || currentData?.permissions || {};
+
     if (metadata.tokens !== undefined) {
         const diff = parseInt(metadata.tokens) - (currentData?.tokens || 0);
         if (diff > 0) {
@@ -69,6 +71,7 @@ export async function POST(req: Request) {
 
     // 4. Update Firestore Document
     const firestoreUpdates: any = { ...metadata };
+    firestoreUpdates.permissions = newPermissions;
     if (role) firestoreUpdates.role = role;
     if (metadata.tokens !== undefined) firestoreUpdates.tokens = parseInt(metadata.tokens) || 0;
     if (metadata.eyeconTokens !== undefined) firestoreUpdates.eyeconTokens = parseInt(metadata.eyeconTokens) || 0;

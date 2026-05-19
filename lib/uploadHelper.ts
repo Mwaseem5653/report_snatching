@@ -1,34 +1,43 @@
 // lib/uploadHelper.ts
 
-import { supabase } from "./supabaseClient";
 import { getApiUrl } from "@/lib/utils";
 
 /**
- * 📁 Uploads a file directly to Supabase Storage.
- * This supports large files (up to 1GB free tier) and bypasses Vercel limits.
+ * 📁 Uploads a file directly to Cloudinary.
+ * Using Unsigned Uploads to bypass server limits and Supabase blocks.
  */
 export async function uploadFileToStorage(file: File, folder: string = "applications"): Promise<{ secure_url: string; public_id: string }> {
-  if (!supabase) {
-    throw new Error("Supabase Storage is not configured. Please add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your environment variables.");
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "ml_default";
+
+  if (!cloudName) {
+    throw new Error("Cloudinary Cloud Name is not configured in environment variables.");
   }
+
   try {
-    const fileName = `${Date.now()}_${file.name}`;
-    const filePath = `${folder}/${fileName}`;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", uploadPreset);
+    formData.append("folder", folder);
 
-    const { data, error } = await supabase.storage
-      .from('khansahab') // Correct bucket name
-      .upload(filePath, file);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+      method: "POST",
+      body: formData,
+    });
 
-    if (error) throw error;
+    const data = await res.json();
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('khansahab')
-      .getPublicUrl(filePath);
+    if (!res.ok) {
+      throw new Error(data.error?.message || "Failed to upload to Cloudinary");
+    }
 
-    return { secure_url: publicUrl, public_id: filePath };
+    return { 
+        secure_url: data.secure_url, 
+        public_id: data.public_id // Cloudinary uses public_id for deletion
+    };
   } catch (error: any) {
-    console.error("Supabase Upload Error:", error);
-    throw new Error(error.message || "Failed to upload file to Supabase.");
+    console.error("Cloudinary Upload Error:", error);
+    throw new Error(error.message || "Failed to upload file to Cloudinary.");
   }
 }
 
