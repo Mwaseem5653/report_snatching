@@ -55,13 +55,33 @@ async function fetchSimInfo(phoneNumber: string) {
     const fetchFromNadra = async (num: string) => {
         const fullNum = num.startsWith('0') ? num : '0' + num;
         const NADRA_KEY = process.env.NADRA_API_KEY;
-        if (!NADRA_KEY) return null;
+        
+        console.log(`[Nadra-Lookup] Searching for: ${fullNum}`);
+        if (!NADRA_KEY) {
+            console.error("[Nadra-Lookup] ERROR: NADRA_API_KEY is missing in environment variables.");
+            return null;
+        }
         
         try {
-            const res = await fetch(`https://api.nadra.xyz/sim_api.php?search_term=${fullNum}&api_key=${NADRA_KEY}`);
-            if (!res.ok) return null;
-            return await res.json();
-        } catch (e) {
+            const url = `https://api.nadra.xyz/sim_api.php?search_term=${fullNum}&api_key=${NADRA_KEY}`;
+            const res = await fetch(url);
+            
+            if (!res.ok) {
+                console.error(`[Nadra-Lookup] API Error: ${res.status} ${res.statusText}`);
+                return null;
+            }
+            
+            const text = await res.text();
+            console.log(`[Nadra-Lookup] Raw Response: ${text.substring(0, 200)}`);
+            
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error("[Nadra-Lookup] JSON Parse Error");
+                return null;
+            }
+        } catch (e: any) {
+            console.error(`[Nadra-Lookup] Fetch Exception: ${e.message}`);
             return null;
         }
     };
@@ -70,13 +90,28 @@ async function fetchSimInfo(phoneNumber: string) {
         // --- NADRA API (NOW PRIMARY) ---
         let data = await fetchFromNadra(phoneNumber);
 
-        // --- Normalization for Nadra Structure ---
-        if (data && data.status === "success" && Array.isArray(data.data)) {
-            const normalizedData: any = {};
-            data.data.forEach((item: any, idx: number) => {
-                normalizedData[idx.toString()] = item;
+        if (data && data.status === "success" && Array.isArray(data.data) && data.data.length > 0) {
+            console.log(`[Nadra-Lookup] Found ${data.data.length} records for ${phoneNumber} in Excel Analyzer`);
+            const first = data.data[0];
+            
+            const numbers = new Set<string>();
+            const names = new Set<string>();
+            const addresses = new Set<string>();
+            
+            data.data.forEach((item: any) => {
+                if (item.number) numbers.add(String(item.number));
+                if (item.name) names.add(String(item.name));
+                if (item.address) addresses.add(String(item.address));
             });
-            data = normalizedData;
+
+            return {
+                name: first.name || "N/A",
+                cnic: first.cnic || "N/A",
+                address: first.address || "N/A",
+                all_numbers: Array.from(numbers).join(" | "),
+                all_names: Array.from(names).join(" | "),
+                all_addresses: Array.from(addresses).join(" | ")
+            };
         }
 
         // --- FALLBACK TO OLD API ---

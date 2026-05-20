@@ -27,13 +27,33 @@ export async function POST(req: NextRequest) {
     const fetchFromNadra = async (num: string) => {
         const fullNum = num.startsWith('0') ? num : '0' + num;
         const NADRA_KEY = process.env.NADRA_API_KEY;
-        if (!NADRA_KEY) return null;
+        
+        console.log(`[Nadra-Lookup] Searching for: ${fullNum}`);
+        if (!NADRA_KEY) {
+            console.error("[Nadra-Lookup] ERROR: NADRA_API_KEY is missing in environment variables.");
+            return null;
+        }
 
         try {
-            const res = await fetch(`https://api.nadra.xyz/sim_api.php?search_term=${fullNum}&api_key=${NADRA_KEY}`);
-            if (!res.ok) return null;
-            return await res.json();
-        } catch (e) {
+            const url = `https://api.nadra.xyz/sim_api.php?search_term=${fullNum}&api_key=${NADRA_KEY}`;
+            const res = await fetch(url);
+            
+            if (!res.ok) {
+                console.error(`[Nadra-Lookup] API Error: ${res.status} ${res.statusText}`);
+                return null;
+            }
+
+            const text = await res.text();
+            console.log(`[Nadra-Lookup] Raw Response: ${text.substring(0, 200)}`);
+            
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error("[Nadra-Lookup] JSON Parse Error");
+                return null;
+            }
+        } catch (e: any) {
+            console.error(`[Nadra-Lookup] Fetch Exception: ${e.message}`);
             return null;
         }
     };

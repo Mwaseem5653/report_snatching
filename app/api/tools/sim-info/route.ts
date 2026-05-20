@@ -49,13 +49,33 @@ async function fetchSingleSimData(term: string) {
     const fetchFromNadra = async (num: string) => {
         const fullNum = num.startsWith('0') ? num : '0' + num;
         const NADRA_KEY = process.env.NADRA_API_KEY;
-        if (!NADRA_KEY) return null;
+        
+        console.log(`[Nadra-Lookup] Searching for: ${fullNum}`);
+        if (!NADRA_KEY) {
+            console.error("[Nadra-Lookup] ERROR: NADRA_API_KEY is missing in environment variables.");
+            return null;
+        }
 
         try {
-            const res = await fetch(`https://api.nadra.xyz/sim_api.php?search_term=${fullNum}&api_key=${NADRA_KEY}`);
-            if (!res.ok) return null;
-            return await res.json();
-        } catch (e) {
+            const url = `https://api.nadra.xyz/sim_api.php?search_term=${fullNum}&api_key=${NADRA_KEY}`;
+            const res = await fetch(url);
+            
+            if (!res.ok) {
+                console.error(`[Nadra-Lookup] API Error: ${res.status} ${res.statusText}`);
+                return null;
+            }
+
+            const text = await res.text();
+            console.log(`[Nadra-Lookup] Raw Response: ${text.substring(0, 200)}`);
+            
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error("[Nadra-Lookup] JSON Parse Error");
+                return null;
+            }
+        } catch (e: any) {
+            console.error(`[Nadra-Lookup] Fetch Exception: ${e.message}`);
             return null;
         }
     };
@@ -64,17 +84,21 @@ async function fetchSingleSimData(term: string) {
         // --- NADRA API (NOW PRIMARY) ---
         let data = await fetchFromNadra(term);
 
-        // --- Normalization for Nadra Structure ---
         if (data && data.status === "success" && Array.isArray(data.data)) {
-            const normalizedData: any = {};
-            data.data.forEach((item: any, idx: number) => {
-                normalizedData[idx.toString()] = item;
-            });
-            data = normalizedData;
+            console.log(`[Nadra-Lookup] Processing ${data.data.length} records for ${term}`);
+            const results = data.data.map((item: any) => ({
+                name: item.name || item.Name || item.NAME || "N/A",
+                number: item.number || item.Number || term,
+                cnic: item.cnic || item.Cnic || item.CNIC || "N/A",
+                address: item.address || item.Address || item.ADDRESS || "N/A",
+                search_term: term
+            }));
+            return results;
         }
 
         // --- FALLBACK TO OLD API ---
         if (!data || data.error || (typeof data === 'object' && Object.keys(data).length === 0)) {
+            console.log(`[Nadra-Lookup] No data from Nadra, trying fallback for ${term}`);
             data = await fetchFromApi(CHECK_URL, cleanNumber);
         }
 
@@ -95,7 +119,7 @@ async function fetchSingleSimData(term: string) {
                 }
             });
 
-            // 2. Fallback for flat structure (if no indexed items found)
+            // 2. Fallback for flat structure
             if (results.length === 0 && (data.name || data.Name || data.NAME)) {
                 results.push({
                     name: data.name || data.Name || data.NAME || "N/A",
@@ -106,10 +130,14 @@ async function fetchSingleSimData(term: string) {
                 });
             }
 
+            console.log(`[Sim-Info] Found ${results.length} records for ${term} from fallback`);
             return results;
         }
+        
+        console.log(`[Sim-Info] No records found for ${term} from any source`);
         return [];
     } catch (e: any) {
+        console.error(`[Sim-Info] Logic Error for ${term}:`, e.message);
         return [];
     }
 }
