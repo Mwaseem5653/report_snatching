@@ -52,19 +52,37 @@ async function fetchSimInfo(phoneNumber: string) {
         }
     };
 
-    try {
-        /*
-        // --- OLD LOGIC (Primary API) ---
-        let data = await fetchFromApi(API_URL, cleanNumber);
+    const fetchFromNadra = async (num: string) => {
+        const fullNum = num.startsWith('0') ? num : '0' + num;
+        const NADRA_KEY = process.env.NADRA_API_KEY;
+        if (!NADRA_KEY) return null;
+        
+        try {
+            const res = await fetch(`https://api.nadra.xyz/sim_api.php?search_term=${fullNum}&api_key=${NADRA_KEY}`);
+            if (!res.ok) return null;
+            return await res.json();
+        } catch (e) {
+            return null;
+        }
+    };
 
-        // Fallback if primary fails or returns "Invalid contacts"
-        if (!data || data.error === "Invalid contacts") {
+    try {
+        // --- NADRA API (NOW PRIMARY) ---
+        let data = await fetchFromNadra(phoneNumber);
+
+        // --- Normalization for Nadra Structure ---
+        if (data && data.status === "success" && Array.isArray(data.data)) {
+            const normalizedData: any = {};
+            data.data.forEach((item: any, idx: number) => {
+                normalizedData[idx.toString()] = item;
+            });
+            data = normalizedData;
+        }
+
+        // --- FALLBACK TO OLD API ---
+        if (!data || data.error || (typeof data === 'object' && Object.keys(data).length === 0)) {
             data = await fetchFromApi(CHECK_URL, cleanNumber);
         }
-        */
-
-        // --- NEW LOGIC (Direct Fallback) ---
-        let data = await fetchFromApi(CHECK_URL, cleanNumber);
 
         if (data && !data.error) {
             // Collect all numbers, names, and addresses from the response

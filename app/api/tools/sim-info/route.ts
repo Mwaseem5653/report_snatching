@@ -20,6 +20,7 @@ async function fetchSingleSimData(term: string) {
 
     const fetchFromApi = async (url: string, num: string) => {
         try {
+            console.log(`SIM Info Request: ${url} for ${num}`);
             const res = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -32,27 +33,50 @@ async function fetchSingleSimData(term: string) {
                     'appkey': APP_KEY
                 })
             });
-            if (!res.ok) return null;
+            if (!res.ok) {
+                console.error(`SIM Info API Error: ${res.status} ${res.statusText}`);
+                return null;
+            }
             const text = await res.text();
+            console.log(`SIM Info Raw Response for ${num}:`, text);
             return JSON.parse(text);
+        } catch (e) {
+            console.error(`SIM Info Fetch Exception for ${num}:`, e);
+            return null;
+        }
+    };
+
+    const fetchFromNadra = async (num: string) => {
+        const fullNum = num.startsWith('0') ? num : '0' + num;
+        const NADRA_KEY = process.env.NADRA_API_KEY;
+        if (!NADRA_KEY) return null;
+
+        try {
+            const res = await fetch(`https://api.nadra.xyz/sim_api.php?search_term=${fullNum}&api_key=${NADRA_KEY}`);
+            if (!res.ok) return null;
+            return await res.json();
         } catch (e) {
             return null;
         }
     };
 
     try {
-        /* 
-        // --- OLD LOGIC (Primary API) ---
-        let data = await fetchFromApi(API_URL, cleanNumber);
+        // --- NADRA API (NOW PRIMARY) ---
+        let data = await fetchFromNadra(term);
 
-        // If primary fails or returns error, try fallback
-        if (!data || data.error === "Invalid contacts") {
+        // --- Normalization for Nadra Structure ---
+        if (data && data.status === "success" && Array.isArray(data.data)) {
+            const normalizedData: any = {};
+            data.data.forEach((item: any, idx: number) => {
+                normalizedData[idx.toString()] = item;
+            });
+            data = normalizedData;
+        }
+
+        // --- FALLBACK TO OLD API ---
+        if (!data || data.error || (typeof data === 'object' && Object.keys(data).length === 0)) {
             data = await fetchFromApi(CHECK_URL, cleanNumber);
         }
-        */
-
-        // --- NEW LOGIC (Direct Fallback) ---
-        let data = await fetchFromApi(CHECK_URL, cleanNumber);
 
         if (data && !data.error) {
             const results: any[] = [];
