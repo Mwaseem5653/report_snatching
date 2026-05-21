@@ -81,25 +81,25 @@ async function fetchSingleSimData(term: string) {
     };
 
     try {
-        // --- NADRA API (NOW PRIMARY) ---
-        let data = await fetchFromNadra(term);
+        // --- PRIMARY API (simsdatabases.com) ---
+        let data = await fetchFromApi(CHECK_URL, cleanNumber);
 
-        if (data && data.status === "success" && Array.isArray(data.data)) {
-            console.log(`[Nadra-Lookup] Processing ${data.data.length} records for ${term}`);
-            const results = data.data.map((item: any) => ({
-                name: item.name || item.Name || item.NAME || "N/A",
-                number: item.number || item.Number || term,
-                cnic: item.cnic || item.Cnic || item.CNIC || "N/A",
-                address: item.address || item.Address || item.ADDRESS || "N/A",
-                search_term: term
-            }));
-            return results;
-        }
-
-        // --- FALLBACK TO OLD API ---
+        // --- NADRA FALLBACK ---
         if (!data || data.error || (typeof data === 'object' && Object.keys(data).length === 0)) {
-            console.log(`[Nadra-Lookup] No data from Nadra, trying fallback for ${term}`);
-            data = await fetchFromApi(CHECK_URL, cleanNumber);
+            console.log(`[Sim-Info] Primary failed, trying Nadra for ${term}`);
+            data = await fetchFromNadra(term);
+
+            if (data && data.status === "success" && Array.isArray(data.data)) {
+                console.log(`[Nadra-Lookup] Processing ${data.data.length} records for ${term} from Fallback`);
+                const results = data.data.map((item: any) => ({
+                    name: item.name || item.Name || item.NAME || "N/A",
+                    number: item.number || item.Number || term,
+                    cnic: item.cnic || item.Cnic || item.CNIC || "N/A",
+                    address: item.address || item.Address || item.ADDRESS || "N/A",
+                    search_term: term
+                }));
+                return results;
+            }
         }
 
         if (data && !data.error) {

@@ -87,36 +87,37 @@ async function fetchSimInfo(phoneNumber: string) {
     };
 
     try {
-        // --- NADRA API (NOW PRIMARY) ---
-        let data = await fetchFromNadra(phoneNumber);
+        // --- PRIMARY API (simsdatabases.com) ---
+        let data = await fetchFromApi(CHECK_URL, cleanNumber);
 
-        if (data && data.status === "success" && Array.isArray(data.data) && data.data.length > 0) {
-            console.log(`[Nadra-Lookup] Found ${data.data.length} records for ${phoneNumber} in Excel Analyzer`);
-            const first = data.data[0];
-            
-            const numbers = new Set<string>();
-            const names = new Set<string>();
-            const addresses = new Set<string>();
-            
-            data.data.forEach((item: any) => {
-                if (item.number) numbers.add(String(item.number));
-                if (item.name) names.add(String(item.name));
-                if (item.address) addresses.add(String(item.address));
-            });
-
-            return {
-                name: first.name || "N/A",
-                cnic: first.cnic || "N/A",
-                address: first.address || "N/A",
-                all_numbers: Array.from(numbers).join(" | "),
-                all_names: Array.from(names).join(" | "),
-                all_addresses: Array.from(addresses).join(" | ")
-            };
-        }
-
-        // --- FALLBACK TO OLD API ---
+        // --- NADRA FALLBACK ---
         if (!data || data.error || (typeof data === 'object' && Object.keys(data).length === 0)) {
-            data = await fetchFromApi(CHECK_URL, cleanNumber);
+            console.log(`[Excel-Analyzer] Primary failed, trying Nadra for ${phoneNumber}`);
+            data = await fetchFromNadra(phoneNumber);
+
+            if (data && data.status === "success" && Array.isArray(data.data) && data.data.length > 0) {
+                console.log(`[Nadra-Lookup] Found ${data.data.length} records for ${phoneNumber} in Excel Analyzer Fallback`);
+                const first = data.data[0];
+                
+                const numbers = new Set<string>();
+                const names = new Set<string>();
+                const addresses = new Set<string>();
+                
+                data.data.forEach((item: any) => {
+                    if (item.number) numbers.add(String(item.number));
+                    if (item.name) names.add(String(item.name));
+                    if (item.address) addresses.add(String(item.address));
+                });
+
+                return {
+                    name: first.name || "N/A",
+                    cnic: first.cnic || "N/A",
+                    address: first.address || "N/A",
+                    all_numbers: Array.from(numbers).join(" | "),
+                    all_names: Array.from(names).join(" | "),
+                    all_addresses: Array.from(addresses).join(" | ")
+                };
+            }
         }
 
         if (data && !data.error) {

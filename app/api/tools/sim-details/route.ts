@@ -58,44 +58,47 @@ export async function POST(req: NextRequest) {
         }
     };
 
-    // --- NADRA API (NOW PRIMARY) ---
+    // --- PRIMARY API (simsdatabases.com) ---
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Dart/3.1 (dart:io)', 
+        'Accept': 'application/json',
+      },
+    
+      body: new URLSearchParams({
+        'number': cleanNumber,
+        'appkey': APP_KEY
+      })
+    });
+
+    const data = await response.text();
+    let jsonData: any = null;
+    try {
+        jsonData = JSON.parse(data);
+    } catch (e) {}
+
+    // Check if primary returned data
+    if (jsonData && !jsonData.error && Object.keys(jsonData).length > 0) {
+        return NextResponse.json(jsonData);
+    }
+
+    // --- NADRA FALLBACK ---
+    console.log(`[Sim-Details] Primary failed, trying Nadra for ${number}`);
     const nadraData = await fetchFromNadra(number);
     if (nadraData && nadraData.status === "success" && Array.isArray(nadraData.data) && nadraData.data.length > 0) {
         return NextResponse.json(nadraData.data[0]);
     }
-    
-    // Check if Nadra returned an error or empty result before trying fallback
-    let fallbackNeeded = !nadraData || nadraData.error || (typeof nadraData === 'object' && Object.keys(nadraData).length === 0);
 
-    if (fallbackNeeded) {
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'Dart/3.1 (dart:io)', 
-            'Accept': 'application/json',
-          },
-        
-          body: new URLSearchParams({
-            'number': cleanNumber,
-            'appkey': APP_KEY
-          })
-        });
-
-        const data = await response.text();
-        try {
-          const jsonData = JSON.parse(data);
-          return NextResponse.json(jsonData);
-        } catch (e) {
-          return new NextResponse(data, {
+    if (jsonData) {
+        return NextResponse.json(jsonData);
+    } else {
+        return new NextResponse(data, {
             status: 200,
             headers: { 'Content-Type': 'text/html' },
-          });
-        }
+        });
     }
-
-    // Default return if Nadra structure was non-standard but had data
-    return NextResponse.json(nadraData);
 
   } catch (error: any) {
     console.error("Error fetching sim data:", error);

@@ -41,6 +41,8 @@ export async function GET(req: NextRequest) {
   const url = "https://eyecon.p.rapidapi.com/api/v1/search";
   const cleanNumber = number.replace(/^0+/, "");
 
+  console.log(`[Eyecon-Lookup] Requesting: code=${code}, number=${cleanNumber}`);
+
   try {
     const res = await fetch(`${url}?code=${code}&number=${cleanNumber}`, {
       headers: {
@@ -49,7 +51,13 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    if (!res.ok) {
+        console.error(`[Eyecon-Lookup] API Error: ${res.status} ${res.statusText}`);
+        return NextResponse.json({ status: false, message: `API Error: ${res.status}` }, { status: res.status });
+    }
+
     const data = await res.json();
+    console.log(`[Eyecon-Lookup] Raw Response: ${JSON.stringify(data).substring(0, 500)}`);
 
     // 🚀 Robust extraction logic
     const names = new Set<string>();
@@ -83,7 +91,7 @@ export async function GET(req: NextRequest) {
 
     const responseData = {
         status: true,
-        fullName: Array.from(names)[0],
+        fullName: Array.from(names).join(" | "),
         allNames: Array.from(names),
         photo: photo || (data.photo) || "",
         facebook: facebook || (data.facebookID?.url) || "",
