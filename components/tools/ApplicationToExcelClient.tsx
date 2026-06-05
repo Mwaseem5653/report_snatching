@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import ExcelJS from "exceljs/dist/exceljs.min.js";
+import JSZip from "jszip";
 import { cn, getApiUrl } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
@@ -106,13 +107,15 @@ export default function ApplicationToExcelClient() {
 
       const applications = data.applications || [];
       if (applications.length === 0) {
-        toast.info("No applications found for the selected date range.");
+        toast.info("No applications found for the selected criteria.");
         setLoading(false);
         return;
       }
 
       setStats({ count: applications.length, lastFetch: new Date() });
 
+      const zip = new JSZip();
+      const imgFolder = zip.folder("images");
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Applications Data");
 
@@ -134,8 +137,8 @@ export default function ApplicationToExcelClient() {
           { header: "INCIDENT NOTE", key: "Incident Note", width: 40 },
           { header: "LAST NUM USED", key: "last Num Used", width: 20 },
           { header: "ALL IMEIS", key: "IMEI Numbers", width: 40 },
-          { header: "BOX PICTURE LINK", key: "boxPictureLink", width: 20 },
-          { header: "ATTACHMENT LINK", key: "attestedAppLink", width: 20 },
+          { header: "BOX PICTURE", key: "boxPictureLink", width: 20 },
+          { header: "ATTACHMENT", key: "attestedAppLink", width: 20 },
       ];
 
       worksheet.columns = columns;
@@ -162,10 +165,44 @@ export default function ApplicationToExcelClient() {
         } catch (e) { return "None"; }
       };
 
-      applications.forEach((app: any) => {
+      // Helper to fetch and add image to ZIP
+      const fetchAndAddImage = async (url: string, fileName: string) => {
+          try {
+              const imgRes = await fetch(url);
+              const blob = await imgRes.blob();
+              imgFolder?.file(fileName, blob);
+              return true;
+          } catch (e) {
+              console.error("Image fetch failed:", e);
+              return false;
+          }
+      };
+
+      toast.loading("Downloading images and generating report...", { id: "export-toast" });
+
+      for (const app of applications) {
           let rawName = app.applicantName || "";
           const nameMatch = rawName.split(/S\/O|D\/O|W\/O/i)[0];
           const cleanedName = nameMatch ? nameMatch.trim() : rawName;
+          
+          const appId = app.id || Math.random().toString(36).substring(7);
+          
+          let boxImgLocal = "";
+          let attImgLocal = "";
+
+          if (app.pictureUrl) {
+              const ext = app.pictureUrl.split('.').pop()?.split('?')[0] || "jpg";
+              const fileName = `box_${appId}.${ext}`;
+              const success = await fetchAndAddImage(app.pictureUrl, fileName);
+              if (success) boxImgLocal = `./images/${fileName}`;
+          }
+
+          if (app.attachmentUrl) {
+              const ext = app.attachmentUrl.split('.').pop()?.split('?')[0] || "jpg";
+              const fileName = `att_${appId}.${ext}`;
+              const success = await fetchAndAddImage(app.attachmentUrl, fileName);
+              if (success) attImgLocal = `./images/${fileName}`;
+          }
 
           const commonRowData = {
               "currentDate": formatAppDate(app.createdAt),
@@ -182,8 +219,21 @@ export default function ApplicationToExcelClient() {
               "Time Of Offence": app.offenceTime || "",
               "Offence Address": app.offenceAddress || "",
               "Incident Note": app.note || "",
-              "boxPictureLink": app.pictureUrl || "",
-              "attestedAppLink": app.attachmentUrl || "",
+          };
+
+          const addRowWithImages = (data: any) => {
+              const row = worksheet.addRow(data);
+              if (boxImgLocal) {
+                  const cell = row.getCell("boxPictureLink");
+                  cell.value = { text: "View Image", hyperlink: boxImgLocal };
+                  cell.font = { color: { argb: 'FF0000FF' }, underline: true };
+              }
+              if (attImgLocal) {
+                  const cell = row.getCell("attestedAppLink");
+                  cell.value = { text: "View Image", hyperlink: attImgLocal };
+                  cell.font = { color: { argb: 'FF0000FF' }, underline: true };
+              }
+              return row;
           };
 
           if (app.devices && app.devices.length > 0) {
@@ -196,23 +246,13 @@ export default function ApplicationToExcelClient() {
                   if (device.lastNumUsed) lastNumsUsed.push(formatMobile(device.lastNumUsed));
                   if (device.lastNumUsed2) lastNumsUsed.push(formatMobile(device.lastNumUsed2));
 
-                  const row = worksheet.addRow({
+                  const row = addRowWithImages({
                       ...commonRowData,
                       "Mobile Model": device.mobileModel || "",
                       "IMEI Numbers": deviceImeis.join(", "),
                       "last Num Used": lastNumsUsed.join(", "),
                   });
                   if (hasMultipleDevices) row.eachCell((cell: any) => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }; });
-                  if (commonRowData.boxPictureLink) {
-                      const cell = row.getCell("boxPictureLink");
-                      cell.value = { text: "Image Link", hyperlink: commonRowData.boxPictureLink };
-                      cell.font = { color: { argb: 'FF0000FF' }, underline: true };
-                  }
-                  if (commonRowData.attestedAppLink) {
-                      const cell = row.getCell("attestedAppLink");
-                      cell.value = { text: "Attachment Link", hyperlink: commonRowData.attestedAppLink };
-                      cell.font = { color: { argb: 'FF0000FF' }, underline: true };
-                  }
               });
           } else {
               const fallbackImeis: string[] = [];
@@ -223,24 +263,14 @@ export default function ApplicationToExcelClient() {
               if (app.lastNumUsed) fallbackNums.push(formatMobile(app.lastNumUsed));
               if (app.lastNumUsed2) fallbackNums.push(formatMobile(app.lastNumUsed2));
 
-              const row = worksheet.addRow({
+              addRowWithImages({
                   ...commonRowData,
                   "Mobile Model": app.mobileModel || "None",
                   "IMEI Numbers": finalImeis,
                   "last Num Used": fallbackNums.length > 0 ? fallbackNums.join(", ") : "None",
               });
-              if (commonRowData.boxPictureLink) {
-                  const cell = row.getCell("boxPictureLink");
-                  cell.value = { text: "Image Link", hyperlink: commonRowData.boxPictureLink };
-                  cell.font = { color: { argb: 'FF0000FF' }, underline: true };
-              }
-              if (commonRowData.attestedAppLink) {
-                  const cell = row.getCell("attestedAppLink");
-                  cell.value = { text: "Attachment Link", hyperlink: commonRowData.attestedAppLink };
-                  cell.font = { color: { argb: 'FF0000FF' }, underline: true };
-              }
           }
-      });
+      }
 
       const headerRow = worksheet.getRow(1);
       headerRow.eachCell((cell: any) => {
@@ -256,18 +286,23 @@ export default function ApplicationToExcelClient() {
           });
       });
 
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const url = window.URL.createObjectURL(blob);
+      const excelBuffer = await workbook.xlsx.writeBuffer();
+      const excelFileName = `Application_Report_${period === 'custom' ? `${fromDate}_to_${toDate}` : period}.xlsx`;
+      zip.file(excelFileName, excelBuffer);
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = window.URL.createObjectURL(zipBlob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `Application_Report_${period === 'custom' ? `${fromDate}_to_${toDate}` : period}.xlsx`;
+      anchor.download = `Application_Export_${new Date().toISOString().split('T')[0]}.zip`;
       anchor.click();
       window.URL.revokeObjectURL(url);
       
-      toast.success(`Exported ${applications.length} applications!`);
+      toast.dismiss("export-toast");
+      toast.success(`Exported ${applications.length} applications with images!`);
     } catch (error: any) {
       console.error("Export error:", error);
+      toast.dismiss("export-toast");
       toast.error("Failed to export: " + error.message);
     } finally {
       setLoading(false);

@@ -82,7 +82,7 @@ export const locationData: LocationData = {
           "Shah Faisal",
           "Saudabad"
         ],
-        markets: ["Korangi Mobile Market", "Landhi Phone Shops"],
+        markets: ["Korangi Mobile Market", "Landhi Phone Shops","Qauidabad Mobile Market","Shah-Faisal Mobile Market","Saudabad Mobile Market"],
       },
       /*
       malir: {

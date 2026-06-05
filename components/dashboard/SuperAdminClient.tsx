@@ -19,6 +19,7 @@ import ApplicationToExcelClient from "@/components/tools/ApplicationToExcelClien
 import AdvancedReportClient from "@/components/tools/AdvancedReportClient";
 import UsageAnalyticsClient from "@/components/tools/UsageAnalyticsClient";
 import TokenManagement from "@/components/dashboard/TokenManagement";
+import ImeiSearchReportClient from "@/components/tools/ImeiSearchReportClient";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -88,6 +89,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
   const TOOLS_MENU = [
     { id: "app-excel", label: "Application To Excel", icon: FileDown, key: "app_to_excel" },
     { id: "adv-reports", label: "Advanced Reports", icon: BarChart3, key: "advanced_reports" },
+    { id: "imei-stats", label: "IMEI Search Stats", icon: Search, key: "super_admin_only" },
     { id: "usage-stats", label: "Tool Usage Analytics", icon: TrendingUp, key: "usage_analytics" },
     { id: "analyzer", label: "Excel Analyzer", icon: FileSpreadsheet, key: "excel_analyzer" },
     { id: "geo", label: "Geo Fencing", icon: MapPin, key: "geo_fencing" },
@@ -221,6 +223,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
         {(activeTab === "app-excel" && (isSuper || perms.app_to_excel)) && <ApplicationToExcelClient />}
         {(activeTab === "adv-reports" && (isSuper || perms.advanced_reports)) && <AdvancedReportClient />}
         {(activeTab === "usage-stats" && (isSuper || perms.usage_analytics)) && <UsageAnalyticsClient />}
+        {activeTab === "imei-stats" && isSuper && <ImeiSearchReportClient />}
         {(activeTab === "analyzer" && (isSuper || perms.excel_analyzer)) && <ExcelAnalyzerClient />}
         {(activeTab === "geo" && (isSuper || perms.geo_fencing)) && <GeoFencingClient />}
         {(activeTab === "visualizer" && (isSuper || perms.movement_visualizer)) && <MovementVisualizerClient />}

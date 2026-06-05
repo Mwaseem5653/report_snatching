@@ -66,10 +66,15 @@ export async function GET(req: NextRequest) {
 
     const processItem = (item: any) => {
         if (!item) return;
-        const n = item.fullName || item.name;
-        if (n) names.add(n);
+        if (item.fullName) names.add(item.fullName);
+        if (item.name) names.add(item.name);
+        if (item.displayName) names.add(item.displayName);
+
         if (item.otherNames && Array.isArray(item.otherNames)) {
-            item.otherNames.forEach((o: any) => names.add(typeof o === 'string' ? o : o.name));
+            item.otherNames.forEach((o: any) => {
+                const n = typeof o === 'string' ? o : (o.name || o.fullName || o);
+                if (n && typeof n === 'string') names.add(n);
+            });
         }
         if (!photo && item.photo) photo = item.photo;
         if (!facebook && item.facebookID?.url) facebook = item.facebookID.url;

@@ -12,6 +12,7 @@ import ExcelAnalyzerClient from "@/components/tools/ExcelAnalyzerClient";
 import GeoFencingClient from "@/components/tools/GeoFencingClient";
 import MovementVisualizerClient from "@/components/tools/MovementVisualizerClient";
 import RapidApiClient from "@/components/tools/RapidApiClient";
+import ImeiSearchReportClient from "@/components/tools/ImeiSearchReportClient";
 import {
   FileSpreadsheet,
   ScanText,
@@ -22,7 +23,8 @@ import {
   Cpu,
   Eye,
   Globe,
-  Shield
+  Shield,
+  Search
 } from "lucide-react";
 import {
   Tooltip,
@@ -80,6 +82,7 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
     { id: "simv2", label: "SIM Details v2", icon: Shield, key: "info_tools" },
     { id: "cdr", label: "CDR Generator", icon: FileCode, key: "cdr_generator" },
     { id: "rapidapi", label: "RapidAPI", icon: Globe, key: "rapid_api" },
+    ...(isSuper ? [{ id: "imei_search", label: "IMEI Search Stats", icon: Search, key: "super_admin_only" }] : []),
   ].filter(t => t && (isSuper || perms[t.key]));
 
   return (
@@ -134,6 +137,7 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
         {(activeTab === "simv2" && (isSuper || perms.info_tools)) && <SimDetailsV2Client />}
         {(activeTab === "cdr" && (isSuper || perms.cdr_generator)) && <CdrFormatClient />}
         {(activeTab === "rapidapi" && (isSuper || perms.rapid_api)) && <RapidApiClient />}
+        {(activeTab === "imei_search" && isSuper) && <ImeiSearchReportClient />}
     </main>
     </div>
   );

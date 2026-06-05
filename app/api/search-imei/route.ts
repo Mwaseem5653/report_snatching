@@ -67,7 +67,26 @@ export async function POST(req: NextRequest) {
         }
     }
 
-    // 3. LOG THE RECOVERY MATCH (Only for Active/Stolen devices)
+    // 3. LOG THE SEARCH ATTEMPT (For Analytics)
+    if (currentUser) {
+        try {
+            await adminDb.collection("imei_search_logs").add({
+                userId: currentUser.uid,
+                userName: currentUser.name || "Unknown",
+                userEmail: currentUser.email || "Unknown",
+                userRole: currentUser.role || "Unknown",
+                userPs: currentUser.ps || "N/A",
+                searchedImei: searchLabel,
+                isMatch: isMatch,
+                timestamp: admin.firestore.Timestamp.now(),
+                date: new Date().toISOString().split('T')[0]
+            });
+        } catch (logErr) {
+            console.error("Failed to log IMEI search attempt:", logErr);
+        }
+    }
+
+    // 4. LOG THE RECOVERY MATCH (Only for Active/Stolen devices)
     const restrictedRoles = ["super_admin", "admin", "officer"];
     if (isMatch && currentUser && !restrictedRoles.includes(currentUser.role)) {
         // Only log if not already recovered

@@ -200,12 +200,14 @@ async function fetchEyeconInfo(number: string, code = "92") {
 
         const processItem = (item: any) => {
             if (!item) return;
-            const fname = item.fullName || item.name;
-            if (fname) names.add(fname);
+            if (item.fullName) names.add(item.fullName);
+            if (item.name) names.add(item.name);
+            if (item.displayName) names.add(item.displayName);
+
             if (Array.isArray(item.otherNames)) {
                 item.otherNames.forEach((o: any) => {
-                    const n = typeof o === 'string' ? o : o.name;
-                    if (n) names.add(n);
+                    const n = typeof o === 'string' ? o : (o.name || o.fullName || o);
+                    if (n && typeof n === 'string') names.add(n);
                 });
             }
             if (!photo && item.photo) photo = item.photo;
