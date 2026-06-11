@@ -6,6 +6,8 @@ import { logToolUsage } from "@/lib/usageLogger";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
     try {
         const { searchParams } = new URL(req.url);

@@ -6,11 +6,11 @@ import { logToolUsage } from "@/lib/usageLogger";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
-async function fetchSingleVehicleData(reg_no: string, category: string) {
+async function fetchSingleVehicleData(reg: string, type: string) {
     const apiUrl = "https://api.mahisite.xyz/sindh/api.php";
     const params = new URLSearchParams({
-      reg_no: reg_no,
-      category: category,
+      reg: reg,
+      type: type,
     });
 
     try {
@@ -18,25 +18,20 @@ async function fetchSingleVehicleData(reg_no: string, category: string) {
         if (!res.ok) return null;
         const data = await res.json();
 
-        if (data.statusCode === 0 && data.data && data.data.length > 0) {
-            const info = data.data[0];
-            return {
-                registrationNumber: info.registrationNumber,
-                ownerName: info.ownerName,
-                ownerCNIC: info.ownerCNIC,
-                ownerAddress: info.ownerAddress,
-                registrationDate: info.registrationDate,
-                engineNumber: info.engineNumber,
-                chassisNumber: info.chassisNumber,
-                branchName: info.branchName,
-                districtName: info.districtName,
-                modelYear: info.modelYear,
-                manufacturerName: info.manufacturerName,
-                modelName: info.modelName,
-                color: info.color,
-                cplcStatus: info.cplcStatus,
-                search_term: reg_no
-            };
+        if (data.status === true && data.data && Array.isArray(data.data)) {
+            return data.data.map((info: any) => ({
+                registrationNumber: info.registration_no || "N/A",
+                ownerName: info.owner_name || "N/A",
+                ownerCNIC: info.cnic || "N/A",
+                ownerAddress: info.address || "N/A",
+                registrationDate: info.registration_date || "N/A",
+                engineNumber: info.engine_no || "N/A",
+                chassisNumber: info.chassis_no || "N/A",
+                model: info.model || "N/A",
+                vehicleType: info.vehicle_type || "N/A",
+                bookNo: info.book_no || "N/A",
+                search_term: reg
+            }));
         }
         return null;
     } catch (e) {
@@ -76,7 +71,11 @@ export async function POST(req: NextRequest) {
         const batch = targets.slice(i, i + 5);
         const results = await Promise.all(batch.map(term => fetchSingleVehicleData(term.trim(), category)));
         results.forEach(res => {
-            if (res) allResults.push(res);
+            if (Array.isArray(res)) {
+                allResults.push(...res);
+            } else if (res) {
+                allResults.push(res);
+            }
         });
         if (i + 5 < targets.length) {
             await new Promise(resolve => setTimeout(resolve, 500));

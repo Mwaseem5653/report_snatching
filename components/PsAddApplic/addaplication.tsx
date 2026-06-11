@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -17,12 +18,13 @@ import {
 } from "@/components/ui/dialog";
 import AddApplicationForm from "../applicationform/applicationform";
 import { getApplications } from "@/lib/applicationApi";
-import { FileText, Search, Plus, RotateCcw, ChevronRight, Clock, MapPin, Calendar, User, X } from "lucide-react";
+import { FileText, Search, Plus, RotateCcw, ChevronRight, Clock, MapPin, Calendar, User, X, Smartphone } from "lucide-react";
 import { cn, getApiUrl } from "@/lib/utils";
 
 export default function Psusersapplication() {
   const [applications, setApplications] = useState<any[]>([]);
-  const [filterPeriod, setFilterPeriod] = useState<string>("today");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterPeriod, setFilterPeriod] = useState<string>("none");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedApp, setSelectedApp] = useState<any>(null);
@@ -53,6 +55,13 @@ export default function Psusersapplication() {
 
   async function fetchApplications() {
     if (!currentUser) return;
+
+    // 🚀 If Period is 'none' and no search query, don't even call the API
+    if (filterPeriod === "none" && !searchQuery.trim()) {
+        setApplications([]);
+        return;
+    }
+
     setLoading(true);
     try {
       const params: Record<string, string> = {
@@ -60,6 +69,12 @@ export default function Psusersapplication() {
         district: currentUser.district,
         ps: currentUser.ps,
       };
+
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+        params.period = "all";
+      }
+
       const data = await getApplications(params);
       setApplications(data.applications || []);
     } catch (err) {
@@ -74,7 +89,8 @@ export default function Psusersapplication() {
   }, [currentUser, filterPeriod]);
 
   function clearFilters() {
-    setFilterPeriod("today");
+    setSearchQuery("");
+    setFilterPeriod("none");
   }
 
   const formatAppDate = (dateVal: any) => {
@@ -103,18 +119,16 @@ export default function Psusersapplication() {
           </div>
 
           <div className="flex flex-col sm:flex-row flex-1 items-stretch sm:items-center gap-2 justify-end">
-              <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-                  <SelectTrigger className="flex-1 sm:w-[180px] border-slate-200 rounded-xl bg-slate-50/50 h-10 text-[11px] font-bold">
-                      <SelectValue placeholder="Period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="all">All Time</SelectItem>
-                      <SelectItem value="today">Today</SelectItem>
-                      <SelectItem value="15days">Last 15 Days</SelectItem>
-                      <SelectItem value="1month">Last 1 Month</SelectItem>
-                      <SelectItem value="3months">Last 3 Months</SelectItem>
-                  </SelectContent>
-              </Select>
+              <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
+                  <Input 
+                    placeholder="Search by Name/IMEI..." 
+                    value={searchQuery} 
+                    onChange={(e) => setSearchQuery(e.target.value)} 
+                    onKeyDown={(e) => e.key === 'Enter' && fetchApplications()} 
+                    className="pl-9 border-slate-200 rounded-xl bg-slate-50/50 h-10 text-sm w-full font-medium" 
+                  />
+              </div>
 
               <div className="flex items-center gap-2">
                 <Button onClick={fetchApplications} className="flex-1 sm:flex-none bg-blue-600 text-white rounded-xl h-10 px-4 font-semibold text-xs" disabled={loading}>{loading ? "..." : "Refresh"}</Button>
@@ -198,9 +212,156 @@ export default function Psusersapplication() {
                     <p className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Station: {selectedApp.ps}</p>
                 </DialogHeader>
             </div>
-            <div className="p-6 md:p-10 bg-white flex-1 overflow-y-auto">
-                {/* Details layout similar to Admin view for consistency */}
-                <p className="text-center text-slate-400 text-xs italic">Full details view ready.</p>
+            <div className="p-8 md:p-10 space-y-10 bg-white flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
+                  <div className="col-span-full mb-2"><h4 className="text-blue-600 font-black text-[11px] uppercase tracking-[0.2em] flex items-center gap-2"><User size={14}/> Applicant & Jurisdiction</h4></div>
+                  <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                    <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2"><User size={12} className="text-slate-300" /> Applicant Name:</span>
+                    <span className="text-slate-800 ml-2 font-bold">{selectedApp.applicantName || "—"}</span>
+                  </div>
+                  <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                    <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">Mobile Number:</span>
+                    <span className="text-slate-800 ml-2 font-bold">{selectedApp.applicantMobile || "—"}</span>
+                  </div>
+                  <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                    <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">CNIC Number:</span>
+                    <span className="text-slate-800 ml-2 font-bold">{selectedApp.cnic || "—"}</span>
+                  </div>
+                  <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                    <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2"><MapPin size={12} className="text-slate-300" /> City:</span>
+                    <span className="text-slate-800 ml-2 font-bold">{selectedApp.city || "—"}</span>
+                  </div>
+                  <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                    <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">District:</span>
+                    <span className="text-slate-800 ml-2 font-bold">{selectedApp.district || "—"}</span>
+                  </div>
+                  <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                    <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">Police Station:</span>
+                    <span className="text-slate-800 ml-2 font-bold">{selectedApp.ps || "—"}</span>
+                  </div>
+                                    
+                  <div className="col-span-full mt-6 mb-2 border-t border-slate-50 pt-6">
+                      <h4 className="text-blue-600 font-black text-[11px] uppercase tracking-[0.2em] flex items-center gap-2">
+                          <Smartphone size={14}/> Device & Incident Details
+                      </h4>
+                  </div>
+
+                  {selectedApp.devices && Array.isArray(selectedApp.devices) ? (
+                      selectedApp.devices.map((device: any, idx: number) => (
+                          <div key={idx} className="col-span-full grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2 bg-slate-50/50 p-4 rounded-2xl mb-4 border border-slate-100">
+                              <p className="col-span-full text-[10px] font-black text-blue-900 uppercase tracking-widest mb-2">Device {idx + 1}</p>
+                              <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                                <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2"><Smartphone size={12} className="text-slate-300" /> Mobile Model:</span>
+                                <span className="text-slate-800 ml-2 font-bold">{device.mobileModel || "—"}</span>
+                              </div>
+                              <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                                <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">IMEI 1:</span>
+                                <span className="text-slate-800 ml-2 font-bold">{device.imei1 || "—"}</span>
+                              </div>
+                              <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                                <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">IMEI 2:</span>
+                                <span className="text-slate-800 ml-2 font-bold">{device.imei2 || "—"}</span>
+                              </div>
+                              <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                                <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">Last Num Used:</span>
+                                <span className="text-slate-800 ml-2 font-bold">{device.lastNumUsed || "—"}</span>
+                              </div>
+                          </div>
+                      ))
+                  ) : (
+                      <>
+                        <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                          <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2"><Smartphone size={12} className="text-slate-300" /> Mobile Model:</span>
+                          <span className="text-slate-800 ml-2 font-bold">{selectedApp.mobileModel || "—"}</span>
+                        </div>
+                        <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                          <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">IMEI 1:</span>
+                          <span className="text-slate-800 ml-2 font-bold">{selectedApp.imei1 || "—"}</span>
+                        </div>
+                        <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                          <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">IMEI 2:</span>
+                          <span className="text-slate-800 ml-2 font-bold">{selectedApp.imei2 || "—"}</span>
+                        </div>
+                        <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                          <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">Last Num Used:</span>
+                          <span className="text-slate-800 ml-2 font-bold">{selectedApp.lastNumUsed || "—"}</span>
+                        </div>
+                      </>
+                  )}
+
+                  <div className="col-span-full grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2 mt-4">
+                      <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                        <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">Crime Category:</span>
+                        <span className="text-slate-800 ml-2 font-bold">{selectedApp.crimeHead || "—"}</span>
+                      </div>
+                      <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                        <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">Offence Date:</span>
+                        <span className="text-slate-800 ml-2 font-bold">{formatAppDate(selectedApp.offenceDate)}</span>
+                      </div>
+                      <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                        <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">Offence Time:</span>
+                        <span className="text-slate-800 ml-2 font-bold">{selectedApp.offenceTime || "—"}</span>
+                      </div>
+                      <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                        <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2"><MapPin size={12} className="text-slate-300" /> Offence Address:</span>
+                        <span className="text-slate-800 ml-2 font-bold">{selectedApp.offenceAddress || "—"}</span>
+                      </div>
+                      <div className="text-sm text-gray-700 border-b border-slate-100 py-3 flex flex-wrap items-center justify-between group">
+                        <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest flex items-center gap-2">Other Lost Property:</span>
+                        <span className="text-slate-800 ml-2 font-bold">{selectedApp.otherLostProperty || "—"}</span>
+                      </div>
+                  </div>                  
+                  <div className="col-span-full mt-6 mb-4 border-t border-slate-50 pt-6"><h4 className="text-blue-600 font-black text-[11px] uppercase tracking-[0.2em] flex items-center gap-2"><Plus size={14}/> Attachments & Evidence</h4></div>
+                  <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {selectedApp.pictureUrl && (
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                  <div className="p-2 bg-white rounded-lg text-blue-600 shadow-sm"><Smartphone size={18}/></div>
+                                  <div><p className="text-[10px] font-black uppercase text-slate-400">Box Picture</p><p className="text-xs font-bold text-slate-700">Image Attached</p></div>
+                              </div>
+                              <Button variant="outline" size="sm" className="rounded-lg h-8 text-[10px] font-black uppercase" onClick={() => window.open(selectedApp.pictureUrl, "_blank")}>View</Button>
+                          </div>
+                      )}
+                      {selectedApp.attachmentUrl && (
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                  <div className="p-2 bg-white rounded-lg text-blue-600 shadow-sm"><FileText size={18}/></div>
+                                  <div><p className="text-[10px] font-black uppercase text-slate-400">Attested Form</p><p className="text-xs font-bold text-slate-700">Document Attached</p></div>
+                              </div>
+                              <Button variant="outline" size="sm" className="rounded-lg h-8 text-[10px] font-black uppercase" onClick={() => window.open(selectedApp.attachmentUrl, "_blank")}>View</Button>
+                          </div>
+                      )}
+                  </div>
+
+                  <div className="col-span-full mt-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                      <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Incident Description</p>
+                      <p className="text-sm text-slate-700 font-medium leading-relaxed italic">"{selectedApp.note || "No description provided."}"</p>
+                  </div>
+              </div>
+
+              {(selectedApp.status === "complete" || selectedApp.comments) && (
+                <section className="bg-emerald-50/50 border border-emerald-100 rounded-[1.5rem] p-8 space-y-6 animate-in zoom-in-95 duration-500">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-black text-emerald-700 uppercase tracking-[0.2em] flex items-center gap-2">
+                            <FileText size={20} className="text-emerald-600" /> Case Resolution Summary
+                        </h3>
+                    </div>
+                    <div className="grid grid-cols-1 gap-6">
+                        <div className="space-y-2">
+                            <p className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest">Investigation & Process Details</p>
+                            <div className="bg-white p-5 rounded-2xl border border-emerald-100/50 shadow-sm text-sm text-slate-700 font-medium leading-relaxed line-clamp-none whitespace-pre-wrap">
+                                {selectedApp.processDetails || "Standard procedure followed."}
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <p className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest">Officer's Closing Remarks</p>
+                            <div className="bg-white p-5 rounded-2xl border border-emerald-100/50 shadow-sm text-sm font-bold text-slate-800 italic">
+                                "{selectedApp.comments || "Case closed successfully."}"
+                            </div>
+                        </div>
+                    </div>
+                </section>
+              )}
             </div>
           </DialogContent>
         </Dialog>

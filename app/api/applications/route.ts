@@ -31,8 +31,11 @@ export async function GET(req: NextRequest) {
     }
 
     let period = searchParams.get("period");
-    if (!period && role === "ps_user") period = "15days";
-    else if (!period) period = "all";
+    if (!period) period = "none";
+    
+    if (period === "none") {
+        return NextResponse.json({ success: true, applications: [] });
+    }
     
     const search = searchParams.get("search")?.toLowerCase();
     let queryRef: any = adminDb.collection("applications");

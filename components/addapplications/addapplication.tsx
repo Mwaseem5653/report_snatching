@@ -41,7 +41,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
   const [applications, setApplications] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>(officerUid ? "processed" : "pending");
-  const [filterPeriod, setFilterPeriod] = useState<string>("today");
+  const [filterPeriod, setFilterPeriod] = useState<string>(officerUid ? "today" : "none");
   const [filterPs, setFilterPs] = useState<string>("all");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -67,6 +67,13 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
 
   const handleSearch = async () => {
     if (!currentUser) return;
+    
+    // 🚀 If Period is 'none' and no search query, don't even call the API
+    if (filterPeriod === "none" && !searchQuery.trim()) {
+        setApplications([]);
+        return;
+    }
+
     setLoading(true);
     try {
       const params: Record<string, string> = { 
@@ -109,7 +116,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
   const handleClear = () => {
     setSearchQuery("");
     setFilterStatus(officerUid ? "all" : "pending");
-    setFilterPeriod("today");
+    setFilterPeriod(officerUid ? "today" : "none");
     setFilterPs("all");
   };
 
@@ -191,50 +198,43 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                   <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()} className="pl-9 border-slate-200 rounded-xl bg-slate-50/50 h-10 text-sm w-full" />
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                      <SelectTrigger className="flex-1 sm:w-[130px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold"><SelectValue placeholder="Status" /></SelectTrigger>
-                      <SelectContent>
-                          {officerUid ? (
-                              <>
-                                  <SelectItem value="all">All My Cases</SelectItem>
-                                  <SelectItem value="processed">My In-Process</SelectItem>
-                                  <SelectItem value="complete">My Completed</SelectItem>
-                              </>
-                          ) : (
-                              <>
-                                  <SelectItem value="all">All Status</SelectItem>
-                                  <SelectItem value="pending">Pending</SelectItem>
-                                  <SelectItem value="processed">In Process</SelectItem>
-                                  <SelectItem value="complete">Completed</SelectItem>
-                              </>
-                          )}
-                      </SelectContent>
-                  </Select>
+                  {currentUser?.role === "officer" && (
+                    <>
+                      <Select value={filterStatus} onValueChange={setFilterStatus}>
+                          <SelectTrigger className="flex-1 sm:w-[130px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold"><SelectValue placeholder="Status" /></SelectTrigger>
+                          <SelectContent>
+                              {officerUid ? (
+                                  <>
+                                      <SelectItem value="all">All My Cases</SelectItem>
+                                      <SelectItem value="processed">My In-Process</SelectItem>
+                                      <SelectItem value="complete">My Completed</SelectItem>
+                                  </>
+                              ) : (
+                                  <>
+                                      <SelectItem value="all">All Status</SelectItem>
+                                      <SelectItem value="pending">Pending</SelectItem>
+                                      <SelectItem value="processed">In Process</SelectItem>
+                                      <SelectItem value="complete">Completed</SelectItem>
+                                  </>
+                              )}
+                          </SelectContent>
+                      </Select>
 
-                  <Select value={filterPs} onValueChange={setFilterPs}>
-                      <SelectTrigger className="flex-1 sm:w-[140px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold overflow-hidden">
-                          <SelectValue placeholder="All PS" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[300px]">
-                          <SelectItem value="all">All PS</SelectItem>
-                          {allPS.map(ps => (
-                              <SelectItem key={ps} value={ps} className="text-xs">{ps}</SelectItem>
-                          ))}
-                      </SelectContent>
-                  </Select>
-
-                  <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-                      <SelectTrigger className="flex-1 sm:w-[110px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold">
-                          <SelectValue placeholder="Period" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          <SelectItem value="all">All Time</SelectItem>
-                          <SelectItem value="today">Today</SelectItem>
-                          <SelectItem value="15days">15 Days</SelectItem>
-                          <SelectItem value="1month">1 Month</SelectItem>
-                          <SelectItem value="6months">6 Months</SelectItem>
-                      </SelectContent>
-                  </Select>
+                      <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                          <SelectTrigger className="flex-1 sm:w-[110px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold">
+                              <SelectValue placeholder="Period" />
+                          </SelectTrigger>
+                          <SelectContent>
+                              <SelectItem value="none">None Set</SelectItem>
+                              <SelectItem value="all">All Time</SelectItem>
+                              <SelectItem value="today">Today</SelectItem>
+                              <SelectItem value="15days">15 Days</SelectItem>
+                              <SelectItem value="1month">1 Month</SelectItem>
+                              <SelectItem value="6months">6 Months</SelectItem>
+                          </SelectContent>
+                      </Select>
+                    </>
+                  )}
               </div>
               <div className="flex items-center gap-2">
                 <Button onClick={handleSearch} className="flex-1 sm:flex-none bg-blue-600 text-white rounded-xl h-10 px-4 md:px-6 font-semibold text-xs" disabled={loading}>{loading ? "..." : "Search"}</Button>

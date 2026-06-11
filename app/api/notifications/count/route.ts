@@ -49,8 +49,22 @@ export async function GET(req: NextRequest) {
         }
     }
 
-    // 2. Fetch records
-    const snapshot = await queryRef.get();
+    // 2. Fetch records with Timeout (to prevent long hangs on DNS failure)
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Firestore Timeout")), 5000)
+    );
+
+    let snapshot;
+    try {
+        snapshot = await Promise.race([
+            queryRef.get(),
+            timeoutPromise
+        ]);
+    } catch (e: any) {
+        console.error("Notification Firestore Error:", e.message);
+        return NextResponse.json({ success: false, count: 0, error: "Database unavailable" });
+    }
+
     let matches = snapshot.docs.map((doc: any) => doc.data());
 
     // 3. Apply Status Filter in-memory (Security & Reliability)

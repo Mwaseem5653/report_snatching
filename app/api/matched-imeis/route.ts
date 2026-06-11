@@ -38,7 +38,22 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ matches: [] });
     }
 
-    const snapshot = await queryRef.get();
+    // Fetch with Timeout (prevent long hangs)
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Database Timeout")), 5000)
+    );
+
+    let snapshot;
+    try {
+        snapshot = await Promise.race([
+            queryRef.get(),
+            timeoutPromise
+        ]);
+    } catch (e: any) {
+        console.error("Matched IMEIs Firestore Error:", e.message);
+        return NextResponse.json({ success: false, matches: [], error: "Database unreachable" });
+    }
+
     let matches = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
 
     // 2. In-Memory Filters
