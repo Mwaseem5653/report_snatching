@@ -111,3 +111,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("sessionToken")?.value;
+    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const decoded: any = jwt.verify(token, SECRET);
+    if (decoded.role !== "super_admin") {
+      return NextResponse.json({ error: "Only Super Admin can delete notifications" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (!id) return NextResponse.json({ error: "Notification ID required" }, { status: 400 });
+
+    await adminDb.collection("matched_imeis").doc(id).delete();
+
+    return NextResponse.json({ success: true, message: "Notification deleted successfully" });
+  } catch (error: any) {
+    console.error("DELETE matched-imeis error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}

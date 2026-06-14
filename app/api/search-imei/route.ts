@@ -45,25 +45,18 @@ export async function POST(req: NextRequest) {
     // 2. Search for ACTIVE reports using the 'allImeis' array field
     const snapshot = await query.get();
     const allReports = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-    const activeReport = allReports.find((report: any) => report.status !== "complete");
+    
+    // Find the relevant report. If multiple, prefer pending ones.
+    const activeReport = allReports.find((report: any) => report.status !== "complete") || allReports[0];
 
     const isMatch = !!activeReport;
     const applicationId = activeReport ? activeReport.id : null;
 
-    // Check existing match status in 'matched_imeis'
+    // Check application status for search result
     let status = "match_found";
     if (isMatch) {
-        const matchSnap = await adminDb.collection("matched_imeis")
-            .where("applicationId", "==", applicationId)
-            .where("imei", "==", searchLabel)
-            .limit(1)
-            .get();
-            
-        if (!matchSnap.empty) {
-            const matchData = matchSnap.docs[0].data();
-            if (matchData.status === "cleared") {
-                status = "recovered_device";
-            }
+        if (activeReport.status === "processed" || activeReport.status === "complete") {
+            status = "cleared";
         }
     }
 

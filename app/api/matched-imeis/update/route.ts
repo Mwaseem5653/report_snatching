@@ -59,6 +59,20 @@ export async function POST(req: NextRequest) {
             district: currentUser.district || "",
             at: admin.firestore.Timestamp.now()
         };
+
+        // 🚀 ALSO UPDATE ORIGINAL APPLICATION STATUS
+        const applicationId = matchDoc.data()?.applicationId;
+        if (applicationId) {
+            await adminDb.collection("applications").doc(applicationId).update({
+                status: "processed",
+                processedBy: {
+                    uid: currentUser.uid,
+                    name: currentUser.name,
+                    at: admin.firestore.Timestamp.now(),
+                    note: note || "Automatically processed via IMEI Match"
+                }
+            });
+        }
     } 
     else if (action === "not_clear") {
         updateData.status = "processed"; // Reset to processed, not new

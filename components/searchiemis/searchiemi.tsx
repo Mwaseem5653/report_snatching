@@ -20,7 +20,7 @@ type User = {
 type IMEIRecord = {
   ps: string;
   crimeHead: string;
-  status: "founded" | "not_found";
+  status: "match_found" | "cleared";
 };
 
 interface IMEISearchProps {
@@ -96,8 +96,8 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
     setResult(res);
     setShowPopup(true);
 
-    // 🔔 If match found, trigger notification
-    if (res && res.status === "founded") {
+    // 🔔 If match found and NOT cleared, trigger notification
+    if (res && res.status === "match_found") {
       await triggerNotification(cleanIMEI, res.crimeHead, res.ps);
     }
 
@@ -138,8 +138,8 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
 
         {/* Result Popup (Inline) */}
         {showPopup && (
-          <div className={`rounded-2xl p-6 border ${result ? "bg-red-50 border-red-100" : "bg-green-50 border-green-100"} animate-in fade-in slide-in-from-top-4`}>
-            {result ? (
+          <div className={`rounded-2xl p-6 border ${result && result.status !== "cleared" ? "bg-red-50 border-red-100" : "bg-green-50 border-green-100"} animate-in fade-in slide-in-from-top-4`}>
+            {result && result.status === "match_found" ? (
               <div className="text-center">
                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <XCircle className="w-8 h-8 text-red-600" />
@@ -162,14 +162,27 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
                    </div>
                 </div>
               </div>
+            ) : result && result.status === "cleared" ? (
+              <div className="text-center py-4">
+                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                   <CheckCircle className="w-8 h-8 text-emerald-600" />
+                </div>
+                <h3 className="text-xl font-bold text-emerald-800 mb-1">CLEAR / RECOVERED</h3>
+                <p className="text-emerald-600 text-sm">
+                   Device with IMEI <span className="font-mono font-bold">{imei}</span> was previously reported but has been <span className="font-bold">Recovered & Processed</span>.
+                </p>
+                <div className="mt-4 bg-white/50 rounded-xl p-3 text-xs text-emerald-700 font-medium border border-emerald-100">
+                    Official status updated by Administration.
+                </div>
+              </div>
             ) : (
               <div className="text-center py-4">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                    <CheckCircle className="w-8 h-8 text-green-600" />
                 </div>
-                <h3 className="text-xl font-bold text-green-800 mb-1">CLEAR</h3>
+                <h3 className="text-xl font-bold text-green-800 mb-1">No Record Found</h3>
                 <p className="text-green-600 text-sm">
-                   Device with IMEI <span className="font-mono font-bold">{imei}</span> is not reported as stolen.
+                   Device with IMEI <span className="font-mono font-bold">{imei}</span> is not found in our criminal record database.
                 </p>
               </div>
             )}

@@ -101,6 +101,16 @@ export async function GET(req: NextRequest) {
             return appDate >= oneDayAgo;
         }
 
+        if (period === "6h") {
+            const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+            return appDate >= sixHoursAgo;
+        }
+
+        if (period === "12h") {
+            const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+            return appDate >= twelveHoursAgo;
+        }
+
         // Other periods
         let limitDate = new Date();
         if (period === "15days") limitDate.setDate(now.getDate() - 15);

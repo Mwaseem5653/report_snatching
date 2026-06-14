@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import AddApplicationForm from "../applicationform/applicationform";
 import { getApplications } from "@/lib/applicationApi";
-import { FileText, Search, Plus, RotateCcw, ChevronRight, Clock, MapPin, Calendar, User, X, Smartphone } from "lucide-react";
+import { appCache } from "@/lib/applicationCache";
+import { FileText, Search, Plus, RotateCcw, ChevronRight, Clock, MapPin, Calendar, User, X, Smartphone, Loader2 } from "lucide-react";
 import { cn, getApiUrl } from "@/lib/utils";
 
 export default function Psusersapplication() {
@@ -29,14 +30,16 @@ export default function Psusersapplication() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    async function fetchSession() {
+    async function init() {
       try {
         const res = await fetch(getApiUrl("/api/auth/create-session"));
         const data = await res.json();
         if (data.authenticated) {
-          setCurrentUser({
+          const u = {
             uid: data.uid,
             name: data.name,
             email: data.email,
@@ -44,17 +47,54 @@ export default function Psusersapplication() {
             city: data.city ?? null,
             district: data.district ?? null,
             ps: data.ps ?? null,
-          });
+          };
+          setCurrentUser(u);
+
+          // 🚀 Restore last filters from cache BEFORE marking as initialized
+          const lastFilters = appCache.getLastFilters(`ps_${data.uid}`);
+          if (lastFilters) {
+              if (lastFilters.period) setFilterPeriod(lastFilters.period);
+              if (lastFilters.search) setSearchQuery(lastFilters.search);
+          }
         }
       } catch (err) {
         console.error("Session fetch error:", err);
+      } finally {
+        setIsInitialized(true);
       }
     }
-    fetchSession();
+    init();
   }, []);
 
-  async function fetchApplications() {
-    if (!currentUser) return;
+  async function fetchApplications(forceRefresh = false) {
+    if (!currentUser || !isInitialized) return;
+    
+    // 🚀 Check cache first unless force refreshing
+    const cacheKey = `ps_${currentUser.uid}`;
+    const params: Record<string, string> = {
+      period: filterPeriod,
+      district: currentUser.district,
+      ps: currentUser.ps,
+    };
+
+    if (searchQuery.trim()) {
+      params.search = searchQuery.trim();
+      params.period = "all";
+    }
+
+    if (!forceRefresh) {
+        const cached = appCache.get(cacheKey, params);
+        if (cached) {
+            setLoading(true);
+            setLoadingMessage("Loading from Cache...");
+            setTimeout(() => {
+                setApplications(cached);
+                setLoading(false);
+                setLoadingMessage("");
+            }, 300); // Small delay to show the message
+            return;
+        }
+    }
 
     // 🚀 If Period is 'none' and no search query, don't even call the API
     if (filterPeriod === "none" && !searchQuery.trim()) {
@@ -63,30 +103,25 @@ export default function Psusersapplication() {
     }
 
     setLoading(true);
+    setLoadingMessage("Loading from Data base...");
     try {
-      const params: Record<string, string> = {
-        period: filterPeriod,
-        district: currentUser.district,
-        ps: currentUser.ps,
-      };
-
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim();
-        params.period = "all";
-      }
-
       const data = await getApplications(params);
-      setApplications(data.applications || []);
+      const apps = data.applications || [];
+      setApplications(apps);
+      
+      // Save to cache
+      appCache.set(cacheKey, apps, params);
     } catch (err) {
       console.error("Application fetch error:", err);
     } finally {
       setLoading(false);
+      setLoadingMessage("");
     }
   }
 
   useEffect(() => {
-    if (currentUser) fetchApplications();
-  }, [currentUser, filterPeriod]);
+    if (isInitialized) fetchApplications();
+  }, [isInitialized, filterPeriod]);
 
   function clearFilters() {
     setSearchQuery("");
@@ -125,19 +160,36 @@ export default function Psusersapplication() {
                     placeholder="Search by Name/IMEI..." 
                     value={searchQuery} 
                     onChange={(e) => setSearchQuery(e.target.value)} 
-                    onKeyDown={(e) => e.key === 'Enter' && fetchApplications()} 
+                    onKeyDown={(e) => e.key === 'Enter' && fetchApplications(true)} 
                     className="pl-9 border-slate-200 rounded-xl bg-slate-50/50 h-10 text-sm w-full font-medium" 
                   />
               </div>
 
               <div className="flex items-center gap-2">
-                <Button onClick={fetchApplications} className="flex-1 sm:flex-none bg-blue-600 text-white rounded-xl h-10 px-4 font-semibold text-xs" disabled={loading}>{loading ? "..." : "Refresh"}</Button>
+                <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                    <SelectTrigger className="w-[110px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-xs font-bold">
+                        <SelectValue placeholder="Period" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">None Set</SelectItem>
+                        <SelectItem value="6h">Last 6 Hours</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Button onClick={() => fetchApplications(true)} className="flex-1 sm:flex-none bg-blue-600 text-white rounded-xl h-10 px-4 font-semibold text-xs" disabled={loading}>{loading ? "..." : "Refresh"}</Button>
                 <Button onClick={clearFilters} variant="ghost" className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0 shrink-0"><RotateCcw size={18} /></Button>
                 <div className="hidden sm:block w-px h-6 bg-slate-200 mx-1"></div>
                 <Button onClick={() => setShowAddForm(true)} className="flex-1 sm:flex-none bg-emerald-600 text-white rounded-xl h-10 px-4 font-semibold text-xs shrink-0"><Plus size={18} className="mr-1" /> New Entry</Button>
               </div>
           </div>
       </div>
+
+      {/* 🚀 DATA SOURCE INDICATOR */}
+      {loading && loadingMessage && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-blue-50/30 border border-blue-100/50 rounded-xl animate-in fade-in slide-in-from-top-1 duration-300">
+              <Loader2 className="w-3 h-3 text-blue-600 animate-spin" />
+              <span className="text-[9px] font-black text-blue-600 uppercase tracking-[0.2em]">{loadingMessage}</span>
+          </div>
+      )}
 
       {/* APPLICATION LIST (USING COMPACT UI) */}
       <div className="flex flex-col gap-1">

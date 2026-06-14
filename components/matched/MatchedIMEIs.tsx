@@ -57,28 +57,30 @@ function InfoRow({ icon: Icon, label, value }: { icon: any, label: string, value
     );
 }
 
-export default function MatchedIMEIsView() {
+export default function MatchedIMEIsView({ initialSession }: { initialSession?: any }) {
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMatch, setSelectedMatch] = useState<any>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(initialSession || null);
   const [note, setNote] = useState("");
-  const [updating, setUpdating] = useState(false);
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
   // Filter States
   const [searchImei, setSearchImei] = useState("");
-  const [filterPeriod, setFilterPeriod] = useState("all"); // 🚀 Changed to 'all'
-  const [filterStatus, setFilterStatus] = useState("new"); // 🚀 New: Default to 'new'
+  const [filterPeriod, setFilterPeriod] = useState("all"); 
+  const [filterStatus, setFilterStatus] = useState("new"); 
 
-  // 1. Fetch Session
+  // 1. Fetch Session if not provided
   useEffect(() => {
-    async function fetchSession() {
-      const res = await fetch(getApiUrl("/api/auth/create-session"));
-      const data = await res.json();
-      if (data.authenticated) setCurrentUser(data);
+    if (!currentUser) {
+        async function fetchSession() {
+          const res = await fetch(getApiUrl("/api/auth/create-session"));
+          const data = await res.json();
+          if (data.authenticated) setCurrentUser(data);
+        }
+        fetchSession();
     }
-    fetchSession();
-  }, []);
+  }, [currentUser]);
 
   // 2. Fetch Matches
   const fetchMatches = async () => {
@@ -131,7 +133,7 @@ export default function MatchedIMEIsView() {
         return;
     }
 
-    setUpdating(true);
+    setLoadingAction(action);
     try {
         const res = await fetch(getApiUrl("/api/matched-imeis/update"), {
             method: "POST",
@@ -150,7 +152,34 @@ export default function MatchedIMEIsView() {
     } catch (err) {
         console.error("Action error:", err);
     } finally {
-        setUpdating(false);
+        setLoadingAction(null);
+    }
+  };
+
+  const handleDeleteNotification = async () => {
+    const id = selectedMatch?.id;
+    if (!id) return;
+    if (!confirm("matched logis want to delte")) return;
+
+    setLoadingAction("delete");
+    try {
+        const res = await fetch(getApiUrl(`/api/matched-imeis?id=${id}`), {
+            method: "DELETE",
+        });
+
+        if (res.ok) {
+            alert("Notification deleted successfully.");
+            setSelectedMatch(null);
+            fetchMatches();
+        } else {
+            const err = await res.json();
+            alert(err.error || "Delete failed");
+        }
+    } catch (err) {
+        console.error("Delete error:", err);
+        alert("Failed to delete notification.");
+    } finally {
+        setLoadingAction(null);
     }
   };
 
@@ -199,22 +228,18 @@ export default function MatchedIMEIsView() {
                         className="pl-9 border-slate-200 focus:ring-red-500 rounded-xl bg-slate-50/50 h-10"
                     />
                 </div>
+<div className="flex items-center gap-2">
+                        <Select value={filterStatus} onValueChange={setFilterStatus}>
+                            <SelectTrigger className="w-[150px] border-slate-200 rounded-xl bg-slate-50/50 h-10">
+                                <SelectValue placeholder="Alert Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="new">Pending Alerts</SelectItem>
+                                <SelectItem value="cleared">Status Clear</SelectItem>
+                            </SelectContent>
+                        </Select>
 
-                <div className="flex items-center gap-2">
-                    {/* 🚀 New: Status Filter */}
-                    <Select value={filterStatus} onValueChange={setFilterStatus}>
-                        <SelectTrigger className="w-[150px] border-slate-200 rounded-xl bg-slate-50/50 h-10">
-                            <SelectValue placeholder="Alert Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="new">Pending Alerts</SelectItem>
-                            <SelectItem value="processed">Officer Processed</SelectItem>
-                            <SelectItem value="cleared">Acknowledged</SelectItem>
-                        </SelectContent>
-                    </Select>
 
-                    {/* 🚀 Period Selector in sequence */}
                     <Select value={filterPeriod} onValueChange={setFilterPeriod}>
                         <SelectTrigger className="w-[130px] border-slate-200 rounded-xl bg-slate-50/50 h-10">
                             <SelectValue placeholder="Period" />
@@ -373,58 +398,44 @@ export default function MatchedIMEIsView() {
                       <FileCheck className="text-blue-600" size={18} /> Case Process Log
                   </h3>
                   <div className="space-y-6">
-                      {!isClearedForUser(selectedMatch) && (
-                          <div className="space-y-3">
-                              <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Case Status / Process Note</Label>
+                      {currentUser?.role === "super_admin" && (
+                          <div className="space-y-6">
                               <div className="space-y-3">
-                                  <Textarea 
-                                    placeholder="Describe current process or action taken..."
-                                    value={note}
-                                    onChange={(e) => setNote(e.target.value)}
-                                    className="rounded-xl border-slate-200 bg-white min-h-[100px] focus:ring-blue-500 font-sans"
-                                  />
-                                  <div className="grid grid-cols-2 gap-3">
-                                      <Button 
-                                        onClick={() => handleAction("admin_acknowledge")}
-                                        disabled={updating}
-                                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-11 shadow-lg shadow-emerald-600/20 uppercase font-bold tracking-widest text-[10px]"
-                                      >
-                                        {updating ? <Loader2 className="animate-spin" /> : "Submit Note & Clear Status"}
-                                      </Button>
-                                      <Button 
-                                        onClick={() => handleAction("officer_view")}
-                                        disabled={updating}
-                                        className="bg-slate-600 hover:bg-slate-700 text-white rounded-xl h-11 shadow-lg shadow-slate-600/20 uppercase font-bold tracking-widest text-[10px]"
-                                      >
-                                        {updating ? <Loader2 className="animate-spin" /> : "Submit Report Not Clear"}
-                                      </Button>
+                                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Case Status / Process Note</Label>
+                                  <div className="space-y-3">
+                                      <Textarea 
+                                        placeholder="Describe current process or action taken..."
+                                        value={note}
+                                        onChange={(e) => setNote(e.target.value)}
+                                        className="rounded-xl border-slate-200 bg-white min-h-[100px] focus:ring-blue-500 font-sans"
+                                      />
                                   </div>
                               </div>
-                          </div>
-                      )}
 
-                      {(currentUser?.role === "admin" || currentUser?.role === "super_admin") && !isClearedForUser(selectedMatch) && (
-                          <div className="pt-4 border-t border-slate-200">
-                              <Button 
-                                onClick={() => handleAction("admin_acknowledge")}
-                                disabled={updating}
-                                className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-600/20 font-black uppercase tracking-[0.2em] text-xs transition-all"
-                              >
-                                {updating ? <Loader2 className="animate-spin" /> : "Acknowledge & Clear Alert"}
-                              </Button>
-                          </div>
-                      )}
-
-                      {isClearedForUser(selectedMatch) && (currentUser?.role === "admin" || currentUser?.role === "super_admin") && (
-                          <div className="pt-4 border-t border-slate-200">
-                               <Button 
-                                onClick={() => handleAction("not_clear")}
-                                disabled={updating}
-                                variant="outline"
-                                className="w-full h-11 border-slate-200 text-slate-500 rounded-xl font-bold uppercase tracking-widest text-[10px]"
-                              >
-                                {updating ? <Loader2 className="animate-spin" /> : "Re-open Case Alert"}
-                              </Button>
+                              <div className={cn(
+                                  "pt-4 border-t border-slate-200 grid gap-4",
+                                  !isClearedForUser(selectedMatch) ? "grid-cols-2" : "grid-cols-1"
+                              )}>
+                                  {!isClearedForUser(selectedMatch) && (
+                                      <Button 
+                                        onClick={handleDeleteNotification}
+                                        disabled={loadingAction !== null}
+                                        className="h-11 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg shadow-red-600/20 font-black uppercase tracking-widest text-[10px]"
+                                      >
+                                        {loadingAction === "delete" ? <Loader2 className="animate-spin" /> : "Delete Notification"}
+                                      </Button>
+                                  )}
+                                  <Button 
+                                    onClick={() => handleAction("admin_acknowledge")}
+                                    disabled={loadingAction !== null || isClearedForUser(selectedMatch)}
+                                    className={cn(
+                                        "h-11 text-white rounded-xl shadow-lg font-black uppercase tracking-widest text-[10px]",
+                                        isClearedForUser(selectedMatch) ? "bg-slate-400 cursor-not-allowed shadow-none" : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
+                                    )}
+                                  >
+                                    {loadingAction === "admin_acknowledge" ? <Loader2 className="animate-spin" /> : isClearedForUser(selectedMatch) ? "Already Processed" : "Add TO Process"}
+                                  </Button>
+                              </div>
                           </div>
                       )}
 

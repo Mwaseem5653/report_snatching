@@ -5,7 +5,6 @@ import SessionHeader from "@/components/session-avtar/page";
 import IMEISearch from "@/components/searchiemis/searchiemi";
 import ApplicationManagement from "@/components/addapplications/addapplication";
 import AddUserForm from "@/components/add-users/page";
-import ReportsView from "@/components/reports/ReportsView";
 import MatchedIMEIsView from "@/components/matched/MatchedIMEIs";
 import ApplicationExtractorClient from "@/components/tools/ApplicationExtractorClient";
 import InfoToolsClient from "@/components/tools/InfoToolsClient";
@@ -49,7 +48,6 @@ const MAIN_TABS = [
   { id: "add-app", label: "Applications", icon: PlusCircle },
   { id: "search", label: "Search IMEI", icon: Search },
   { id: "matched", label: "Matched", icon: FileCheck },
-  { id: "reports", label: "Reports", icon: BarChart3 },
 ];
 
 export default function AdminClient({ initialSession }: { initialSession: any }) {
@@ -197,7 +195,6 @@ export default function AdminClient({ initialSession }: { initialSession: any })
     <main className="flex-1 container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         {activeTab === "add-app" && <ApplicationManagement />}
         {activeTab === "search" && <IMEISearch />}
-        {activeTab === "reports" && <ReportsView />}
         {activeTab === "matched" && <MatchedIMEIsView />}
         
         {(activeTab === "app-excel" && (isSuper || perms.app_to_excel)) && <ApplicationToExcelClient />}

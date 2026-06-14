@@ -21,7 +21,8 @@ import {
   DialogDescription
 } from "@/components/ui/dialog";
 import { updateApplication, deleteApplication } from "@/lib/applicationApi";
-import { Search, Plus, Filter, RotateCcw, FileText, ChevronRight, CheckCircle2, ClipboardList, History, X, Smartphone, MapPin, User, ShieldCheck, Activity, Trash2, AlertTriangle } from "lucide-react";
+import { appCache } from "@/lib/applicationCache";
+import { Search, Plus, Filter, RotateCcw, FileText, ChevronRight, CheckCircle2, ClipboardList, History, X, Smartphone, MapPin, User, ShieldCheck, Activity, Trash2, AlertTriangle, Loader2 } from "lucide-react";
 import { cn, getApiUrl } from "@/lib/utils";
 import { locationData } from "@/components/location/location";
 
@@ -41,12 +42,14 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
   const [applications, setApplications] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>(officerUid ? "processed" : "pending");
-  const [filterPeriod, setFilterPeriod] = useState<string>(officerUid ? "today" : "none");
+  const [filterPeriod, setFilterPeriod] = useState<string>("none");
   const [filterPs, setFilterPs] = useState<string>("all");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
   const [completionData, setCompletionData] = useState({ finalNote: "", processDetails: "" });
@@ -57,17 +60,61 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    async function fetchSession() {
+    async function init() {
       const res = await fetch(getApiUrl("/api/auth/create-session"));
       const data = await res.json();
-      if (data.authenticated) setCurrentUser(data);
+      if (data.authenticated) {
+          setCurrentUser(data);
+          
+          // 🚀 Restore last filters from cache
+          const lastFilters = appCache.getLastFilters(`admin_${data.uid}`);
+          if (lastFilters) {
+              if (lastFilters.status) setFilterStatus(lastFilters.status);
+              if (lastFilters.period) setFilterPeriod(lastFilters.period);
+              if (lastFilters.ps) setFilterPs(lastFilters.ps);
+              if (lastFilters.search) setSearchQuery(lastFilters.search);
+          }
+      }
+      setIsInitialized(true);
     }
-    fetchSession();
+    init();
   }, []);
 
-  const handleSearch = async () => {
-    if (!currentUser) return;
+  const handleSearch = async (forceRefresh = false) => {
+    if (!currentUser || !isInitialized) return;
     
+    // 🚀 Check cache first
+    const cacheKey = `admin_${currentUser.uid}`;
+    const params: Record<string, string> = { 
+        status: filterStatus === "all" ? "all" : filterStatus, 
+        period: filterPeriod 
+    };
+    
+    if (filterPs !== "all") params.ps = filterPs;
+
+    if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+        params.period = "all";
+    }
+
+    if (!forceRefresh) {
+        const cached = appCache.get(cacheKey, params);
+        if (cached) {
+            setLoading(true);
+            setLoadingMessage("Loading from Cache...");
+            setTimeout(() => {
+                let apps = cached;
+                if (officerUid) {
+                    apps = apps.filter((app: any) => app.processedBy?.uid === officerUid);
+                }
+                setApplications(apps);
+                setLoading(false);
+                setLoadingMessage("");
+            }, 300); // Small delay to show message
+            return;
+        }
+    }
+
     // 🚀 If Period is 'none' and no search query, don't even call the API
     if (filterPeriod === "none" && !searchQuery.trim()) {
         setApplications([]);
@@ -75,22 +122,14 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
     }
 
     setLoading(true);
+    setLoadingMessage("Loading from Data base...");
     try {
-      const params: Record<string, string> = { 
-          status: filterStatus === "all" ? "all" : filterStatus, 
-          period: filterPeriod 
-      };
-      
-      if (filterPs !== "all") params.ps = filterPs;
-
-      if (searchQuery.trim()) {
-          params.search = searchQuery.trim();
-          params.period = "all";
-      }
-
       const res = await fetch(getApiUrl(`/api/applications?${new URLSearchParams(params).toString()}`));
       const data = await res.json();
       let apps = data.applications || [];
+
+      // Save full results to cache
+      appCache.set(cacheKey, apps, params);
 
       if (officerUid) {
           apps = apps.filter((app: any) => app.processedBy?.uid === officerUid);
@@ -101,12 +140,13 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
       console.error("Search error:", err);
     } finally {
       setLoading(false);
+      setLoadingMessage("");
     }
   };
 
   useEffect(() => {
-    if (currentUser) handleSearch();
-  }, [currentUser, filterStatus, filterPeriod, filterPs, officerUid]);
+    if (isInitialized) handleSearch();
+  }, [isInitialized, filterStatus, filterPeriod, filterPs, officerUid]);
 
   // Extract all PS names from locationData
   const allPS = Object.values(locationData).flatMap(city => 
@@ -116,7 +156,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
   const handleClear = () => {
     setSearchQuery("");
     setFilterStatus(officerUid ? "all" : "pending");
-    setFilterPeriod(officerUid ? "today" : "none");
+    setFilterPeriod("none");
     setFilterPs("all");
   };
 
@@ -198,52 +238,67 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                   <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()} className="pl-9 border-slate-200 rounded-xl bg-slate-50/50 h-10 text-sm w-full" />
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                  {currentUser?.role === "officer" && (
-                    <>
-                      <Select value={filterStatus} onValueChange={setFilterStatus}>
-                          <SelectTrigger className="flex-1 sm:w-[130px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold"><SelectValue placeholder="Status" /></SelectTrigger>
-                          <SelectContent>
-                              {officerUid ? (
-                                  <>
-                                      <SelectItem value="all">All My Cases</SelectItem>
-                                      <SelectItem value="processed">My In-Process</SelectItem>
-                                      <SelectItem value="complete">My Completed</SelectItem>
-                                  </>
-                              ) : (
-                                  <>
-                                      <SelectItem value="all">All Status</SelectItem>
-                                      <SelectItem value="pending">Pending</SelectItem>
-                                      <SelectItem value="processed">In Process</SelectItem>
-                                      <SelectItem value="complete">Completed</SelectItem>
-                                  </>
-                              )}
-                          </SelectContent>
-                      </Select>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger className="flex-1 sm:w-[130px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold"><SelectValue placeholder="Status" /></SelectTrigger>
+                      <SelectContent>
+                          {officerUid ? (
+                              <>
+                                  <SelectItem value="all">All My Cases</SelectItem>
+                                  <SelectItem value="processed">My In-Process</SelectItem>
+                              </>
+                          ) : (
+                              <>
+                                  <SelectItem value="all">All Status</SelectItem>
+                                  <SelectItem value="pending">Pending</SelectItem>
+                                  <SelectItem value="processed">In Process</SelectItem>
+                              </>
+                          )}
+                      </SelectContent>
+                  </Select>
 
-                      <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-                          <SelectTrigger className="flex-1 sm:w-[110px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold">
-                              <SelectValue placeholder="Period" />
+                  <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                      <SelectTrigger className="flex-1 sm:w-[110px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold">
+                          <SelectValue placeholder="Period" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="none">None Set</SelectItem>
+                          <SelectItem value="6h">Last 6 Hours</SelectItem>
+                          <SelectItem value="12h">Last 12 Hours</SelectItem>
+                          <SelectItem value="all">All</SelectItem>
+                          
+                      </SelectContent>
+                  </Select>
+
+                  {(currentUser?.role === "super_admin" || currentUser?.role === "admin") && (
+                      <Select value={filterPs} onValueChange={setFilterPs}>
+                          <SelectTrigger className="flex-1 sm:w-[150px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold">
+                              <SelectValue placeholder="Police Station" />
                           </SelectTrigger>
-                          <SelectContent>
-                              <SelectItem value="none">None Set</SelectItem>
-                              <SelectItem value="all">All Time</SelectItem>
-                              <SelectItem value="today">Today</SelectItem>
-                              <SelectItem value="15days">15 Days</SelectItem>
-                              <SelectItem value="1month">1 Month</SelectItem>
-                              <SelectItem value="6months">6 Months</SelectItem>
+                          <SelectContent className="max-h-[300px] overflow-y-auto">
+                              <SelectItem value="all">All Stations</SelectItem>
+                              {allPS.map(ps => (
+                                  <SelectItem key={ps} value={ps} className="uppercase text-[10px] font-bold">{ps}</SelectItem>
+                              ))}
                           </SelectContent>
                       </Select>
-                    </>
                   )}
               </div>
               <div className="flex items-center gap-2">
-                <Button onClick={handleSearch} className="flex-1 sm:flex-none bg-blue-600 text-white rounded-xl h-10 px-4 md:px-6 font-semibold text-xs" disabled={loading}>{loading ? "..." : "Search"}</Button>
+                <Button onClick={() => handleSearch(true)} className="flex-1 sm:flex-none bg-blue-600 text-white rounded-xl h-10 px-4 md:px-6 font-semibold text-xs" disabled={loading}>{loading ? "..." : "Refresh"}</Button>
                 <Button onClick={handleClear} variant="ghost" className="text-slate-500 hover:bg-slate-100 rounded-xl h-10 w-10 p-0 shrink-0"><RotateCcw size={18} /></Button>
                 <div className="hidden sm:block w-px h-6 bg-slate-200 mx-1"></div>
                 <Button onClick={() => setShowAddForm(true)} className="flex-1 sm:flex-none bg-emerald-600 text-white rounded-xl h-10 px-4 font-semibold text-xs shrink-0"><Plus size={18} className="mr-1" /> New</Button>
               </div>
           </div>
       </div>
+
+      {/* 🚀 DATA SOURCE INDICATOR */}
+      {loading && loadingMessage && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-blue-50/30 border border-blue-100/50 rounded-xl animate-in fade-in slide-in-from-top-1 duration-300">
+              <Loader2 className="w-3 h-3 text-blue-600 animate-spin" />
+              <span className="text-[9px] font-black text-blue-600 uppercase tracking-[0.2em]">{loadingMessage}</span>
+          </div>
+      )}
 
       <div className="flex flex-col gap-1">
         {loading && applications.length === 0 ? (
@@ -441,7 +496,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                 </section>
               )}
 
-              {currentUser?.role === "officer" && selectedApp.status !== "complete" && (
+              {currentUser?.role === "super_admin" && selectedApp.status !== "complete" && (
                 <div className="p-8 bg-[#0a2c4e]/5 rounded-[1.5rem] border border-[#0a2c4e]/10 flex flex-col md:flex-row gap-6 items-center justify-between">
                     <div className="flex items-center gap-4">
                         <div className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm"><Activity size={24}/></div>
