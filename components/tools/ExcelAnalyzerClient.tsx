@@ -174,21 +174,28 @@ export default function ExcelAnalyzerClient() {
             const blob = await res.blob();
             const outFileName = file.name.split('.').slice(0, -1).join('.') + "_Analyzed.xlsx";
             
+            let addedToZip = false;
             if (blob.type === "application/zip") {
                 const incomingZip = await JSZip.loadAsync(blob);
                 const firstFile = Object.values(incomingZip.files)[0];
                 if (firstFile) {
                     const fileData = await firstFile.async("blob");
                     zip.file(outFileName, fileData);
+                    addedToZip = true;
+                } else {
+                    addLog(`ERROR: API returned an empty result for ${file.name}`);
                 }
             } else {
                 zip.file(outFileName, blob);
+                addedToZip = true;
             }
             
-            processedCount++;
-            setCurrentStep(processedCount); 
-            addLog(`SUCCESS: ${file.name} ANALYZED AND BUNDLED.`);
-            window.dispatchEvent(new Event("refresh-session"));
+            if (addedToZip) {
+                processedCount++;
+                setCurrentStep(processedCount); 
+                addLog(`SUCCESS: ${file.name} ANALYZED AND BUNDLED.`);
+                window.dispatchEvent(new Event("refresh-session"));
+            }
         } catch (error: any) {
             addLog(`FATAL ERROR ON ${file.name}: ${error.message}`);
         }

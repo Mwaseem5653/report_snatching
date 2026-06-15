@@ -184,7 +184,7 @@ async function fetchEyeconInfo(number: string, code = "92") {
             method: 'GET',
             headers: { 
                 "x-rapidapi-key": rapidApiKey, 
-                "x-rapidapi-host": "eyecon.p.rapidapi.com",
+                "x-rapidapi-host": "eyecon3.p.rapidapi.com",
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "application/json"
             }
@@ -200,25 +200,30 @@ async function fetchEyeconInfo(number: string, code = "92") {
 
         const processItem = (item: any) => {
             if (!item) return;
-            if (item.fullName) names.add(item.fullName);
-            if (item.name) names.add(item.name);
-            if (item.displayName) names.add(item.displayName);
+            // Handle cases where item might be the root or the data object
+            const target = item.data && !item.fullName ? item.data : item;
+            
+            if (target.fullName) names.add(target.fullName);
+            if (target.name) names.add(target.name);
+            if (target.displayName) names.add(target.displayName);
 
-            if (Array.isArray(item.otherNames)) {
-                item.otherNames.forEach((o: any) => {
+            if (Array.isArray(target.otherNames)) {
+                target.otherNames.forEach((o: any) => {
                     const n = typeof o === 'string' ? o : (o.name || o.fullName || o);
                     if (n && typeof n === 'string') names.add(n);
                 });
             }
-            if (!photo && item.photo) photo = item.photo;
-            if (!facebook && item.facebookID?.url) facebook = item.facebookID.url;
+            if (!photo && target.photo) photo = target.photo;
+            if (!photo && target.b64) photo = target.b64;
+            if (!facebook && target.facebookID?.url) facebook = target.facebookID.url;
         };
 
         if (Array.isArray(data)) {
             data.forEach(processItem);
         } else {
             processItem(data);
-            if (data.data) {
+            // If the root didn't have names but data object does
+            if (data.data && names.size === 0) {
                 if (Array.isArray(data.data)) data.data.forEach(processItem);
                 else processItem(data.data);
             }
@@ -231,8 +236,9 @@ async function fetchEyeconInfo(number: string, code = "92") {
         let image_url = photo;
 
         const getImagesUrl = (d: any) => {
-            if (d && Array.isArray(d.images)) {
-                for (const imgEntry of d.images) {
+            const target = d.data || d;
+            if (target && Array.isArray(target.images)) {
+                for (const imgEntry of target.images) {
                     if (imgEntry && imgEntry.pictures && typeof imgEntry.pictures === 'object') {
                         const pics = imgEntry.pictures;
                         return pics["200"] || pics["600"] || Object.values(pics)[0] || "";
@@ -279,18 +285,26 @@ function normalizeNumber(num: any): string | null {
         }
     }
 
-    s = s.replace(/\.0$/, ""); 
-    s = s.replace(/\D/g, "");
+    s = s.replace(/\D/g, ""); // Remove all non-digits
     
-    if (s.length === 12 && s.startsWith("923")) {
-        s = s.substring(2);
-    } else if (s.length === 11 && s.startsWith("03")) {
-        s = s.substring(1);
+    // Handle Pakistan prefixes: 923... or 03... or 3...
+    if (s.startsWith("923") && s.length === 12) {
+        return s.substring(2);
     }
-    
-    if (s.length === 10 && s.startsWith("3")) {
+    if (s.startsWith("03") && s.length === 11) {
+        return s.substring(1);
+    }
+    if (s.startsWith("3") && s.length === 10) {
         return s;
     }
+    
+    // Fallback for other formats that might still be valid 10-digit mobile numbers
+    if (s.length > 10) {
+        if (s.endsWith("3") && s.length === 11) return s.substring(1); // Handle weird leading char
+        const last10 = s.slice(-10);
+        if (last10.startsWith("3")) return last10;
+    }
+
     return null; 
 }
 
@@ -406,14 +420,29 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const isCsv = fileName?.toLowerCase().endsWith(".csv");
 
     if (isCsv) {
-        // ExcelJS csv.read accepts a stream
+        // 🚀 Enhanced CSV Delimiter & Encoding Detection
+        const text = new TextDecoder().decode(buffer.slice(0, 8192)); 
+        const firstLine = text.split('\n')[0] || "";
+        let delimiter = ',';
+        if (firstLine.includes(';')) delimiter = ';';
+        else if (firstLine.includes('\t')) delimiter = '\t';
+        else if (firstLine.includes('|')) delimiter = '|';
+
         const stream = Readable.from(Buffer.from(buffer));
-        await wb.csv.read(stream);
+        await wb.csv.read(stream, { 
+            parserOptions: { 
+                delimiter,
+                quote: '"',
+                escape: '"',
+                ignoreEmpty: true
+            } 
+        });
     } else {
         await wb.xlsx.load(buffer);
     }
 
-    const ws = wb.worksheets[0];
+    const ws = wb.getWorksheet(1) || wb.worksheets[0];
+    if (!ws) return null;
 
     const rawRows: any[][] = [];
     ws.eachRow({ includeEmpty: true }, (row) => {
@@ -438,11 +467,12 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const bCol = findColumn(headers, [
         "B Number", "BNUMBER", "b number", "b party", "b_party", "BParty", 
         "CALL_DIALED_NUM", "DIALED_NUMBER", "Dialled Number", "CONNECTED_NUMBER",
-        "Other Party", "OTHER_MSISDN", "Destination Number", "Called Number"
+        "Other Party", "OTHER_MSISDN", "Destination Number", "Called Number",
+        "Dialled No", "Dialed No", "Called No", "Dest No", "Destination No", "B-Number", "B_Number", "B_NUM", "BNUM",
+        "Mobile", "Mobile Number", "Phone", "Phone Number", "Contact"
     ]);
-    if (!bCol) return null;
 
-    const aCol = findColumn(headers, ["MSISDN", "A Number", "ANUMBER", "a party", "a_party", "AParty", "Subscriber Number", "ORIGINATING_NUMBER", "OWNER_NUMBER"]);
+    const aCol = findColumn(headers, ["MSISDN", "A Number", "ANUMBER", "a party", "a_party", "AParty", "Subscriber Number", "ORIGINATING_NUMBER", "OWNER_NUMBER", "Subscriber No", "Originating No", "A-Number", "A_Number", "A_NUM", "ANUM", "Calling Number", "Calling No"]);
     const dateCol = findColumn(headers, ["CALL_START_DT_TM", "Start Date", "Datetime", "Date", "STRT_TM", "Start Time", "Time"]);
     
     // 🚀 Detect Date Format Hint
@@ -543,8 +573,11 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         if (orgNumCol && dialedNumCol) {
             const cleanOrg = normalizeNumber(row[orgNumCol]);
             const cleanDialed = normalizeNumber(row[dialedNumCol]);
+            
+            // 🚀 Special Case: If MSISDN and Dialed Num are same, try to find an alternative B-Party
             if (cleanOrg && cleanOrg !== cleanA) finalB = cleanOrg;
             else if (cleanDialed && cleanDialed !== cleanA) finalB = cleanDialed;
+            else if (cleanDialed) finalB = cleanDialed; // Fallback to Dialed Num even if same as A
         } else if (bCol) {
             finalB = normalizeNumber(row[bCol]);
         }
@@ -674,7 +707,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         }
     });
 
-    if (mobileSummaryMap.size === 0) return null;
+    if (mobileSummaryMap.size === 0 && addressSummaryMap.size === 0 && imeiSummaryMap.size === 0) return null;
 
     const mobileSummary = Array.from(mobileSummaryMap.entries()).map(([num, s]) => ({
         "Mobile Number": num, "Count": s.count, 
@@ -1144,14 +1177,22 @@ export async function POST(req: NextRequest) {
             eyeconCount: enableEyecon ? (eyeconTopN * cloudinaryUrls.length) : 0
         });
 
-        if (cloudinaryUrls.length === 1 && singleFileBuffer) {
-            return new NextResponse(singleFileBuffer as any, {
-                status: 200,
-                headers: {
-                    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    "Content-Disposition": `attachment; filename="${singleFileName}"`,
-                },
-            });
+        if (cloudinaryUrls.length === 1) {
+            if (singleFileBuffer) {
+                return new NextResponse(singleFileBuffer as any, {
+                    status: 200,
+                    headers: {
+                        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "Content-Disposition": `attachment; filename="${singleFileName}"`,
+                    },
+                });
+            } else {
+                return NextResponse.json({ error: "No data could be extracted from the file. Please ensure it contains valid mobile numbers and supported column headers." }, { status: 422 });
+            }
+        }
+
+        if (Object.keys(zip.files).length === 0) {
+            return NextResponse.json({ error: "No data could be extracted from any of the provided files. Please check the formats." }, { status: 422 });
         }
 
         const zipBuffer = await zip.generateAsync({ type: "arraybuffer" });
