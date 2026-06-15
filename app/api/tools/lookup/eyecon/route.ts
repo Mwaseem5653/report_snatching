@@ -9,31 +9,27 @@ const SECRET = process.env.SESSION_JWT_SECRET!;
 async function fetchEyeconInfo(number: string, code = "92") {
     const rapidApiKey = process.env.RAPID_API_KEY;
     if (!rapidApiKey) {
-        console.error("[Eyecon-Bulk] Error: RAPID_API_KEY is missing");
         return null;
     }
     
     const cleanNumber = number.replace(/^0+/, "");
     const fullUrl = `https://eyecon.p.rapidapi.com/api/v1/search?code=${code}&number=${cleanNumber}`;
-    console.log(`[Eyecon-Bulk] Requesting: ${cleanNumber}`);
 
     try {
         const res = await fetch(fullUrl, {
             method: 'GET',
             headers: { 
                 "x-rapidapi-key": rapidApiKey, 
-                "x-rapidapi-host": "eyecon.p.rapidapi.com",
+                "x-rapidapi-host": "eyecon3.p.rapidapi.com",
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "application/json"
             }
         });
         
         if (!res.ok) {
-            console.error(`[Eyecon-Bulk] API Error for ${cleanNumber}: ${res.status} ${res.statusText}`);
             return null;
         }
         const data = await res.json();
-        console.log(`[Eyecon-Bulk] Raw Response for ${cleanNumber}: ${JSON.stringify(data).substring(0, 200)}`);
 
         const names = new Set<string>();
         let facebook = "";
