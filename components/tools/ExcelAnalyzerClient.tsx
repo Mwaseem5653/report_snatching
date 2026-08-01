@@ -10,6 +10,7 @@ import { FileSpreadsheet, Loader2, Download, AlertTriangle, Settings2, Terminal,
 import { toast } from "sonner";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/uploadHelper";
 import AlertModal from "@/components/ui/alert-modal";
+import TokenExpiredModal from "@/components/ui/token-expired-modal";
 import { cn, getApiUrl } from "@/lib/utils";
 import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
@@ -71,6 +72,7 @@ export default function ExcelAnalyzerClient() {
     description: "",
     type: "info" as any
   });
+  const [tokenModal, setTokenModal] = useState({ isOpen: false, currentBalance: 0, requiredTokens: 0, toolName: "" });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -109,7 +111,7 @@ export default function ExcelAnalyzerClient() {
       return;
     }
 
-    const totalGeneralRequired = files.length * 15;
+    const totalGeneralRequired = files.length * 30;
     const totalEyeconRequired = enableEyecon ? (eyeconTopN * files.length) : 0;
 
     try {
@@ -117,7 +119,7 @@ export default function ExcelAnalyzerClient() {
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
             if ((sData.tokens || 0) < totalGeneralRequired) {
-                setAlert({ isOpen: true, title: "Insufficient General Credits", description: `You need ${totalGeneralRequired} general credits (15 per file). Current balance: ${sData.tokens || 0}`, type: "warning" });
+                setTokenModal({ isOpen: true, currentBalance: sData.tokens || 0, requiredTokens: totalGeneralRequired, toolName: "Excel Analyzer" });
                 return;
             }
             if (enableEyecon && (sData.eyeconTokens || 0) < totalEyeconRequired) {
@@ -263,6 +265,13 @@ export default function ExcelAnalyzerClient() {
         title={alert.title}
         description={alert.description}
         type={alert.type}
+      />
+      <TokenExpiredModal
+        isOpen={tokenModal.isOpen}
+        onClose={() => setTokenModal({ ...tokenModal, isOpen: false })}
+        currentBalance={tokenModal.currentBalance}
+        requiredTokens={tokenModal.requiredTokens}
+        toolName={tokenModal.toolName}
       />
       
       {/* HEADER SECTION */}

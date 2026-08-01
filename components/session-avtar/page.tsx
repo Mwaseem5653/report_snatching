@@ -270,7 +270,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
                             )}
                         </div>
 
-                        {(session?.role === "super_admin" || session?.permissions?.eyecon_access) && (
+                        {(session?.role === "super_admin" || session?.permissions?.eyecon_access || session?.permissions?.eyecon_lookup) && (
                             <div className="flex flex-col gap-1 p-2 bg-indigo-50 rounded-lg border border-indigo-100">
                                 <div className="flex items-center justify-between text-[9px] font-black uppercase text-indigo-700 tracking-wider">
                                     <span>Eyecon Tokens</span>

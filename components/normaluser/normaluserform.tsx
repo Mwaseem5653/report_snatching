@@ -107,7 +107,7 @@ export default function AddApplicationFormNormalUser() {
         }
     }
     if (!formData.attestedApplication) {
-        showAlert("Missing Documents", "Attested Form is mandatory.", "warning");
+        showAlert("Missing Documents", "Attested Application is mandatory.", "warning");
         return false;
     }
     return true;
@@ -439,7 +439,7 @@ export default function AddApplicationFormNormalUser() {
                                   <div className={cn("mx-auto w-12 h-12 md:w-16 md:h-16 rounded-2xl shadow-sm flex items-center justify-center transition-transform group-hover:scale-110", formData.attestedApplication ? "bg-emerald-50 text-emerald-600" : "bg-white text-blue-600")}>
                                       {formData.attestedApplication ? <CheckCircle2 size={24} /> : <FileText size={24} />}
                                   </div>
-                                  <div><p className="font-bold text-slate-800 text-xs md:text-base">{formData.attestedApplication ? "Application Uploaded" : "Attested Form *"}</p></div>
+                                  <div><p className="font-bold text-slate-800 text-xs md:text-base">{formData.attestedApplication ? "Application Uploaded" : "Attested Application *"}</p></div>
                                   {formData.attestedApplication && <div className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-bold rounded-full inline-flex items-center gap-2 border border-emerald-100 max-w-full truncate">Selected: {formData.attestedApplication.name.substring(0, 15)}...</div>}
                               </div>
                           </div>

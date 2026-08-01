@@ -44,6 +44,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
   const [filterStatus, setFilterStatus] = useState<string>(officerUid ? "processed" : "pending");
   const [filterPeriod, setFilterPeriod] = useState<string>("none");
   const [filterPs, setFilterPs] = useState<string>("all");
+  const [filterSource, setFilterSource] = useState<string>("all");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedApp, setSelectedApp] = useState<any>(null);
@@ -158,6 +159,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
     setFilterStatus(officerUid ? "all" : "pending");
     setFilterPeriod("none");
     setFilterPs("all");
+    setFilterSource("all");
   };
 
   const handleUpdateStatus = async (app: any, newStatus: string, comments?: string, processDetails?: string) => {
@@ -221,6 +223,12 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
     }
   }
 
+  const filteredAppsForDisplay = applications.filter(app => {
+      if (filterSource === "citizen" && app.role !== "user") return false;
+      if (filterSource === "official" && app.role === "user") return false;
+      return true;
+  });
+
   return (
     <div className="w-full space-y-6">
       {/* 🔹 FILTER BAR */}
@@ -269,6 +277,19 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                       </SelectContent>
                   </Select>
 
+                  {currentUser?.role === "super_admin" && (
+                      <Select value={filterSource} onValueChange={setFilterSource}>
+                          <SelectTrigger className="flex-1 sm:w-[110px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold">
+                              <SelectValue placeholder="Source" />
+                          </SelectTrigger>
+                          <SelectContent>
+                              <SelectItem value="all">All Sources</SelectItem>
+                              <SelectItem value="citizen">Citizen Only</SelectItem>
+                              <SelectItem value="official">Official Only</SelectItem>
+                          </SelectContent>
+                      </Select>
+                  )}
+
                   {(currentUser?.role === "super_admin" || currentUser?.role === "admin") && (
                       <Select value={filterPs} onValueChange={setFilterPs}>
                           <SelectTrigger className="flex-1 sm:w-[150px] rounded-xl h-10 border-slate-200 bg-slate-50/50 text-[10px] md:text-xs font-bold">
@@ -303,8 +324,8 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
       <div className="flex flex-col gap-1">
         {loading && applications.length === 0 ? (
             Array.from({ length: 10 }).map((_, i) => <div key={i} className="h-12 bg-white rounded-xl animate-pulse border border-slate-100"></div>)
-        ) : applications.length > 0 ? (
-          applications.map((app) => (
+        ) : filteredAppsForDisplay.length > 0 ? (
+          filteredAppsForDisplay.map((app) => (
             <div 
               key={app.id} 
               onClick={() => setSelectedApp(app)} 
@@ -313,9 +334,22 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
               <div className="absolute top-0 left-0 w-1 h-full bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               
               <div className="flex flex-col min-w-0 flex-1">
-                <p className="font-black text-[#0a2c4e] text-xs uppercase tracking-tight group-hover:text-blue-700 transition-colors leading-none truncate pr-2">
-                  {app.applicantName}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="font-black text-[#0a2c4e] text-xs uppercase tracking-tight group-hover:text-blue-700 transition-colors leading-none truncate">
+                    {app.applicantName}
+                  </p>
+                  {app.role === "user" ? (
+                      <div className="shrink-0 px-1.5 py-0.5 rounded flex items-center gap-1 bg-slate-100 text-slate-600 border border-slate-200" title="Submitted by Citizen">
+                          <User size={10} />
+                          <span className="text-[7px] font-black uppercase tracking-widest">Citizen</span>
+                      </div>
+                  ) : (
+                      <div className="shrink-0 px-1.5 py-0.5 rounded flex items-center gap-1 bg-blue-50 text-[#0a2c4e] border border-blue-200" title="Submitted by Police Official">
+                          <ShieldCheck size={10} />
+                          <span className="text-[7px] font-black uppercase tracking-widest">Official</span>
+                      </div>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
                     <p className="text-[9px] text-slate-400 font-bold tracking-wider">
                         {app.applicantMobile || app.applicantPhone || "No Contact"}

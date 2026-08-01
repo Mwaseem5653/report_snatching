@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
 
         // 🚀 Deduct Eyecon Tokens
         const tokenCheck = await checkAndDeductEyeconTokens(decoded.uid, decoded.role, numbers.length);
-        if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
+        if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error, currentBalance: tokenCheck.currentBalance }, { status: 403 });
 
         const results = [];
         // Process in small batches to avoid timeouts and rate limits

@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import SessionHeader from "@/components/session-avtar/page";
 import ApplicationExtractorClient from "@/components/tools/ApplicationExtractorClient";
 import InfoToolsClient from "@/components/tools/InfoToolsClient";
-import SimDetailsV2Client from "@/components/tools/SimDetailsV2Client";
 import CdrFormatClient from "@/components/tools/CdrFormatClient";
 import LacCellConverterClient from "@/components/tools/LacCellConverterClient";
 import EyeconLookupClient from "@/components/tools/EyeconLookupClient";
@@ -55,7 +54,6 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
             { id: "eyecon", key: "eyecon_lookup" },
             { id: "extractor", key: "ai_extractor" },
             { id: "utilities", key: "info_tools" },
-            { id: "simv2", key: "info_tools" },
             { id: "cdr", key: "cdr_generator" },
             { id: "rapidapi", key: "rapid_api" },
           ].filter(t => t && (isSuper || perms[t.key]));
@@ -79,7 +77,6 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
     { id: "eyecon", label: "Eyecon Lookup", icon: Eye, key: "eyecon_lookup" },
     { id: "extractor", label: "AI Extractor", icon: ScanText, key: "ai_extractor" },
     { id: "utilities", label: "Info Lookup", icon: LayoutGrid, key: "info_tools" },
-    { id: "simv2", label: "SIM Details v2", icon: Shield, key: "info_tools" },
     { id: "cdr", label: "CDR Generator", icon: FileCode, key: "cdr_generator" },
     { id: "rapidapi", label: "RapidAPI", icon: Globe, key: "rapid_api" },
     ...(isSuper ? [{ id: "imei_search", label: "IMEI Search Stats", icon: Search, key: "super_admin_only" }] : []),
@@ -134,7 +131,6 @@ export default function AdvancedToolClient({ initialSession }: { initialSession:
         {(activeTab === "eyecon" && (isSuper || perms.eyecon_lookup)) && <EyeconLookupClient />}
         {(activeTab === "extractor" && (isSuper || perms.ai_extractor)) && <ApplicationExtractorClient />}
         {(activeTab === "utilities" && (isSuper || perms.info_tools)) && <InfoToolsClient />}
-        {(activeTab === "simv2" && (isSuper || perms.info_tools)) && <SimDetailsV2Client />}
         {(activeTab === "cdr" && (isSuper || perms.cdr_generator)) && <CdrFormatClient />}
         {(activeTab === "rapidapi" && (isSuper || perms.rapid_api)) && <RapidApiClient />}
         {(activeTab === "imei_search" && isSuper) && <ImeiSearchReportClient />}

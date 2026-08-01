@@ -12,7 +12,8 @@ import {
   ClipboardCheck
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, getApiUrl } from "@/lib/utils";
+import TokenExpiredModal from "@/components/ui/token-expired-modal";
 
 interface RowData {
   lac: string;
@@ -25,6 +26,8 @@ export default function LacCellConverterClient() {
   const [rows, setRows] = useState<RowData[]>(
     Array.from({ length: 10 }, () => ({ lac: "", cell: "", output: "" }))
   );
+  const [tokenModal, setTokenModal] = useState({ isOpen: false, currentBalance: 0, requiredTokens: 0, toolName: "" });
+  const [loading, setLoading] = useState(false);
 
   const convertValue = (val: string) => {
     const num = parseInt(val);
@@ -69,20 +72,81 @@ export default function LacCellConverterClient() {
   const updateRow = (index: number, field: keyof RowData, value: string) => {
     const newRows = [...rows];
     newRows[index][field] = value;
-
-    if (field === 'output') {
-      const reversed = reverseCalculate(value);
-      if (reversed) {
-        newRows[index].lac = reversed.lac;
-        newRows[index].cell = reversed.cell;
-      }
-    } else {
-      newRows[index].output = calculateOutput(
-        field === 'lac' ? value : newRows[index].lac,
-        field === 'cell' ? value : newRows[index].cell
-      );
-    }
     setRows(newRows);
+  };
+
+  const handleProcess = async () => {
+      const rowsToProcess = rows.map((r, i) => ({ ...r, index: i }))
+          .filter(r => (r.lac && r.cell && !r.output) || (r.output && (!r.lac || !r.cell)));
+      
+      if (rowsToProcess.length === 0) {
+          toast.info("No new rows to process.");
+          return;
+      }
+
+      const requiredTokens = rowsToProcess.length * 5;
+
+      try {
+          const sRes = await fetch(getApiUrl("/api/auth/create-session"));
+          const sData = await sRes.json();
+          if (sData.authenticated && sData.role !== "super_admin") {
+              if ((sData.tokens || 0) < requiredTokens) {
+                  setTokenModal({ isOpen: true, currentBalance: sData.tokens || 0, requiredTokens, toolName: "LAC/Cell Converter" });
+                  return;
+              }
+          }
+      } catch (e) {}
+
+      setLoading(true);
+      try {
+          const deductRes = await fetch(getApiUrl("/api/tools/cdr-token"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ count: rowsToProcess.length }),
+          });
+          const deductData = await deductRes.json();
+
+          if (deductRes.status === 403) {
+              setTokenModal({ isOpen: true, currentBalance: deductData.currentBalance || 0, requiredTokens, toolName: "LAC/Cell Converter" });
+              setLoading(false);
+              return;
+          }
+
+          if (!deductRes.ok) {
+              toast.error(deductData.error || "Token deduction failed.");
+              setLoading(false);
+              return;
+          }
+
+          window.dispatchEvent(new Event("refresh-session"));
+          
+          const newRows = [...rows];
+          let processedCount = 0;
+          
+          rowsToProcess.forEach(item => {
+              if (item.output && (!item.lac || !item.cell)) {
+                  const reversed = reverseCalculate(item.output);
+                  if (reversed) {
+                      newRows[item.index].lac = reversed.lac;
+                      newRows[item.index].cell = reversed.cell;
+                      processedCount++;
+                  }
+              } else if (item.lac && item.cell && !item.output) {
+                  const out = calculateOutput(item.lac, item.cell);
+                  if (out) {
+                      newRows[item.index].output = out;
+                      processedCount++;
+                  }
+              }
+          });
+          
+          setRows(newRows);
+          toast.success(`Processed ${processedCount} records!`);
+      } catch (e) {
+          toast.error("An error occurred.");
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleAddRows = (count: number = 10) => {
@@ -106,18 +170,11 @@ export default function LacCellConverterClient() {
       
       if (field === 'output') {
           newRows[targetIndex].output = columns[0].trim();
-          const reversed = reverseCalculate(newRows[targetIndex].output);
-          if (reversed) {
-              newRows[targetIndex].lac = reversed.lac;
-              newRows[targetIndex].cell = reversed.cell;
-          }
       } else if (columns.length >= 2) {
         newRows[targetIndex].lac = columns[0].trim();
         newRows[targetIndex].cell = columns[1].trim();
-        newRows[targetIndex].output = calculateOutput(newRows[targetIndex].lac, newRows[targetIndex].cell);
       } else {
         newRows[targetIndex][field] = columns[0].trim();
-        newRows[targetIndex].output = calculateOutput(newRows[targetIndex].lac, newRows[targetIndex].cell);
       }
     });
 
@@ -134,7 +191,6 @@ export default function LacCellConverterClient() {
     const newRows = [...rows];
     for (let i = index + 1; i < newRows.length; i++) {
       newRows[i].lac = valueToFill;
-      newRows[i].output = calculateOutput(valueToFill, newRows[i].cell);
     }
     setRows(newRows);
     toast.success("LAC ID applied to all rows below");
@@ -156,6 +212,13 @@ export default function LacCellConverterClient() {
 
   return (
     <div className="h-[calc(100vh-140px)] flex flex-col space-y-4 overflow-hidden max-w-5xl mx-auto">
+      <TokenExpiredModal
+        isOpen={tokenModal.isOpen}
+        onClose={() => setTokenModal({ ...tokenModal, isOpen: false })}
+        currentBalance={tokenModal.currentBalance}
+        requiredTokens={tokenModal.requiredTokens}
+        toolName={tokenModal.toolName}
+      />
       <div className="shrink-0 flex flex-col md:flex-row items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4">
         <div className="flex items-center gap-3 w-full md:w-auto">
             <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-lg">
@@ -167,6 +230,9 @@ export default function LacCellConverterClient() {
             </div>
         </div>
         <div className="flex items-center justify-center gap-2 w-full md:w-auto flex-wrap">
+            <Button onClick={handleProcess} disabled={loading} className="flex-1 md:flex-none bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black shadow-lg h-9 px-4 md:px-6 text-[10px] md:text-xs transition-all active:scale-95 whitespace-nowrap">
+                {loading ? "Processing..." : "Process Data"}
+            </Button>
             <Button variant="outline" onClick={handleReset} className="flex-1 md:flex-none rounded-xl font-bold text-slate-500 border-slate-200 h-9 text-[10px] md:text-xs">
                 <RotateCcw size={14} className="mr-2" /> Reset
             </Button>

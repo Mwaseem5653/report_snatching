@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
         // 🚀 LOG USAGE
         await logToolUsage(decoded, "Movement Visualizer");
 
-        const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, 10); // 10 tokens for visual analysis
+        const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, 15); // 15 tokens for visual analysis
         if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
 
         // Fetch from Supabase URL

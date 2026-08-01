@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import { cn, getApiUrl } from "@/lib/utils";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/uploadHelper";
+import TokenExpiredModal from "@/components/ui/token-expired-modal";
 import { 
   Select, 
   SelectContent, 
@@ -41,6 +42,7 @@ export default function MovementVisualizerClient() {
   const [allData, setAllData] = useState<any[]>([]); 
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [showSidebar, setShowSidebar] = useState(true);
+  const [tokenModal, setTokenModal] = useState({ isOpen: false, currentBalance: 0, requiredTokens: 0, toolName: "" });
   
   const [fromTime, setFromTime] = useState("12:00");
   const [fromPeriod, setFromPeriod] = useState("AM");
@@ -120,6 +122,18 @@ export default function MovementVisualizerClient() {
 
   const uploadAndAnalyze = async () => {
     if (!file) return;
+
+    try {
+        const sRes = await fetch(getApiUrl("/api/auth/create-session"));
+        const sData = await sRes.json();
+        if (sData.authenticated && sData.role !== "super_admin") {
+            if ((sData.tokens || 0) < 15) {
+                setTokenModal({ isOpen: true, currentBalance: sData.tokens || 0, requiredTokens: 15, toolName: "Movement Visualizer" });
+                return;
+            }
+        }
+    } catch (e) {}
+
     setLoading(true);
     try {
       const { secure_url, public_id } = await uploadFileToStorage(file, "movement-analysis");
@@ -127,6 +141,15 @@ export default function MovementVisualizerClient() {
       formData.append("url", secure_url);
       formData.append("fileName", file.name);
       const res = await fetch(getApiUrl("/api/tools/analyze-movement"), { method: "POST", body: formData });
+      
+      if (res.status === 403) {
+          const errData = await res.json();
+          setTokenModal({ isOpen: true, currentBalance: errData.currentBalance || 0, requiredTokens: 15, toolName: "Movement Visualizer" });
+          if (public_id) deleteFileFromStorage(public_id);
+          setLoading(false);
+          return;
+      }
+
       const result = await res.json();
       if (public_id) deleteFileFromStorage(public_id);
       if (result.success) {
@@ -172,6 +195,13 @@ export default function MovementVisualizerClient() {
 
   return (
     <div className="h-full md:h-[calc(100vh-120px)] flex flex-col space-y-4">
+      <TokenExpiredModal
+        isOpen={tokenModal.isOpen}
+        onClose={() => setTokenModal({ ...tokenModal, isOpen: false })}
+        currentBalance={tokenModal.currentBalance}
+        requiredTokens={tokenModal.requiredTokens}
+        toolName={tokenModal.toolName}
+      />
       
       {/* 🔹 HEADER */}
       <div className="bg-white px-4 md:px-6 py-4 md:py-2.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">

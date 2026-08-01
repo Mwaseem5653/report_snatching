@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, getApiUrl } from "@/lib/utils";
+import TokenExpiredModal from "@/components/ui/token-expired-modal";
 import {
   Table,
   TableBody,
@@ -39,6 +40,7 @@ export default function EyeconLookupClient() {
   const [inputNumbers, setInputNumbers] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<EyeconResult[]>([]);
+  const [tokenModal, setTokenModal] = useState({ isOpen: false, currentBalance: 0, requiredTokens: 0, toolName: "" });
 
   const handleLookup = async () => {
     const numbers = inputNumbers
@@ -51,6 +53,17 @@ export default function EyeconLookupClient() {
       return;
     }
 
+    try {
+        const sRes = await fetch(getApiUrl("/api/auth/create-session"));
+        const sData = await sRes.json();
+        if (sData.authenticated && sData.role !== "super_admin") {
+            if ((sData.eyeconTokens || 0) < numbers.length) {
+                setTokenModal({ isOpen: true, currentBalance: sData.eyeconTokens || 0, requiredTokens: numbers.length, toolName: "Eyecon Lookup" });
+                return;
+            }
+        }
+    } catch (e) {}
+
     setLoading(true);
     try {
       const res = await fetch(getApiUrl("/api/tools/lookup/eyecon"), {
@@ -58,10 +71,19 @@ export default function EyeconLookupClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ numbers }),
       });
+      
+      if (res.status === 403) {
+          const errData = await res.json();
+          setTokenModal({ isOpen: true, currentBalance: errData.currentBalance || 0, requiredTokens: numbers.length, toolName: "Eyecon Lookup" });
+          setLoading(false);
+          return;
+      }
+      
       const data = await res.json();
 
       if (data.success) {
         setResults(data.results);
+        window.dispatchEvent(new Event("refresh-session"));
         toast.success(`Lookup complete. Found ${data.results.length} results.`);
       } else {
         toast.error(data.error || "Lookup failed");
@@ -86,6 +108,13 @@ export default function EyeconLookupClient() {
 
   return (
     <div className="h-[calc(100vh-140px)] flex flex-col space-y-4 overflow-hidden">
+      <TokenExpiredModal
+        isOpen={tokenModal.isOpen}
+        onClose={() => setTokenModal({ ...tokenModal, isOpen: false })}
+        currentBalance={tokenModal.currentBalance}
+        requiredTokens={tokenModal.requiredTokens}
+        toolName={tokenModal.toolName}
+      />
       {/* 🔹 HEADER AREA (Fixed height) */}
       <div className="shrink-0 flex flex-col md:flex-row items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4">
         <div className="flex items-center gap-3 w-full md:w-auto">

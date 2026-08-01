@@ -25,7 +25,7 @@ export async function checkAndDeductTokens(uid: string, role: string, amount: nu
 
     const currentTokens = Number(userData?.tokens || 0);
     if (currentTokens < amount) {
-        return { success: false, error: `Insufficient Credits. Required: ${amount}, Current Balance: ${currentTokens}. Please request top-up.` };
+        return { success: false, error: `Insufficient Credits. Required: ${amount}, Current Balance: ${currentTokens}. Please request top-up.`, currentBalance: currentTokens };
     }
 
     // Deduct tokens
@@ -51,7 +51,7 @@ export async function checkAndDeductEyeconTokens(uid: string, role: string, amou
     const currentTokens = Number(userData?.eyeconTokens || 0);
 
     if (currentTokens < amount) {
-        return { success: false, error: `Insufficient Eyecon Tokens. Required: ${amount}, Balance: ${currentTokens}.` };
+        return { success: false, error: `Insufficient Eyecon Tokens. Required: ${amount}, Balance: ${currentTokens}.`, currentBalance: currentTokens };
     }
 
     try {

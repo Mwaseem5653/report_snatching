@@ -167,9 +167,9 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
                 <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                    <CheckCircle className="w-8 h-8 text-emerald-600" />
                 </div>
-                <h3 className="text-xl font-bold text-emerald-800 mb-1">CLEAR / RECOVERED</h3>
+                <h3 className="text-xl font-bold text-emerald-800 mb-1">No Record Found</h3>
                 <p className="text-emerald-600 text-sm">
-                   Device with IMEI <span className="font-mono font-bold">{imei}</span> was previously reported but has been <span className="font-bold">Recovered & Processed</span>.
+                   Device with IMEI <span className="font-mono font-bold">{imei}</span> is not found in our criminal record database.
                 </p>
                 <div className="mt-4 bg-white/50 rounded-xl p-3 text-xs text-emerald-700 font-medium border border-emerald-100">
                     Official status updated by Administration.

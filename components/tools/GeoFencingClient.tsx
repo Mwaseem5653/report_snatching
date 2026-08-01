@@ -11,6 +11,7 @@ import { MapPin, Loader2, Download, History, Clock, FileSpreadsheet, AlertTriang
 import { toast } from "sonner";
 import { getApiUrl } from "@/lib/utils";
 import AlertModal from "@/components/ui/alert-modal";
+import TokenExpiredModal from "@/components/ui/token-expired-modal";
 
 export default function GeoFencingClient() {
   const [file, setFile] = useState<File | null>(null);
@@ -24,6 +25,7 @@ export default function GeoFencingClient() {
   const [includeB, setIncludeB] = useState(true);
 
   const [alert, setAlert] = useState({ isOpen: false, title: "", description: "", type: "info" as any });
+  const [tokenModal, setTokenModal] = useState({ isOpen: false, currentBalance: 0, requiredTokens: 10 });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -43,13 +45,8 @@ export default function GeoFencingClient() {
         const sRes = await fetch(getApiUrl("/api/auth/create-session"));
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
-            if ((sData.tokens || 0) < 5) {
-                setAlert({
-                    isOpen: true,
-                    title: "Insufficient Credits",
-                    description: `You need at least 5 credits to start geo-fencing analysis. Current balance: ${sData.tokens || 0}`,
-                    type: "warning"
-                });
+            if ((sData.tokens || 0) < 10) {
+                setTokenModal({ isOpen: true, currentBalance: sData.tokens || 0, requiredTokens: 10 });
                 return;
             }
         }
@@ -73,12 +70,11 @@ export default function GeoFencingClient() {
 
       if (!res.ok) {
         const errData = await res.json();
-        setAlert({
-            isOpen: true,
-            title: res.status === 403 ? "Insufficient Credits" : "Process Error",
-            description: errData.error || "An unexpected error occurred.",
-            type: "warning"
-        });
+        if (res.status === 403) {
+            setTokenModal({ isOpen: true, currentBalance: errData.currentBalance || 0, requiredTokens: 10 });
+        } else {
+            setAlert({ isOpen: true, title: "Process Error", description: errData.error || "An unexpected error occurred.", type: "error" });
+        }
         setLoading(false);
         return;
       }
@@ -103,6 +99,13 @@ export default function GeoFencingClient() {
         title={alert.title}
         description={alert.description}
         type={alert.type}
+      />
+      <TokenExpiredModal
+        isOpen={tokenModal.isOpen}
+        onClose={() => setTokenModal({ ...tokenModal, isOpen: false })}
+        currentBalance={tokenModal.currentBalance}
+        requiredTokens={tokenModal.requiredTokens}
+        toolName="Geo Fencing Analyzer"
       />
 
       <div className="flex items-center gap-4 bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">

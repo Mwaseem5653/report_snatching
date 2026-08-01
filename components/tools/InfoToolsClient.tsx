@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { cn, getApiUrl } from "@/lib/utils";
 import AlertModal from "@/components/ui/alert-modal";
+import TokenExpiredModal from "@/components/ui/token-expired-modal";
 
 export default function InfoToolsClient() {
   const [phoneInput, setPhoneInput] = useState("");
@@ -30,6 +31,7 @@ export default function InfoToolsClient() {
   const [vehicleRemaining, setVehicleRemaining] = useState(0);
 
   const [alert, setAlert] = useState({ isOpen: false, title: "", description: "", type: "info" as any });
+  const [tokenModal, setTokenModal] = useState({ isOpen: false, currentBalance: 0, requiredTokens: 0, toolName: "" });
 
   const handleSimSearch = async () => {
     const targets = phoneInput
@@ -52,12 +54,7 @@ export default function InfoToolsClient() {
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
             if ((sData.tokens || 0) < targets.length) {
-                setAlert({
-                    isOpen: true,
-                    title: "Insufficient Credits",
-                    description: `You need ${targets.length} credits for this bulk lookup. Balance: ${sData.tokens || 0}`,
-                    type: "warning"
-                });
+                setTokenModal({ isOpen: true, currentBalance: sData.tokens || 0, requiredTokens: targets.length, toolName: "SIM Info Lookup" });
                 return;
             }
         }
@@ -74,12 +71,7 @@ export default function InfoToolsClient() {
       const data = await res.json();
 
       if (res.status === 403) {
-        setAlert({
-            isOpen: true,
-            title: "Insufficient Credits",
-            description: data.error || "You do not have enough credits.",
-            type: "warning"
-        });
+        setTokenModal({ isOpen: true, currentBalance: 0, requiredTokens: targets.length, toolName: "SIM Info Lookup" });
         return;
       }
 
@@ -112,12 +104,7 @@ export default function InfoToolsClient() {
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
             if ((sData.tokens || 0) < targets.length) {
-                setAlert({
-                    isOpen: true,
-                    title: "Insufficient Credits",
-                    description: `You need ${targets.length} credits for this CNIC lookup. Balance: ${sData.tokens || 0}`,
-                    type: "warning"
-                });
+                setTokenModal({ isOpen: true, currentBalance: sData.tokens || 0, requiredTokens: targets.length, toolName: "CNIC Info Lookup" });
                 return;
             }
         }
@@ -134,12 +121,7 @@ export default function InfoToolsClient() {
       const data = await res.json();
 
       if (res.status === 403) {
-        setAlert({
-            isOpen: true,
-            title: "Insufficient Credits",
-            description: data.error || "You do not have enough credits.",
-            type: "warning"
-        });
+        setTokenModal({ isOpen: true, currentBalance: 0, requiredTokens: targets.length, toolName: "CNIC Info Lookup" });
         return;
       }
 
@@ -172,12 +154,7 @@ export default function InfoToolsClient() {
         const sData = await sRes.json();
         if (sData.authenticated && sData.role !== "super_admin") {
             if ((sData.tokens || 0) < targets.length) {
-                setAlert({
-                    isOpen: true,
-                    title: "Insufficient Credits",
-                    description: `You need ${targets.length} credits for this bulk vehicle lookup. Balance: ${sData.tokens || 0}`,
-                    type: "warning"
-                });
+                setTokenModal({ isOpen: true, currentBalance: sData.tokens || 0, requiredTokens: targets.length, toolName: "Vehicle Info Lookup" });
                 return;
             }
         }
@@ -203,7 +180,7 @@ export default function InfoToolsClient() {
         const data = await res.json();
 
         if (res.status === 403) {
-          toast.error("Insufficient Credits. Process stopped.");
+          setTokenModal({ isOpen: true, currentBalance: 0, requiredTokens: targets.length, toolName: "Vehicle Info Lookup" });
           break;
         }
 
@@ -280,6 +257,13 @@ export default function InfoToolsClient() {
         title={alert.title}
         description={alert.description}
         type={alert.type}
+      />
+      <TokenExpiredModal
+        isOpen={tokenModal.isOpen}
+        onClose={() => setTokenModal({ ...tokenModal, isOpen: false })}
+        currentBalance={tokenModal.currentBalance}
+        requiredTokens={tokenModal.requiredTokens}
+        toolName={tokenModal.toolName}
       />
       <div className="flex items-center gap-3">
         <div className="p-3 bg-purple-100 text-purple-700 rounded-xl">

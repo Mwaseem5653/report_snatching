@@ -1138,7 +1138,7 @@ export async function POST(req: NextRequest) {
 
         if (cloudinaryUrls.length === 0) return NextResponse.json({ error: "No files provided" }, { status: 400 });
 
-        const totalTokensNeeded = cloudinaryUrls.length * 15;
+        const totalTokensNeeded = cloudinaryUrls.length * 30;
         const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, totalTokensNeeded);
         if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
 

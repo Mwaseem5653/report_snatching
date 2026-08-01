@@ -28,6 +28,7 @@ export default function UserManagement() {
   const [users, setUsers] = useState<any[]>([]);
   const [filterRole, setFilterRole] = useState<string>("none");
   const [filterDistrict, setFilterDistrict] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -60,12 +61,13 @@ export default function UserManagement() {
   }, []);
 
   // ---------------- FETCH USERS ----------------
-  async function fetchUsers(filters: { role?: string; district?: string } = {}) {
+  async function fetchUsers(filters: { role?: string; district?: string; query?: string } = {}) {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filters.role && filters.role !== "none") params.append("role", filters.role);
       if (filters.district && filters.district !== "all") params.append("district", filters.district);
+      if (filters.query) params.append("query", filters.query);
 
       const res = await fetch(getApiUrl(`/api/get-users?${params.toString()}`));
       const data = await res.json();
@@ -98,7 +100,8 @@ export default function UserManagement() {
 
     const filters: any = { 
         role: filterRole,
-        district: filterDistrict
+        district: filterDistrict,
+        query: searchQuery
     };
 
     if (filterRole === "none") delete filters.role;
@@ -125,6 +128,7 @@ export default function UserManagement() {
   function handleClear() {
     setFilterRole("none");
     setFilterDistrict("all");
+    setSearchQuery("");
     setUsers([]);
   }
 
@@ -224,6 +228,17 @@ export default function UserManagement() {
           {/* Right: Controls */}
           <div className="flex flex-col sm:flex-row flex-1 items-stretch sm:items-center gap-2 justify-end">
                 
+                <div className="relative flex-1 sm:max-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                        placeholder="Search by name..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleFilterSearch()}
+                        className="pl-9 border-slate-200 rounded-xl bg-slate-50/50 h-10 text-[11px] font-bold w-full"
+                    />
+                </div>
+
                 {/* District Filter (Super Admin Only) */}
                 {currentUser?.role === "super_admin" && (
                     <Select value={filterDistrict} onValueChange={setFilterDistrict}>
@@ -457,53 +472,56 @@ export default function UserManagement() {
                     </div>
                 )}
 
-                {Object.entries(selectedUser).map(([key, value]) => {
-                    if (["uid", "createdAt", "tokens", "eyeconTokens", "hasToolsAccess", "permissions"].includes(key)) return null;
-
-                    if (key === "role") {
-                    return (
-                        <div key={key} className="space-y-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                            Access Level (Role)
-                        </label>
-                        <Select
-                            value={selectedUser.role}
-                            onValueChange={(val) =>
-                            setSelectedUser({ ...selectedUser, role: val })
-                            }
-                        >
-                            <SelectTrigger className="w-full rounded-xl border-slate-200 bg-slate-50 h-11 text-slate-900">
-                            <SelectValue placeholder="Select Role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                            {availableFilters().map((r) => (
-                                <SelectItem key={r} value={r} className="capitalize">
-                                {r.replace("_", " ")}
-                                </SelectItem>
-                            ))}
-                            </SelectContent>
-                        </Select>
-                        </div>
-                    );
-                    }
-
-                    return (
-                    <div key={key} className="space-y-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                        {key.replace(/([A-Z])/g, ' $1').trim()}
-                        </label>
-                        <Input
-                        value={value ? String(value) : ""}
-                        placeholder={`Enter ${key}`}
-                        className="rounded-xl border-slate-200 bg-slate-50 h-11 text-slate-900"
-                        onChange={(e) =>
-                            setSelectedUser({
-                            ...selectedUser,
-                            [key]: e.target.value,
-                            })
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        Access Level (Role)
+                    </label>
+                    <Select
+                        value={selectedUser.role}
+                        onValueChange={(val) =>
+                        setSelectedUser({ ...selectedUser, role: val })
                         }
-                        />
-                    </div>
+                    >
+                        <SelectTrigger className="w-full rounded-xl border-slate-200 bg-slate-50 h-11 text-slate-900">
+                        <SelectValue placeholder="Select Role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        {availableFilters().map((r) => (
+                            <SelectItem key={r} value={r} className="capitalize">
+                            {r.replace("_", " ")}
+                            </SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {[
+                    { key: "name", label: "Full Name", show: true },
+                    { key: "phone", label: "Phone Number", show: true },
+                    { key: "email", label: "Email Address", show: true },
+                    { key: "buckle", label: "Buckle / ID", show: true },
+                    { key: "city", label: "City", show: selectedUser.role !== "super_admin" },
+                    { key: "district", label: "District", show: selectedUser.role !== "super_admin" },
+                    { key: "ps", label: selectedUser.role === "market_user" ? "Market" : "Police Station", show: ["ps_user", "market_user"].includes(selectedUser.role) },
+                ].map((field) => {
+                    if (!field.show) return null;
+                    return (
+                        <div key={field.key} className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                {field.label}
+                            </label>
+                            <Input
+                                value={selectedUser[field.key] ? String(selectedUser[field.key]) : ""}
+                                placeholder={`Enter ${field.label}`}
+                                className="rounded-xl border-slate-200 bg-slate-50 h-11 text-slate-900"
+                                onChange={(e) =>
+                                    setSelectedUser({
+                                        ...selectedUser,
+                                        [field.key]: e.target.value,
+                                    })
+                                }
+                            />
+                        </div>
                     );
                 })}
 

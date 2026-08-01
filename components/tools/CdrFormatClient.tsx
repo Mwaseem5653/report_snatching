@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import AlertModal from "@/components/ui/alert-modal";
+import TokenExpiredModal from "@/components/ui/token-expired-modal";
 import { cn, getApiUrl } from "@/lib/utils";
 
 const TEMPLATES = [
@@ -56,6 +57,56 @@ export default function CdrFormatClient() {
   const [previews, setPreviews] = useState<{ name: string, html: string }[]>([]);
   const [viewMode, setViewMode] = useState<"single" | "all">("single");
   const [alert, setAlert] = useState({ isOpen: false, title: "", description: "", type: "info" as any });
+  const [tokenModal, setTokenModal] = useState({ isOpen: false, currentBalance: 0, requiredTokens: 0 });
+  const [sessionInfo, setSessionInfo] = useState<{ isSuper: boolean, tokens: number }>({ isSuper: true, tokens: 999999 });
+
+  useEffect(() => {
+      const fetchSession = async () => {
+          try {
+              const res = await fetch(getApiUrl("/api/auth/create-session"));
+              const data = await res.json();
+              if (data.authenticated) {
+                  setSessionInfo({
+                      isSuper: data.role === "super_admin",
+                      tokens: data.tokens || 0
+                  });
+              }
+          } catch(e) {}
+      };
+      fetchSession();
+      window.addEventListener("refresh-session", fetchSession);
+      return () => window.removeEventListener("refresh-session", fetchSession);
+  }, []);
+
+  const checkTemplateTokens = async (templateCount: number) => {
+      const requiredTokens = templateCount * 5;
+      
+      if (!sessionInfo.isSuper && sessionInfo.tokens < requiredTokens) {
+          setTokenModal({
+              isOpen: true,
+              currentBalance: sessionInfo.tokens,
+              requiredTokens,
+          });
+          return false;
+      }
+
+      try {
+          const sRes = await fetch(getApiUrl("/api/auth/create-session"));
+          const sData = await sRes.json();
+          if (sData.authenticated && sData.role !== "super_admin") {
+              if ((sData.tokens || 0) < requiredTokens) {
+                  setTokenModal({
+                      isOpen: true,
+                      currentBalance: sData.tokens || 0,
+                      requiredTokens,
+                  });
+                  return false;
+              }
+          }
+      } catch (e) {}
+
+      return true;
+  };
 
   const handleAutoFormat = () => {
       const lines = rawInput.split("\n").map(l => l.trim()).filter(l => l);
@@ -80,36 +131,68 @@ export default function CdrFormatClient() {
       return;
     }
 
-    if (useApiLookup) {
-        // 🚀 PROACTIVE CHECK
-        try {
-            const sRes = await fetch(getApiUrl("/api/auth/create-session"));
-            const sData = await sRes.json();
-            if (sData.authenticated && sData.role !== "super_admin") {
-                if ((sData.tokens || 0) < 5) {
-                    setAlert({
-                        isOpen: true,
-                        title: "Insufficient Credits",
-                        description: `You need at least 5 credits for live identification. Balance: ${sData.tokens || 0}`,
-                        type: "warning"
-                    });
-                    return;
-                }
+    const requiredTokens = numbers.length * 5;
+
+    // 🚀 PROACTIVE TOKEN CHECK for both modes
+    try {
+        const sRes = await fetch(getApiUrl("/api/auth/create-session"));
+        const sData = await sRes.json();
+        if (sData.authenticated && sData.role !== "super_admin") {
+            if ((sData.tokens || 0) < requiredTokens) {
+                setTokenModal({
+                    isOpen: true,
+                    currentBalance: sData.tokens || 0,
+                    requiredTokens,
+                });
+                return;
             }
-        } catch (e) {}
-    }
+        }
+    } catch (e) {}
 
     setLoadingLookup(true);
     setPreviews([]);
 
     if (!useApiLookup) {
+        // Standard Mode — deduct tokens via cdr-token API
+        try {
+            const deductRes = await fetch(getApiUrl("/api/tools/cdr-token"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ count: numbers.length }),
+            });
+            const deductData = await deductRes.json();
+
+            if (deductRes.status === 403) {
+                setTokenModal({
+                    isOpen: true,
+                    currentBalance: deductData.currentBalance || 0,
+                    requiredTokens,
+                });
+                setLoadingLookup(false);
+                return;
+            }
+
+            if (!deductRes.ok) {
+                toast.error(deductData.error || "Token deduction failed.");
+                setLoadingLookup(false);
+                return;
+            }
+
+            window.dispatchEvent(new Event("refresh-session"));
+        } catch (e) {
+            toast.error("Could not verify tokens. Please try again.");
+            setLoadingLookup(false);
+            return;
+        }
+
         const results = identifyLocal(numbers);
         setAnalyzedNumbers(results);
         setLoadingLookup(false);
-        toast.success("Operators identified (Standard Mode)");
+        toast.success(`Operators identified — ${requiredTokens} tokens deducted`);
         return;
     }
 
+    // Live API Mode
     try {
         const res = await fetch(getApiUrl("/api/tools/pta-lookup"), {
             method: "POST",
@@ -119,11 +202,10 @@ export default function CdrFormatClient() {
         const data = await res.json();
         
         if (res.status === 403) {
-            setAlert({
+            setTokenModal({
                 isOpen: true,
-                title: "Insufficient Credits",
-                description: data.error || "You do not have enough credits.",
-                type: "warning"
+                currentBalance: data.currentBalance || 0,
+                requiredTokens,
             });
             return;
         }
@@ -177,7 +259,10 @@ export default function CdrFormatClient() {
         }
 
         const payload = numbersToInject.join("\n");
-        const injectedHtml = html.replace(regex, (match, start, content, end) => `${start}${payload}${end}`);
+        const injectedHtml = html.replace(regex, (match, start, content, end) => {
+            const disabledStart = start.replace("<textarea", "<textarea disabled readonly ");
+            return `${disabledStart}${payload}${end}`;
+        });
         const script = `
           <script>
             document.addEventListener('DOMContentLoaded', function() {
@@ -190,10 +275,14 @@ export default function CdrFormatClient() {
   };
 
   const handleGenerate = async (templateFile: string) => {
-    setViewMode("single");
-    setSelectedTemplate(templateFile);
     const config = TEMPLATES.find(t => t.file === templateFile);
     if (!config) return;
+
+    const canProceed = await checkTemplateTokens(1);
+    if (!canProceed) return;
+
+    setViewMode("single");
+    setSelectedTemplate(templateFile);
 
     const html = await fetchInjectedHtml(templateFile, config.operatorKey);
     if (html) {
@@ -223,6 +312,10 @@ export default function CdrFormatClient() {
         return;
     }
 
+    const canProceed = await checkTemplateTokens(activeTemplates.length);
+    if (!canProceed) return;
+
+    setViewMode("all");
     const generated = [];
     for (const t of activeTemplates) {
         const html = await fetchInjectedHtml(t.file, t.operatorKey);
@@ -249,6 +342,13 @@ export default function CdrFormatClient() {
         title={alert.title}
         description={alert.description}
         type={alert.type}
+      />
+      <TokenExpiredModal
+        isOpen={tokenModal.isOpen}
+        onClose={() => setTokenModal({ ...tokenModal, isOpen: false })}
+        currentBalance={tokenModal.currentBalance}
+        requiredTokens={tokenModal.requiredTokens}
+        toolName="CDR Generator"
       />
       
       {/* 🔹 TOP SECTION: INPUT, RESULTS & FORMATS */}
