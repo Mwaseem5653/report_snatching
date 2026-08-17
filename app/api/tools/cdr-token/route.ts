@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
 
     const decoded: any = jwt.verify(token, SECRET);
 
-    // 5 tokens per number
-    const tokensNeeded = count * 5;
+    // 10 tokens per number (offline mode)
+    const tokensNeeded = count * 10;
 
     const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, tokensNeeded);
     if (!tokenCheck.success) {

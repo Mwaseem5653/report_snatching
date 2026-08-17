@@ -62,3 +62,31 @@ export async function checkAndDeductEyeconTokens(uid: string, role: string, amou
         return { success: false, error: "Database error during Eyecon deduction." };
     }
 }
+
+export async function checkAndDeductFaceSearchTokens(uid: string, role: string, amount: number) {
+    const userRef = adminDb.collection("users").doc(uid);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) return { success: false, error: "User profile not found." };
+
+    const userData = userDoc.data();
+
+    // 🚀 Super Admin bypasses token deduction
+    if (role === "super_admin") {
+        return { success: true, newBalance: Number(userData?.faceSearchTokens || 0) };
+    }
+
+    const currentTokens = Number(userData?.faceSearchTokens || 0);
+
+    if (currentTokens < amount) {
+        return { success: false, error: `Insufficient Face Search Tokens. Required: ${amount}, Balance: ${currentTokens}.`, currentBalance: currentTokens };
+    }
+
+    try {
+        const newBalance = currentTokens - amount;
+        await userRef.update({ faceSearchTokens: newBalance });
+        return { success: true, newBalance };
+    } catch (err) {
+        return { success: false, error: "Database error during Face Search deduction." };
+    }
+}

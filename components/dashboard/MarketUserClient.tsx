@@ -8,6 +8,7 @@ import InfoToolsClient from "@/components/tools/InfoToolsClient";
 import CdrFormatClient from "@/components/tools/CdrFormatClient";
 import ExcelAnalyzerClient from "@/components/tools/ExcelAnalyzerClient";
 import GeoFencingClient from "@/components/tools/GeoFencingClient";
+import FaceSearchClient from "@/components/tools/FaceSearchClient";
 import TokenManagement from "@/components/dashboard/TokenManagement";
 import { 
   DropdownMenu, 
@@ -23,7 +24,8 @@ import {
   FileCode,
   Wrench,
   ChevronDown,
-  MapPin
+  MapPin,
+  Image as ImageIcon
 } from "lucide-react";
 import { cn, getApiUrl } from "@/lib/utils";
 

@@ -411,6 +411,7 @@ export default function UserManagement() {
                                         { key: 'movement_visualizer', label: 'Movement Visualizer' },
                                         { key: 'lac_cell_converter', label: 'LAC/Cell Converter' },
                                         { key: 'eyecon_lookup', label: 'Eyecon Lookup (Standalone)' },
+                                        { key: 'face_search', label: 'Face Search (Social)' },
                                         { key: 'ai_extractor', label: 'AI Extractor' },
                                         { key: 'usage_analytics', label: 'Usage Analytics' },
                                         { key: 'app_to_excel', label: 'App To Excel' },

@@ -14,6 +14,7 @@ import GeoFencingClient from "@/components/tools/GeoFencingClient";
 import MovementVisualizerClient from "@/components/tools/MovementVisualizerClient";
 import LacCellConverterClient from "@/components/tools/LacCellConverterClient";
 import EyeconLookupClient from "@/components/tools/EyeconLookupClient";
+import FaceSearchClient from "@/components/tools/FaceSearchClient";
 import ApplicationToExcelClient from "@/components/tools/ApplicationToExcelClient";
 import AdvancedReportClient from "@/components/tools/AdvancedReportClient";
 import TokenManagement from "@/components/dashboard/TokenManagement";
@@ -40,7 +41,8 @@ import {
   Navigation,
   Cpu,
   Eye,
-  FileDown
+  FileDown,
+  Image as ImageIcon
 } from "lucide-react";
 import { cn, getApiUrl } from "@/lib/utils";
 
@@ -81,6 +83,7 @@ export default function AdminClient({ initialSession }: { initialSession: any })
     { id: "visualizer", label: "Movement Visualizer", icon: Navigation, key: "movement_visualizer" },
     { id: "converter", label: "LAC/Cell Converter", icon: Cpu, key: "lac_cell_converter" },
     { id: "eyecon", label: "Eyecon Lookup", icon: Eye, key: "eyecon_lookup" },
+    { id: "face_search", label: "Face Search", icon: ImageIcon, key: "face_search" },
     { id: "extractor", label: "AI Extractor", icon: ScanText, key: "ai_extractor" },
     { id: "utilities", label: "Info Lookup", icon: LayoutGrid, key: "info_tools" },
     { id: "cdr", label: "CDR Generator", icon: FileCode, key: "cdr_generator" },
@@ -204,6 +207,7 @@ export default function AdminClient({ initialSession }: { initialSession: any })
         {(activeTab === "visualizer" && (isSuper || perms.movement_visualizer)) && <MovementVisualizerClient />}
         {(activeTab === "converter" && (isSuper || perms.lac_cell_converter)) && <LacCellConverterClient />}
         {(activeTab === "eyecon" && (isSuper || perms.eyecon_lookup)) && <EyeconLookupClient />}
+        {(activeTab === "face_search" && (isSuper || perms.face_search)) && <FaceSearchClient />}
         {(activeTab === "extractor" && (isSuper || perms.ai_extractor)) && <ApplicationExtractorClient />}
         {(activeTab === "utilities" && (isSuper || perms.info_tools)) && <InfoToolsClient />}
         {(activeTab === "cdr" && (isSuper || perms.cdr_generator)) && <CdrFormatClient />}

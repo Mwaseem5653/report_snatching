@@ -21,8 +21,8 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const decoded: any = jwt.verify(token, SECRET);
 
-    // Deduct a flat 5 tokens for operator identification
-    const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, 5);
+    // 20 tokens per number for live API identification
+    const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, numbers.length * 20);
     if (!tokenCheck.success) {
         return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
     }

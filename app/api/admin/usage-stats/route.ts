@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
         const period = searchParams.get("period") || "today";
         const role = searchParams.get("role");
         const tool = searchParams.get("tool");
+        const startDate = searchParams.get("startDate");
+        const endDate = searchParams.get("endDate");
 
         let query: any = adminDb.collection("tool_usage_logs");
 
@@ -30,6 +32,12 @@ export async function GET(req: NextRequest) {
         const now = new Date();
         if (period === "today") {
             query = query.where("date", "==", now.toISOString().split('T')[0]);
+        } else if (period === "custom" && startDate && endDate) {
+            const start = admin.firestore.Timestamp.fromDate(new Date(startDate));
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            const endTimestamp = admin.firestore.Timestamp.fromDate(end);
+            query = query.where("timestamp", ">=", start).where("timestamp", "<=", endTimestamp);
         } else if (period !== "all") {
             let limitDate = new Date();
             if (period === "15days") limitDate.setDate(now.getDate() - 15);

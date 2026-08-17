@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
         if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         const decoded: any = jwt.verify(token, SECRET);
 
-        const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, targets.length);
+        const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, targets.length * 40);
         if (!tokenCheck.success) {
             return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
         }

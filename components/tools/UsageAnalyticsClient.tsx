@@ -29,6 +29,8 @@ export default function UsageAnalyticsClient() {
     
     // Filter States
     const [filterPeriod, setFilterPeriod] = useState("today");
+    const [startDate, setStartDate] = useState<string>("");
+    const [endDate, setEndDate] = useState<string>("");
     const [filterRole, setFilterRole] = useState("all");
     const [filterTool, setFilterTool] = useState("all");
 
@@ -65,6 +67,10 @@ export default function UsageAnalyticsClient() {
         try {
             const params = new URLSearchParams();
             params.append("period", filterPeriod);
+            if (filterPeriod === "custom") {
+                if (startDate) params.append("startDate", startDate);
+                if (endDate) params.append("endDate", endDate);
+            }
             if (filterRole !== "all") params.append("role", filterRole);
             if (filterTool !== "all") params.append("tool", filterTool);
 
@@ -86,7 +92,7 @@ export default function UsageAnalyticsClient() {
 
     useEffect(() => {
         fetchStats();
-    }, [filterPeriod, filterRole, filterTool]);
+    }, [filterPeriod, filterRole, filterTool, startDate, endDate]);
 
     const ROLES = ["super_admin", "admin", "officer", "ps_user", "market_user", "advanced_tool"];
     const TOOLS = ["Excel Analyzer", "Eyecon Lookup", "SIM Info Lookup", "Geo Fencing", "Movement Visualizer", "LAC/Cell Converter", "AI Application Extractor"];
@@ -122,9 +128,23 @@ export default function UsageAnalyticsClient() {
                                 <SelectItem value="1month">Last 1 Month</SelectItem>
                                 <SelectItem value="3months">Last 3 Months</SelectItem>
                                 <SelectItem value="all">All Time</SelectItem>
+                                <SelectItem value="custom">Custom Date</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
+
+                    {filterPeriod === "custom" && (
+                        <div className="space-y-1.5 sm:col-span-2 lg:col-span-2 grid grid-cols-2 gap-2">
+                            <div>
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Start Date</Label>
+                                <input type="date" className="flex h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                            </div>
+                            <div>
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">End Date</Label>
+                                <input type="date" className="flex h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                            </div>
+                        </div>
+                    )}
 
                     <div className="space-y-1.5">
                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Filter by Role</Label>

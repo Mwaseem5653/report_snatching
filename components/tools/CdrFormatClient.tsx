@@ -131,7 +131,7 @@ export default function CdrFormatClient() {
       return;
     }
 
-    const requiredTokens = numbers.length * 5;
+    const requiredTokens = numbers.length * (useApiLookup ? 20 : 10);
 
     // 🚀 PROACTIVE TOKEN CHECK for both modes
     try {

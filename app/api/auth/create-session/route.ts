@@ -84,6 +84,7 @@ export async function POST(req: Request) {
       mobile: finalData.mobile || null,
       tokens: finalData.tokens || 0,
       eyeconTokens: finalData.eyeconTokens || 0,
+      faceSearchTokens: finalData.faceSearchTokens || 0,
       tokensExpiry: finalData.tokensExpiry || null,
       eyeconTokensExpiry: finalData.eyeconTokensExpiry || null,
       permissions: finalData.permissions || {} 
@@ -142,6 +143,7 @@ export async function GET() {
         ...decoded,
         tokens: liveData?.tokens || 0,
         eyeconTokens: liveData?.eyeconTokens || 0,
+        faceSearchTokens: liveData?.faceSearchTokens || 0,
         tokensExpiry: liveData?.tokensExpiry || null,
         eyeconTokensExpiry: liveData?.eyeconTokensExpiry || null,
         permissions: liveData?.permissions || {}
