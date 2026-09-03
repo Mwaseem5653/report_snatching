@@ -260,6 +260,13 @@ async function fetchEyeconInfo(number: string, code = "92") {
             }
         }
 
+        if (image_url) {
+            const lowerUrl = String(image_url).toLowerCase();
+            if (lowerUrl.startsWith("data:image/gif") || lowerUrl.includes("r0lgodlh")) {
+                image_url = "";
+            }
+        }
+
         return {
             name: finalName,
             image: image_url,

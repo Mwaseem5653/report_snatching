@@ -27,25 +27,39 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
     }
 
-    const results = await Promise.all(
-      numbers.map(async (num: string) => {
-        let cleanNum = num.trim().replace(/\D/g, "");
-        
-        // Standardize to 923XXXXXXXXX format
-        if (cleanNum.length >= 10) {
+    const results: { number: string; operator: string }[] = [];
+    const batchSize = 10;
+
+    for (let i = 0; i < numbers.length; i += batchSize) {
+      const batch = numbers.slice(i, i + batchSize);
+
+      const batchResults = await Promise.all(
+        batch.map(async (num: string) => {
+          let cleanNum = num.trim().replace(/\D/g, "");
+
+          // Standardize to 923XXXXXXXXX format
+          if (cleanNum.length >= 10) {
             cleanNum = "92" + cleanNum.slice(-10);
-        }
-        
-        try {
-          const res = await fetch(`https://easyload.com.pk/dingconnect.php?action=GetProviders&accountNumber=${cleanNum}`, { cache: "no-store" });
-          const data = await res.json();
-          const operator = data?.Items?.[0]?.Name || "Not Found";
-          return { number: num, operator };
-        } catch (e) {
-          return { number: num, operator: "API Error" };
-        }
-      })
-    );
+          }
+
+          try {
+            const res = await fetch(`https://easyload.com.pk/dingconnect.php?action=GetProviders&accountNumber=${cleanNum}`, { cache: "no-store" });
+            const data = await res.json();
+            const operator = data?.Items?.[0]?.Name || "Not Found";
+            return { number: num, operator };
+          } catch (e) {
+            return { number: num, operator: "API Error" };
+          }
+        })
+      );
+
+      results.push(...batchResults);
+
+      // ⏳ 1 second delay after each batch (except the last one)
+      if (i + batchSize < numbers.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
 
     return NextResponse.json({ success: true, results });
   } catch (error: any) {
