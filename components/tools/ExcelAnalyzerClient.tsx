@@ -39,6 +39,7 @@ export default function ExcelAnalyzerClient() {
   }, [liveLog]);
 
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [generatedFiles, setGeneratedFiles] = useState<string[]>([]);
   const [topN, setTopN] = useState(15);
   const [eyeconTopN, setEyeconTopN] = useState(5);
   const [enableLookup, setEnableLookup] = useState(false);
@@ -83,6 +84,7 @@ export default function ExcelAnalyzerClient() {
       }
       setFiles(selected);
       setResultUrl(null);
+      setGeneratedFiles([]);
       setCurrentStep(0);
       setTotalSteps(0);
       uploadedPublicIds.current.forEach(publicId => deleteFileFromStorage(publicId)); 
@@ -101,6 +103,7 @@ export default function ExcelAnalyzerClient() {
     }
     setFiles([]);
     setResultUrl(null);
+    setGeneratedFiles([]);
     setCurrentStep(0);
     setTotalSteps(0);
   };
@@ -131,12 +134,14 @@ export default function ExcelAnalyzerClient() {
 
     setLoading(true);
     setResultUrl(null);
+    setGeneratedFiles([]);
     setCurrentStep(0);
-    setTotalSteps(files.length); 
+    setTotalSteps(files.length);  // initial estimate, updated as splits are discovered
     
     addLog("INITIALIZING EXCEL ENGINE...");
     const zip = new JSZip();
     let processedCount = 0;
+    const allGeneratedFiles: string[] = [];
 
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -179,22 +184,32 @@ export default function ExcelAnalyzerClient() {
             let addedToZip = false;
             if (blob.type === "application/zip") {
                 const incomingZip = await JSZip.loadAsync(blob);
-                const firstFile = Object.values(incomingZip.files)[0];
-                if (firstFile) {
-                    const fileData = await firstFile.async("blob");
-                    zip.file(outFileName, fileData);
+                const innerFileNames = Object.keys(incomingZip.files);
+
+                if (innerFileNames.length > 0) {
+                    addLog(`SPLIT DETECTED: ${file.name} → ${innerFileNames.length} A-Party reports:`);
+                    // Expand totalSteps: replace this file's 1 slot with actual split count
+                    setTotalSteps(prev => prev - 1 + innerFileNames.length);
+                    for (const innerName of innerFileNames) {
+                        const fileData = await incomingZip.files[innerName].async("blob");
+                        zip.file(innerName, fileData);
+                        allGeneratedFiles.push(innerName);
+                        setCurrentStep(prev => prev + 1);
+                        addLog(`  ✓ ${innerName}`);
+                    }
                     addedToZip = true;
                 } else {
                     addLog(`ERROR: API returned an empty result for ${file.name}`);
                 }
             } else {
                 zip.file(outFileName, blob);
+                allGeneratedFiles.push(outFileName);
+                setCurrentStep(prev => prev + 1);
                 addedToZip = true;
             }
             
             if (addedToZip) {
                 processedCount++;
-                setCurrentStep(processedCount); 
                 addLog(`SUCCESS: ${file.name} ANALYZED AND BUNDLED.`);
                 window.dispatchEvent(new Event("refresh-session"));
             }
@@ -208,9 +223,9 @@ export default function ExcelAnalyzerClient() {
         const zipBlob = await zip.generateAsync({ type: "blob" });
         const url = window.URL.createObjectURL(zipBlob);
         setResultUrl(url);
-        setCurrentStep(files.length);
-        addLog("ALL TASKS COMPLETED. DOWNLOAD READY.");
-        toast.success(`Analysis Complete! Processed ${processedCount} files.`);
+        setGeneratedFiles(allGeneratedFiles);
+        addLog(`ALL TASKS COMPLETED. ${allGeneratedFiles.length} FILE(S) READY FOR DOWNLOAD.`);
+        toast.success(`Analysis Complete! ${allGeneratedFiles.length} report(s) generated.`);
     } else {
         addLog("ERROR: NO FILES WERE SUCCESSFULLY PROCESSED.");
         toast.error("Analysis Failed.");
@@ -319,7 +334,7 @@ export default function ExcelAnalyzerClient() {
                           <div className="bg-white h-full transition-all duration-1000 ease-in-out shadow-[0_0_10px_rgba(255,255,255,0.5)]" style={{ width: `${totalSteps > 0 ? (currentStep / totalSteps) * 100 : 0}%` }} />
                       </div>
                       <div className="flex justify-between text-[9px] font-bold uppercase tracking-wider text-white/60 mt-2">
-                          <span>{currentStep} of {totalSteps} Steps</span>
+                          <span>{currentStep} of {totalSteps} Reports</span>
                           {loading && <Loader2 size={12} className="animate-spin" />}
                       </div>
                   </CardContent>
@@ -441,12 +456,23 @@ export default function ExcelAnalyzerClient() {
                                 
                                 {resultUrl && (
                                     <div className="shrink-0 pt-4 space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                                        {/* Generated files list */}
+                                        {generatedFiles.length > 0 && (
+                                            <div className="max-h-40 overflow-y-auto space-y-1 custom-scrollbar">
+                                                {generatedFiles.map((fname, idx) => (
+                                                    <div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl">
+                                                        <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />
+                                                        <p className="text-[9px] font-black text-emerald-800 uppercase truncate tracking-tight">{fname}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                         <div className="p-4 bg-emerald-600 text-white rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg shadow-emerald-600/20">
                                             <div className="flex items-center gap-3 w-full md:w-auto">
                                                 <CheckCircle2 size={32} className="shrink-0 text-emerald-200" />
                                                 <div>
                                                     <p className="text-sm font-black uppercase tracking-tight leading-none">Process Complete</p>
-                                                    <p className="text-[10px] opacity-80 font-bold uppercase mt-1">Reports Analyzed & Combined</p>
+                                                    <p className="text-[10px] opacity-80 font-bold uppercase mt-1">{generatedFiles.length} Report{generatedFiles.length !== 1 ? "s" : ""} Ready</p>
                                                 </div>
                                             </div>
                                             <Button 

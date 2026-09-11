@@ -35,9 +35,52 @@ const TEMPLATES = [
 ];
 
 const OPERATOR_CODES: Record<string, string> = {
-    "30": "Jazz", "31": "Zong", "32": "Jazz", "33": "Ufone", 
-    "34": "Telenor", "35": "SCO", "36": "Jazz", "37": "Telenor"
+    // Jazz (Mobilink legacy)
+    "300": "Jazz", "301": "Jazz", "302": "Jazz", "303": "Jazz", "304": "Jazz",
+    "305": "Jazz", "306": "Jazz", "307": "Jazz", "308": "Jazz", "309": "Jazz",
+
+    // Zong
+    "310": "Zong", "311": "Zong", "312": "Zong", "313": "Zong", "314": "Zong",
+    "315": "Zong", "316": "Zong", "317": "Zong", "318": "Zong", "319": "Zong",
+
+    // Jazz (Warid legacy, ab Jazz mein merge ho chuka)
+    "320": "Jazz", "321": "Jazz", "322": "Jazz", "323": "Jazz", "324": "Jazz",
+    "325": "Jazz", "326": "Jazz", "327": "Jazz", "328": "Jazz", "329": "Jazz",
+
+    // Ufone
+    "330": "Ufone", "331": "Ufone", "332": "Ufone", "333": "Ufone", "334": "Ufone",
+    "335": "Ufone", "336": "Ufone", "337": "Ufone", "338": "Ufone", "339": "Ufone",
+
+    // Telenor
+    "340": "Telenor", "341": "Telenor", "342": "Telenor", "343": "Telenor", "344": "Telenor",
+    "345": "Telenor", "346": "Telenor", "347": "Telenor", "348": "Telenor", "349": "Telenor",
+
+    // SCO (AJK / Gilgit-Baltistan only)
+    "355": "SCO",
+
+    // Zong (extra block)
+    "370": "Zong", "371": "Zong",
 };
+
+/**
+ * Kisi bhi Pakistani mobile number se operator detect karo.
+ * Accepts: 03001234567, 3001234567, +923001234567, 00923001234567, 923001234567
+ */
+export function getOperator(rawNumber: string): string | null {
+    // sirf digits rakho
+    let num = rawNumber.replace(/\D/g, "");
+
+    // country code normalize karo -> local "03XXXXXXXXX" format mein le aao
+    if (num.startsWith("0092")) num = num.slice(4);
+    else if (num.startsWith("92")) num = num.slice(2);
+
+    if (num.startsWith("3") && num.length === 10) num = "0" + num; // "3001234567" -> "03001234567"
+
+    if (!/^03\d{9}$/.test(num)) return null; // invalid number
+
+    const prefix = num.slice(1, 4); // "0" ke baad 3 digits nikal lo, e.g. "300"
+    return OPERATOR_CODES[prefix] ?? null;
+}
 
 const formatTo92 = (num: string) => {
     let clean = num.replace(/\D/g, ""); 
@@ -118,7 +161,7 @@ export default function CdrFormatClient() {
       return numbers.map(num => {
           const formatted = formatTo92(num);
           const cleanForPrefix = formatted.startsWith("92") ? formatted.substring(2) : formatted;
-          const prefix = cleanForPrefix.substring(0, 2);
+          const prefix = cleanForPrefix.substring(0, 3);
           const operator = OPERATOR_CODES[prefix] || "Unknown";
           return { number: formatted, operator };
       });

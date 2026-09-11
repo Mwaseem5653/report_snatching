@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import JSZip from "jszip";
+import { Readable } from "stream";
 import { checkAndDeductTokens, checkAndDeductEyeconTokens } from "@/lib/tokenHelper";
 import { deleteFileFromStorageServer } from "@/lib/storageAdmin";
 import { logToolUsage } from "@/lib/usageLogger";
@@ -16,7 +17,6 @@ async function fetchSimInfo(phoneNumber: string) {
     const APP_KEY = process.env.SIMINFO;
 
     if (!APP_KEY) {
-        console.log("[Excel-Analyzer] ERROR: SIMINFO_KEY is not defined in environment variables.");
         return null;
     }
     
@@ -56,9 +56,7 @@ async function fetchSimInfo(phoneNumber: string) {
         const fullNum = num.startsWith('0') ? num : '0' + num;
         const NADRA_KEY = process.env.NADRA_API_KEY;
         
-        console.log(`[Nadra-Lookup] Searching for: ${fullNum}`);
         if (!NADRA_KEY) {
-            console.error("[Nadra-Lookup] ERROR: NADRA_API_KEY is missing in environment variables.");
             return null;
         }
         
@@ -67,21 +65,17 @@ async function fetchSimInfo(phoneNumber: string) {
             const res = await fetch(url);
             
             if (!res.ok) {
-                console.error(`[Nadra-Lookup] API Error: ${res.status} ${res.statusText}`);
                 return null;
             }
             
             const text = await res.text();
-            console.log(`[Nadra-Lookup] Raw Response: ${text.substring(0, 200)}`);
             
             try {
                 return JSON.parse(text);
             } catch (e) {
-                console.error("[Nadra-Lookup] JSON Parse Error");
                 return null;
             }
         } catch (e: any) {
-            console.error(`[Nadra-Lookup] Fetch Exception: ${e.message}`);
             return null;
         }
     };
@@ -92,11 +86,9 @@ async function fetchSimInfo(phoneNumber: string) {
 
         // --- NADRA FALLBACK ---
         if (!data || data.error || (typeof data === 'object' && Object.keys(data).length === 0)) {
-            console.log(`[Excel-Analyzer] Primary failed, trying Nadra for ${phoneNumber}`);
             data = await fetchFromNadra(phoneNumber);
 
             if (data && data.status === "success" && Array.isArray(data.data) && data.data.length > 0) {
-                console.log(`[Nadra-Lookup] Found ${data.data.length} records for ${phoneNumber} in Excel Analyzer Fallback`);
                 const first = data.data[0];
                 
                 const numbers = new Set<string>();
@@ -293,26 +285,32 @@ function normalizeNumber(num: any): string | null {
     }
 
     s = s.replace(/\D/g, ""); // Remove all non-digits
-    
-    // Handle Pakistan prefixes: 923... or 03... or 3...
+    if (!s) return null;
+
+    // Handle Pakistan prefixes: 923... or 03... (strip, then validate below —
+    // stripping alone no longer short-circuits acceptance of junk values)
     if (s.startsWith("923") && s.length === 12) {
-        return s.substring(2);
-    }
-    if (s.startsWith("03") && s.length === 11) {
-        return s.substring(1);
-    }
-    if (s.startsWith("3") && s.length === 10) {
-        return s;
-    }
-    
-    // Fallback for other formats that might still be valid 10-digit mobile numbers
-    if (s.length > 10) {
-        if (s.endsWith("3") && s.length === 11) return s.substring(1); // Handle weird leading char
-        const last10 = s.slice(-10);
-        if (last10.startsWith("3")) return last10;
+        s = s.substring(2);
+    } else if (s.startsWith("03") && s.length === 11) {
+        s = s.substring(1);
+    } else if (s.startsWith("92") && s.length >= 11 && s.length <= 12) {
+        s = s.substring(2);
+    } else if (s.startsWith("0") && s.length === 11) {
+        s = s.substring(1);
     }
 
-    return null; 
+    // 🚀 FIX: strict validation — ONLY accept real Pakistani mobile numbers
+    // (exactly 10 digits, starts with "3"). This rejects SMS/bank sender
+    // codes like 55666665 / 55464445, short-codes like 6255/3737/56789, and
+    // garbage/corrupted entries like 4245464945249 / 534942044147414.
+    // (Previously an 8-10 digit "landline" exception let sender-code style
+    // numbers like 55666665 slip through — removed since this CDR data
+    // doesn't contain genuine landlines.)
+    if (s.length === 10 && s.startsWith("3")) {
+        return s;
+    }
+
+    return null;
 }
 
 // --- Helper: Exact Call Type Matching ---
@@ -418,8 +416,6 @@ function makeUniqueKeys(headers: string[]) {
     });
 }
 
-import { Readable } from "stream";
-
 async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages, fileName } = options;
     
@@ -466,10 +462,13 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         rawRows.push(processedRow);
     });
 
-    if (rawRows.length === 0) return null;
+    if (rawRows.length === 0) {
+        return null;
+    }
 
     const { index: headerIndex, headers } = findTableHeaders(rawRows);
     const dataRows = rawRows.slice(headerIndex + 1);
+
     
     const bCol = findColumn(headers, [
         "B Number", "BNUMBER", "b number", "b party", "b_party", "BParty", 
@@ -479,8 +478,9 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         "Mobile", "Mobile Number", "Phone", "Phone Number", "Contact"
     ]);
 
-    const aCol = findColumn(headers, ["MSISDN", "A Number", "ANUMBER", "a party", "a_party", "AParty", "Subscriber Number", "ORIGINATING_NUMBER", "OWNER_NUMBER", "Subscriber No", "Originating No", "A-Number", "A_Number", "A_NUM", "ANUM", "Calling Number", "Calling No"]);
-    const dateCol = findColumn(headers, ["CALL_START_DT_TM", "Start Date", "Datetime", "Date", "STRT_TM", "Start Time", "Time"]);
+    const aCol = findColumn(headers, ["A Number", "ANUMBER", "a party", "a_party", "AParty", "MSISDN", "Subscriber Number", "ORIGINATING_NUMBER", "OWNER_NUMBER", "Subscriber No", "Originating No", "A-Number", "A_Number", "A_NUM", "ANUM", "Calling Number", "Calling No"]);
+    const dateCol = findColumn(headers, ["Start Time", "CALL_START_DT_TM", "Start Date", "Datetime", "Date", "STRT_TM", "Time"]);
+    
     
     // 🚀 Detect Date Format Hint
     let formatHint: "DMY" | "MDY" = (dateCol?.toLowerCase().trim() === "strt_tm") ? "MDY" : "DMY";
@@ -505,7 +505,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const imeiCol = findColumn(headers, ["IMEI", "imei", "Imei number", "Device IMEI"]);
     const latCol = findColumn(headers, ["Latitude", "Lat", "LATITUDE", "CELL_LAT", "SITE_LAT", "X_COORD", "GPS_LAT", "LATITUTDE", "LATITUD", "LATITIDE"]);
     const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LNG", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON", "LONGITUTDE", "LONGITUD", "LONGITIDE", "LANGUTIDE", "LANGITUDE"]);
-    const lacCol = findColumn(headers, ["LAC_ID", "LAC", "Lac_Id", "lac"]);
+    const lacCol = findColumn(headers, ["LAC_ID", "LAC", "Lac_Id", "lac","Cell Sector"]);
     const cellCol = findColumn(headers, ["Cell_Id", "CELL_ID", "Cell id", "Cell_SITE_ID"]);
     const cellidSpecialCol = findColumn(headers, ["cellid", "cell_id_special", "cellidspecial"]);
 
@@ -555,36 +555,120 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         return obj;
     }).sort((a, b) => a._dateObj.getTime() - b._dateObj.getTime());
 
+    // 🚀 Check unique A-Party numbers to see if split is needed
+    const aPartySet = new Set<string>();
+    jsonData.forEach(row => {
+        const rawA = aCol ? row[aCol] : null;
+        const cleanA = normalizeNumber(rawA);
+        if (cleanA) aPartySet.add(cleanA);
+    });
+
+    // Create formatted headers by inserting LAC/CELL after cellidSpecialCol
+    const formattedHeaders = [...headers];
+    if (cellidSpecialCol) {
+        const cellidIdx = formattedHeaders.indexOf(cellidSpecialCol);
+        if (cellidIdx !== -1) {
+            const toInsert = [];
+            if (!headers.includes("LAC_ID")) toInsert.push("LAC_ID");
+            if (!headers.includes("CELL_ID")) toInsert.push("CELL_ID");
+            if (toInsert.length > 0) {
+                formattedHeaders.splice(cellidIdx + 1, 0, ...toInsert);
+            }
+        }
+    }
+    const uniqueKeys = makeUniqueKeys(formattedHeaders);
+
+    const colRefs = {
+        aCol, bCol, dateCol, typeCol, directionCol, addressCol, imeiCol,
+        latCol, lonCol, lacCol, cellCol, cellidSpecialCol,
+        orgNumCol, dialedNumCol, formatHint, formattedHeaders, uniqueKeys,
+    };
+
+    if (aPartySet.size > 1) {
+        // Multiple A-Party numbers detected! Split into individual reports per A-Party number
+        const splitZip = new JSZip();
+        const cleanBaseName = fileName ? fileName.split('.').slice(0, -1).join('.') : "CDR";
+        const usedNames = new Set<string>(); // 🚀 DEBUG/SAFETY: catch filename collisions
+
+
+        let splitIdx = 0;
+        for (const num of Array.from(aPartySet)) {
+            splitIdx++;
+            const filteredData = jsonData.filter(row => {
+                const rawA = aCol ? row[aCol] : null;
+                const cleanA = normalizeNumber(rawA);
+                return cleanA === num;
+            });
+
+
+            if (filteredData.length > 0) {
+                const numBuffer = await buildWorkbookFromData(filteredData, headers, options, colRefs);
+                if (numBuffer) {
+                    let entryName = `${num}_${cleanBaseName}_Analyzed.xlsx`;
+                    // 🚀 SAFETY: if this exact filename was already used (e.g. normalization
+                    // collision), make it unique instead of silently overwriting an earlier entry.
+                    if (usedNames.has(entryName)) {
+                        entryName = `${num}_${cleanBaseName}_${splitIdx}_Analyzed.xlsx`;
+                    }
+                    usedNames.add(entryName);
+                    splitZip.file(entryName, numBuffer);
+                } else {
+                }
+            } else {
+            }
+        }
+
+
+        const zipArrayBuffer = await splitZip.generateAsync({ type: "arraybuffer" });
+        return { buffer: zipArrayBuffer, isSplitZip: true };
+    }
+
+    const singleWbBuffer = await buildWorkbookFromData(jsonData, headers, options, colRefs);
+    return singleWbBuffer ? { buffer: singleWbBuffer, isSplitZip: false } : null;
+}
+
+// --- Helper: Build analyzed workbook from pre-parsed jsonData ---
+async function buildWorkbookFromData(
+    jsonData: any[],
+    headers: string[],
+    options: any,
+    colRefs: any
+) {
+    const {
+        topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages,
+    } = options;
+    const {
+        aCol, bCol, dateCol, typeCol, directionCol, addressCol, imeiCol,
+        latCol, lonCol, lacCol, cellCol, cellidSpecialCol,
+        orgNumCol, dialedNumCol, formatHint, formattedHeaders, uniqueKeys,
+    } = colRefs;
+
     const mobileSummaryMap = new Map<string, any>();
     const addressSummaryMap = new Map<string, any>();
     const onlyAddressSummaryMap = new Map<string, any>();
     const imeiSummaryMap = new Map<string, any>();
     const callLogMap = new Map<string, any>();
-    
-    // --- Intelligence Tracking ---
     const nightActivity: any[] = [];
     const mainImeiHistory = new Set<string>();
     const disposableCheck = new Map<string, number>();
     const aPartyNumber = new Set<string>();
     const hourlyActivity = new Array(24).fill(0);
-    const dailyActivity = new Array(7).fill(0); // 0=Sun, 1=Mon...
-    const locationTimeFreq = new Map<string, number>(); // Key: "Day-Hour-Location"
+    const dailyActivity = new Array(7).fill(0);
+    const locationTimeFreq = new Map<string, number>();
     const uniqueDates = new Set<string>();
-    const dailyMovementMap = new Map<string, any[]>(); // Key: "Date", Value: Array of sequential unique points
+    const dailyMovementMap = new Map<string, any[]>();
 
     jsonData.forEach((row) => {
         const rawA = aCol ? row[aCol] : null;
         const cleanA = normalizeNumber(rawA);
-        
+
         let finalB: string | null = null;
         if (orgNumCol && dialedNumCol) {
             const cleanOrg = normalizeNumber(row[orgNumCol]);
             const cleanDialed = normalizeNumber(row[dialedNumCol]);
-            
-            // 🚀 Special Case: If MSISDN and Dialed Num are same, try to find an alternative B-Party
             if (cleanOrg && cleanOrg !== cleanA) finalB = cleanOrg;
             else if (cleanDialed && cleanDialed !== cleanA) finalB = cleanDialed;
-            else if (cleanDialed) finalB = cleanDialed; // Fallback to Dialed Num even if same as A
+            else if (cleanDialed) finalB = cleanDialed;
         } else if (bCol) {
             finalB = normalizeNumber(row[bCol]);
         }
@@ -595,20 +679,19 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         const rawImei = imeiCol ? String(row[imeiCol] || "").trim() : null;
         const dateObj = row._dateObj;
 
-        // 🚀 PERMANENT SOLUTION: Extract lat/lon from SiteLocation if format matches
         if (addressCol && addressCol.toLowerCase() === 'sitelocation' && rawAddr.includes('|')) {
             const parts = rawAddr.split('|');
             if (parts.length === 3) {
                 const potentialLat = parseFloat(parts[1]);
                 const potentialLon = parseFloat(parts[2]);
                 if (!isNaN(potentialLat) && !isNaN(potentialLon)) {
-                    rawAddr = parts[0].trim(); // Use cleaned address
-                    rawLat = potentialLat;     // Overwrite lat/lon variables for this row
+                    rawAddr = parts[0].trim();
+                    rawLat = potentialLat;
                     rawLon = potentialLon;
                 }
             }
         }
-        
+
         if (cleanA) aPartyNumber.add(cleanA);
         if (rawImei && rawImei !== "None" && rawImei !== "") mainImeiHistory.add(rawImei);
 
@@ -617,25 +700,17 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             hourlyActivity[dateObj.getHours()]++;
             dailyActivity[dateObj.getDay()]++;
             uniqueDates.add(dStr);
-            
+
             const hasCoords = (rawLat !== null && rawLat !== undefined && rawLat !== "");
             const hasAddr = rawAddr && rawAddr !== "None" && rawAddr !== "";
-            
             if (hasAddr || hasCoords) {
                 const locationKey = rawAddr || `${rawLat},${rawLon}`;
                 const key = `${dateObj.getDay()}-${dateObj.getHours()}-${locationKey}`;
                 locationTimeFreq.set(key, (locationTimeFreq.get(key) || 0) + 1);
-
                 const currentMovements = dailyMovementMap.get(dStr) || [];
                 const lastMove = currentMovements[currentMovements.length - 1];
-                
                 if (!lastMove || lastMove.addr !== rawAddr || lastMove.lat !== rawLat || lastMove.lon !== rawLon) {
-                    currentMovements.push({
-                        time: dateObj.toISOString().substring(11, 19),
-                        addr: rawAddr || `Coords: ${rawLat}, ${rawLon}`,
-                        lat: rawLat,
-                        lon: rawLon
-                    });
+                    currentMovements.push({ time: dateObj.toISOString().substring(11, 19), addr: rawAddr || `Coords: ${rawLat}, ${rawLon}`, lat: rawLat, lon: rawLon });
                     dailyMovementMap.set(dStr, currentMovements);
                 }
             }
@@ -662,33 +737,25 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             callLogMap.set(finalB, log);
         }
 
-        // --- Improved Address/Location Summary Logic ---
         const lacVal = row._extractedLac !== undefined ? row._extractedLac : (lacCol ? row[lacCol] : null);
         const cellVal = row._extractedCell !== undefined ? row._extractedCell : (cellCol ? row[cellCol] : null);
-        
-        // Grouping key: Strictly Cell ID if available, otherwise fallback to Address
         const groupKey = cellVal ? `CELL-${cellVal}` : (rawAddr || null);
 
         if (groupKey && groupKey !== "None" && groupKey !== "") {
             const stats = addressSummaryMap.get(groupKey) || { count: 0, start: dateObj, end: dateObj, lat: null, lon: null, lac: lacVal, cell: cellVal, addr: rawAddr };
             stats.count++;
-            
             if (dateObj.getTime() > 0) {
                 if (stats.start.getTime() === 0 || dateObj < stats.start) stats.start = dateObj;
                 if (dateObj > stats.end) stats.end = dateObj;
             }
-            
-            // For a single Cell ID, preserve the first valid LAC, Lat, Lon, and Address encountered
             if (stats.lat === null && rawLat !== null && rawLat !== '') stats.lat = rawLat;
             if (stats.lon === null && rawLon !== null && rawLon !== '') stats.lon = rawLon;
             if (!stats.addr && rawAddr && rawAddr !== "None") stats.addr = rawAddr;
             if (!stats.lac && lacVal) stats.lac = lacVal;
             if (!stats.cell && cellVal) stats.cell = cellVal;
-
             addressSummaryMap.set(groupKey, stats);
         }
 
-        // --- Strictly Address-Based Summary (For OnlyAddresses Sheet) ---
         if (rawAddr && rawAddr !== "None" && rawAddr !== "") {
             const stats = onlyAddressSummaryMap.get(rawAddr) || { count: 0, start: dateObj, end: dateObj, lat: null, lon: null, lac: lacVal, cell: cellVal };
             stats.count++;
@@ -714,13 +781,16 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         }
     });
 
-    if (mobileSummaryMap.size === 0 && addressSummaryMap.size === 0 && imeiSummaryMap.size === 0) return null;
+
+    if (mobileSummaryMap.size === 0 && addressSummaryMap.size === 0 && imeiSummaryMap.size === 0) {
+        return null;
+    }
 
     const mobileSummary = Array.from(mobileSummaryMap.entries()).map(([num, s]) => ({
-        "Mobile Number": num, "Count": s.count, 
+        "Mobile Number": num, "Count": s.count,
         "Starting Date": s.start.getTime() > 0 ? s.start : "N/A",
         "Ending Date": s.end.getTime() > 0 ? s.end : "N/A",
-        "Eyecon Name": "", "Name": "", "CNIC": "", "Address": "", 
+        "Eyecon Name": "", "Name": "", "CNIC": "", "Address": "",
         "Other Names": "", "Other Addresses": "", "Other Numbers": ""
     })).sort((a, b) => b.Count - a.Count);
 
@@ -735,36 +805,26 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
                 if (data) {
                     rec["Name"] = data.name; rec["CNIC"] = " " + data.cnic; rec["Address"] = data.address;
                     rec["Other Names"] = data.all_names; rec["Other Addresses"] = data.all_addresses; rec["Other Numbers"] = data.all_numbers;
-                    
-                    cache.set(rec["Mobile Number"], { 
-                        ...cache.get(rec["Mobile Number"]), 
-                        name: data.name, cnic: data.cnic, address: data.address,
-                        other_names: data.all_names, other_addresses: data.all_addresses, other_numbers: data.all_numbers
-                    });
+                    cache.set(rec["Mobile Number"], { ...cache.get(rec["Mobile Number"]), name: data.name, cnic: data.cnic, address: data.address, other_names: data.all_names, other_addresses: data.all_addresses, other_numbers: data.all_numbers });
                 } else {
                     rec["Name"] = " "; rec["CNIC"] = " "; rec["Address"] = " ";
                     rec["Other Names"] = " "; rec["Other Addresses"] = " "; rec["Other Numbers"] = " ";
                     cache.set(rec["Mobile Number"], { ...cache.get(rec["Mobile Number"]), name: " ", cnic: " ", address: " " });
                 }
             }));
-            // Very short delay to avoid immediate API blocking
-            if (i + 10 < topSim.length) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+            if (i + 10 < topSim.length) await new Promise(resolve => setTimeout(resolve, 100));
         }
     }
     if (enableEyecon) {
         const topEye = mobileSummary.slice(0, eyeconTopN);
-        const eyeconBatchSize = 5; // To avoid overwhelming the API
+        const eyeconBatchSize = 5;
         for (let i = 0; i < topEye.length; i += eyeconBatchSize) {
             const batch = topEye.slice(i, i + eyeconBatchSize);
             await Promise.all(batch.map(async (rec) => {
                 const eyeData = await fetchEyeconInfo(rec["Mobile Number"]);
                 if (eyeData) {
                     rec["Eyecon Name"] = eyeData.name;
-                    cache.set(rec["Mobile Number"], { 
-                        ...cache.get(rec["Mobile Number"]), eye: eyeData.name, eyeImage: eyeData.image, eyeFb: eyeData.facebook
-                    });
+                    cache.set(rec["Mobile Number"], { ...cache.get(rec["Mobile Number"]), eye: eyeData.name, eyeImage: eyeData.image, eyeFb: eyeData.facebook });
                 } else {
                     rec["Eyecon Name"] = " ";
                 }
@@ -774,39 +834,18 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     const outWb = new ExcelJS.Workbook();
     const sRaw = outWb.addWorksheet("Formatted Data");
-    
-    // Create formatted headers by inserting LAC/CELL after cellidSpecialCol
-    const formattedHeaders = [...headers];
-    if (cellidSpecialCol) {
-        const cellidIdx = formattedHeaders.indexOf(cellidSpecialCol);
-        if (cellidIdx !== -1) {
-            // Insert after cellidSpecialCol (order: cellid, LAC_ID, CELL_ID)
-            const toInsert = [];
-            if (!headers.includes("LAC_ID")) toInsert.push("LAC_ID");
-            if (!headers.includes("CELL_ID")) toInsert.push("CELL_ID");
-            
-            if (toInsert.length > 0) {
-                formattedHeaders.splice(cellidIdx + 1, 0, ...toInsert);
-            }
-        }
-    }
-
-    // 🚀 CRITICAL FIX: DEDUPLICATE KEYS AND CLEAN STRINGS
-    const uniqueKeys = makeUniqueKeys(formattedHeaders);
-    sRaw.columns = formattedHeaders.map((h, i) => ({ header: String(h || `Col_${i}`), key: uniqueKeys[i], width: 15 }));
+    sRaw.columns = formattedHeaders.map((h: string, i: number) => ({ header: String(h || `Col_${i}`), key: uniqueKeys[i], width: 15 }));
 
     jsonData.forEach(row => {
         const cleanRow: any = {};
-        formattedHeaders.forEach((h, i) => {
+        formattedHeaders.forEach((h: string, i: number) => {
             const key = uniqueKeys[i];
             let val: any = null;
-
             if (h === "LAC_ID" && row._extractedLac !== undefined) {
                 val = row._extractedLac;
             } else if (h === "CELL_ID" && row._extractedCell !== undefined) {
                 val = row._extractedCell;
             } else if (h === dateCol) {
-                // 🚀 If it's the date column, use the parsed Date object
                 val = row._dateObj && row._dateObj.getTime() > 0 ? row._dateObj : row._rawDateValue;
             } else {
                 val = row[h];
@@ -821,7 +860,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         sRaw.addRow(cleanRow);
     });
 
-    // 🚀 Apply Date Formatting to the Formatted Data sheet's date column
     if (dateCol) {
         const dateHeaderIdx = formattedHeaders.indexOf(dateCol);
         if (dateHeaderIdx !== -1) {
@@ -834,7 +872,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     const s1 = outWb.addWorksheet("Mobile Numbers");
     const s1Cols: any[] = [{ header: "Mobile Number", key: "Mobile Number", width: 15 }];
-    
     if (enableEyecon) {
         s1Cols.push({ header: "Eyecon Name", key: "Eyecon Name", width: 40 });
         if (includeImages === true) {
@@ -842,7 +879,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             s1Cols.push({ header: "Facebook Link", key: "eyeFb", width: 15 });
         }
     }
-
     if (enableLookup) {
         s1Cols.push(
             { header: "Name", key: "Name", width: 25 },
@@ -853,7 +889,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             { header: "Other Numbers", key: "Other Numbers", width: 50 }
         );
     }
-    
     s1Cols.push(
         { header: "Start", key: "Starting Date", width: 20 },
         { header: "End", key: "Ending Date", width: 20 },
@@ -865,7 +900,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     const safeLink = (url: string) => {
         if (!url || typeof url !== "string") return "";
-        // Excel breaks on extremely long URLs or Data URIs in hyperlinks
         if (url.startsWith("data:") || url.length > 2000) return "Image/Link Attached";
         return { text: "Open Link", hyperlink: url };
     };
@@ -894,15 +928,11 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const logs = Array.from(callLogMap.entries()).map(([num, log]) => {
         const c = cache.get(num) || null;
         const ms = mobileSummaryMap.get(num);
-        const logEntry: any = { 
-            num, 
-            start: ms.start.getTime() > 0 ? ms.start : "N/A", 
-            end: ms.end.getTime() > 0 ? ms.end : "N/A", 
-            name: cleanString(c ? (c.name || " ") : ""), 
-            eye: cleanString(c ? (c.eye || " ") : ""), 
-            cnic: cleanString(c ? (c.cnic ? " " + c.cnic : " ") : ""), 
-            addr: cleanString(c ? (c.address || " ") : ""), 
-            inS: log.inSms, outS: log.outSms, inC: log.inCall, outC: log.outCall, total: ms.count 
+        const logEntry: any = {
+            num, start: ms.start.getTime() > 0 ? ms.start : "N/A", end: ms.end.getTime() > 0 ? ms.end : "N/A",
+            name: cleanString(c ? (c.name || " ") : ""), eye: cleanString(c ? (c.eye || " ") : ""),
+            cnic: cleanString(c ? (c.cnic ? " " + c.cnic : " ") : ""), addr: cleanString(c ? (c.address || " ") : ""),
+            inS: log.inSms, outS: log.outSms, inC: log.inCall, outC: log.outCall, total: ms.count
         };
         if (enableEyecon && includeImages === true) {
             logEntry.eyeImage = safeLink(c?.eyeImage);
@@ -913,7 +943,6 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
 
     const s2Cols: any[] = [];
     s2Cols.push({ header: "B-Party", key: "num", width: 15 });
-
     if (enableEyecon) {
         s2Cols.push({ header: "Eyecon", key: "eye", width: 40 });
         if (includeImages === true) {
@@ -921,16 +950,13 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             s2Cols.push({ header: "Facebook Link", key: "eyeFb", width: 15 });
         }
     }
-
     if (enableLookup) {
         s2Cols.push({ header: "Name", key: "name", width: 25 });
         s2Cols.push({ header: "CNIC", key: "cnic", width: 18 });
         s2Cols.push({ header: "Address", key: "addr", width: 45 });
     }
-
     s2Cols.push({ header: "Start Date", key: "start", width: 20 });
     s2Cols.push({ header: "End Date", key: "end", width: 20 });
-
     s2Cols.push(
         { header: "In-SMS", key: "inS", width: 10 },
         { header: "Out-SMS", key: "outS", width: 10 },
@@ -946,70 +972,49 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     if (addressSummaryMap.size > 0) {
         const s3 = outWb.addWorksheet("Addresses");
         s3.columns = [
-            { header: "CELL_ID", key: "cell", width: 12 }, 
-            { header: "LAC_ID", key: "lac", width: 12 }, 
-            { header: "Count", key: "count", width: 10 }, 
-            { header: "Site Address", key: "addr", width: 60 }, 
-            { header: "Latitude", key: "lat", width: 15 }, 
-            { header: "Longitude", key: "lon", width: 15 }, 
-            { header: "Date From", key: "start", width: 20 }, 
-            { header: "Date To", key: "end", width: 20 }
+            { header: "CELL_ID", key: "cell", width: 12 }, { header: "LAC_ID", key: "lac", width: 12 },
+            { header: "Count", key: "count", width: 10 }, { header: "Site Address", key: "addr", width: 60 },
+            { header: "Latitude", key: "lat", width: 15 }, { header: "Longitude", key: "lon", width: 15 },
+            { header: "Date From", key: "start", width: 20 }, { header: "Date To", key: "end", width: 20 }
         ];
         s3.getColumn("start").numFmt = "yyyy-mm-dd hh:mm:ss";
         s3.getColumn("end").numFmt = "yyyy-mm-dd hh:mm:ss";
-        s3.addRows(Array.from(addressSummaryMap.entries()).map(([k, s]) => ({ 
-            addr: cleanString(s.addr) || "N/A", 
-            count: s.count, 
-            lac: s.lac,
-            cell: s.cell,
-            lat: s.lat, 
-            lon: s.lon, 
-            start: s.start.getTime() > 0 ? s.start : "N/A", 
-            end: s.end.getTime() > 0 ? s.end : "N/A" 
+        s3.addRows(Array.from(addressSummaryMap.entries()).map(([k, s]) => ({
+            addr: cleanString(s.addr) || "N/A", count: s.count, lac: s.lac, cell: s.cell,
+            lat: s.lat, lon: s.lon, start: s.start.getTime() > 0 ? s.start : "N/A", end: s.end.getTime() > 0 ? s.end : "N/A"
         })).sort((a, b) => b.count - a.count));
     }
 
     if (onlyAddressSummaryMap.size > 0) {
         const s3b = outWb.addWorksheet("OnlyAddresses");
         s3b.columns = [
-            { header: "Site Address", key: "addr", width: 60 }, 
-            { header: "Count", key: "count", width: 10 }, 
-            { header: "LAC_ID", key: "lac", width: 12 }, 
-            { header: "CELL_ID", key: "cell", width: 12 }, 
-            { header: "Latitude", key: "lat", width: 15 }, 
-            { header: "Longitude", key: "lon", width: 15 }, 
-            { header: "Start", key: "start", width: 20 }, 
-            { header: "End", key: "end", width: 20 }
+            { header: "Site Address", key: "addr", width: 60 }, { header: "Count", key: "count", width: 10 },
+            { header: "LAC_ID", key: "lac", width: 12 }, { header: "CELL_ID", key: "cell", width: 12 },
+            { header: "Latitude", key: "lat", width: 15 }, { header: "Longitude", key: "lon", width: 15 },
+            { header: "Start", key: "start", width: 20 }, { header: "End", key: "end", width: 20 }
         ];
         s3b.getColumn("start").numFmt = "yyyy-mm-dd hh:mm:ss";
         s3b.getColumn("end").numFmt = "yyyy-mm-dd hh:mm:ss";
-        s3b.addRows(Array.from(onlyAddressSummaryMap.entries()).map(([addr, s]) => ({ 
-            addr: cleanString(addr), 
-            count: s.count, 
-            lac: s.lac,
-            cell: s.cell,
-            lat: s.lat, 
-            lon: s.lon, 
-            start: s.start.getTime() > 0 ? s.start : "N/A", 
-            end: s.end.getTime() > 0 ? s.end : "N/A" 
+        s3b.addRows(Array.from(onlyAddressSummaryMap.entries()).map(([addr, s]) => ({
+            addr: cleanString(addr), count: s.count, lac: s.lac, cell: s.cell,
+            lat: s.lat, lon: s.lon, start: s.start.getTime() > 0 ? s.start : "N/A", end: s.end.getTime() > 0 ? s.end : "N/A"
         })).sort((a, b) => b.count - a.count));
     }
+
     if (imeiSummaryMap.size > 0) {
         const s4 = outWb.addWorksheet("IMEI Numbers");
         s4.columns = [{ header: "IMEI Number", key: "imei", width: 25 }, { header: "Count", key: "count", width: 10 }, { header: "Start", key: "start", width: 20 }, { header: "End", key: "end", width: 20 }];
         s4.getColumn("start").numFmt = "yyyy-mm-dd hh:mm:ss";
         s4.getColumn("end").numFmt = "yyyy-mm-dd hh:mm:ss";
-        s4.addRows(Array.from(imeiSummaryMap.entries()).map(([i, s]) => ({ 
-            imei: " " + i, 
-            count: s.count, 
-            start: s.start.getTime() > 0 ? s.start : "N/A", 
-            end: s.end.getTime() > 0 ? s.end : "N/A" 
+        s4.addRows(Array.from(imeiSummaryMap.entries()).map(([i, s]) => ({
+            imei: " " + i, count: s.count,
+            start: s.start.getTime() > 0 ? s.start : "N/A", end: s.end.getTime() > 0 ? s.end : "N/A"
         })).sort((a, b) => b.count - a.count));
     }
 
     if (enableIntel) {
         const sIntel = outWb.addWorksheet("Intelligence Report");
-        sIntel.columns = [ { key: "label", width: 35 }, { key: "v1", width: 40 }, { key: "v2", width: 25 }, { key: "v3", width: 50 } ];
+        sIntel.columns = [{ key: "label", width: 35 }, { key: "v1", width: 40 }, { key: "v2", width: 25 }, { key: "v3", width: 50 }];
         const addHeader = (text: string, color: string = "FF1E3A8A") => {
             const row = sIntel.addRow([cleanString(text).toUpperCase()]);
             row.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
@@ -1041,9 +1046,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             const bar = "█".repeat(Math.round(count / (totalCalls || 1) * 50));
             const hStr = `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`;
             const row = sIntel.addRow([hStr, count, pct + "%", bar]);
-            if (count > 0 && count === maxActivity) {
-                row.font = { color: { argb: "FFFF0000" }, bold: true };
-            }
+            if (count > 0 && count === maxActivity) row.font = { color: { argb: "FFFF0000" }, bold: true };
         });
         sIntel.addRow([]);
         addHeader("LOCATION-TIME CORRELATION (PREDICTIVE ANALYSIS)", "FF1E3A8A");
@@ -1054,9 +1057,7 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             const [day, hour, ...locArr] = key.split("-");
             const loc = locArr.join("-");
             const groupKey = `${day}-${hour}`;
-            if (!groupMap.has(groupKey) || count > groupMap.get(groupKey)!.count) {
-                groupMap.set(groupKey, { loc, count });
-            }
+            if (!groupMap.has(groupKey) || count > groupMap.get(groupKey)!.count) groupMap.set(groupKey, { loc, count });
         });
         const sortedGroups = Array.from(groupMap.entries()).sort((a, b) => b[1].count - a[1].count).slice(0, 15);
         sortedGroups.forEach(([key, val]) => {
@@ -1157,6 +1158,10 @@ export async function POST(req: NextRequest) {
         const zip = new JSZip();
         let singleFileBuffer: any = null;
         let singleFileName = "";
+        // 🚀 FIX: track whether any file (even a single upload) got split into
+        // multiple A-Party reports, so the "single file" fast-path below doesn't
+        // incorrectly assume no data was extracted.
+        let anySplitOccurred = false;
 
         for (let i = 0; i < cloudinaryUrls.length; i++) {
             const url = cloudinaryUrls[i];
@@ -1166,16 +1171,30 @@ export async function POST(req: NextRequest) {
             if (!res.ok) throw new Error(`Failed to download ${fileName} from Cloudinary`);
             const buffer = await res.arrayBuffer();
             
-            const reportBuffer = await processSingleFile(buffer, { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages, fileName });
-            if (reportBuffer) {
-                const outFileName = fileName.split('.').slice(0, -1).join('.') + "_Analyzed.xlsx";
-                zip.file(outFileName, reportBuffer);
-                if (cloudinaryUrls.length === 1) {
-                    singleFileBuffer = reportBuffer;
-                    singleFileName = outFileName;
+            const result = await processSingleFile(buffer, { topN, eyeconTopN, enableLookup, enableEyecon, enableIntel, includeImages, fileName });
+            if (result && result.buffer) {
+                if (result.isSplitZip) {
+                    anySplitOccurred = true; // 🚀 Mark that multiple A-Party numbers were split into individual files
+                    const innerZip = await JSZip.loadAsync(result.buffer);
+                    const innerFileNames = Object.keys(innerZip.files);
+                    for (const innerFileName of innerFileNames) {
+                        const innerContent = await innerZip.files[innerFileName].async("arraybuffer");
+                        if (zip.files[innerFileName]) {
+                        }
+                        zip.file(innerFileName, innerContent);
+                    }
+                } else {
+                    const outFileName = fileName.split('.').slice(0, -1).join('.') + "_Analyzed.xlsx";
+                    zip.file(outFileName, result.buffer);
+                    if (cloudinaryUrls.length === 1) {
+                        singleFileBuffer = result.buffer;
+                        singleFileName = outFileName;
+                    }
                 }
             }
         }
+
+        // 🚀 DEBUG: final tally right before we decide single-file vs zip response
 
         // 🚀 LOG USAGE ONLY ON SUCCESS
         await logToolUsage(decoded, "Excel Analyzer", { 
@@ -1184,7 +1203,11 @@ export async function POST(req: NextRequest) {
             eyeconCount: enableEyecon ? (eyeconTopN * cloudinaryUrls.length) : 0
         });
 
-        if (cloudinaryUrls.length === 1) {
+        // 🚀 FIX: only take the "single xlsx file" fast-path when the single
+        // uploaded file did NOT get split into multiple A-Party reports.
+        // If it did split, we fall through to the ZIP response below, which
+        // already contains all the split analyzed files.
+        if (cloudinaryUrls.length === 1 && !anySplitOccurred) {
             if (singleFileBuffer) {
                 return new NextResponse(singleFileBuffer as any, {
                     status: 200,
@@ -1212,7 +1235,6 @@ export async function POST(req: NextRequest) {
         });
 
     } catch (error: any) {
-        console.error("Analysis Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

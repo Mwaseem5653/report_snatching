@@ -276,76 +276,87 @@ export async function POST(req: NextRequest) {
         }
 
         const outWb = new ExcelJS.Workbook();
-        const wsOut = outWb.addWorksheet("Geo_Fencing_Results");
-
+        
+        // --- Sheet 1: Result Summary ---
+        const wsSummary = outWb.addWorksheet("Result Summary");
         const summaryHeaders = [
             'A Number', 'A Date', 'A First Call', 'A Last Call', 'A Count',
             'B Number', 'B Date', 'B First Call', 'B Last Call', 'B Count'
         ];
+        wsSummary.columns = summaryHeaders.map(h => ({ header: h, key: h, width: 25 }));
 
-        const fullDataCols = headers.map(h => ({ header: h, key: `RAW_${h}`, width: 25 }));
-        const summaryCols = summaryHeaders.map(h => ({ header: h, key: `SUM_${h}`, width: 25 }));
-
-        wsOut.columns = [...fullDataCols, ...summaryCols];
-
-        const maxRows = Math.max(fullMatchedOriginals.length, results.length);
-        for (let i = 0; i < maxRows; i++) {
+        results.forEach(resRow => {
             const rowData: any = {};
-            if (i < fullMatchedOriginals.length) {
-                headers.forEach((h, idx) => {
-                    let val = fullMatchedOriginals[i][idx];
-                    const headerUpper = h.toUpperCase();
-                    const isDateOrTimeCol = headerUpper.includes('TIME') || headerUpper.includes('DATE') || headerUpper.includes('STRT_TM') || headerUpper.includes('DATETIME');
+            summaryHeaders.forEach(h => {
+                let val = resRow[h];
+                rowData[h] = val !== null && val !== undefined ? " " + String(val) : "";
+            });
+            wsSummary.addRow(rowData);
+        });
 
-                    if (val instanceof Date) {
-                        val = standardizeDateTime(val);
-                    } else if (isDateOrTimeCol && (typeof val === 'string' || typeof val === 'number')) {
-                        const parsed = parseDateTime(val);
-                        if (parsed) val = standardizeDateTime(parsed);
-                    }
-                    rowData[`RAW_${h}`] = val !== null && val !== undefined ? " " + String(val) : "";
-                });
-            }
-            if (i < results.length) {
-                const resRow = results[i];
-                summaryHeaders.forEach(h => {
-                    let val = resRow[h];
-                    rowData[`SUM_${h}`] = val !== null && val !== undefined ? " " + String(val) : "";
-                });
-            }
-            wsOut.addRow(rowData);
-        }
-
-        const headerRow = wsOut.getRow(1);
-        headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
-        
-        // Dynamic Column Width and Color Coding
-        wsOut.columns.forEach((col, idx) => {
-            const headerCell = headerRow.getCell(idx + 1);
-            const isSummary = idx >= headers.length;
-            
-            // Header Color: Blue for Raw, Green for Summary
-            headerCell.fill = { 
-                type: "pattern", 
-                pattern: "solid", 
-                fgColor: { argb: isSummary ? "FF92D050" : "FF4F81BD" } 
-            };
+        // Styling Sheet 1
+        const headerRow1 = wsSummary.getRow(1);
+        headerRow1.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        wsSummary.columns.forEach((col, idx) => {
+            const headerCell = headerRow1.getCell(idx + 1);
+            headerCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF92D050" } };
             headerCell.alignment = { horizontal: "center", vertical: "middle" };
 
-            // Calculate Max Length for this column
             let maxLen = String(headerCell.value || "").length;
-            wsOut.eachRow({ includeEmpty: false }, (row) => {
+            wsSummary.eachRow({ includeEmpty: false }, (row) => {
                 const cell = row.getCell(idx + 1);
                 const cellValue = String(cell.value || "");
                 if (cellValue.length > maxLen) maxLen = cellValue.length;
             });
-            
-            // Set width with some padding, capped at 50
-            col.width = Math.min(Math.max(maxLen + 4, 15), 50);
+            col.width = Math.min(Math.max(maxLen + 4, 15), 40);
+        });
+        wsSummary.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
+            if (rowNumber > 1) {
+                row.eachCell((cell: any) => {
+                    cell.alignment = { horizontal: "center", vertical: "middle" };
+                });
+            }
         });
 
-        // Apply alignment to all data rows
-        wsOut.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
+        // --- Sheet 2: Raw Data ---
+        const wsRaw = outWb.addWorksheet("Raw Data");
+        wsRaw.columns = headers.map(h => ({ header: h, key: h, width: 25 }));
+
+        fullMatchedOriginals.forEach(rawRow => {
+            const rowData: any = {};
+            headers.forEach((h, idx) => {
+                let val = rawRow[idx];
+                const headerUpper = h.toUpperCase();
+                const isDateOrTimeCol = headerUpper.includes('TIME') || headerUpper.includes('DATE') || headerUpper.includes('STRT_TM') || headerUpper.includes('DATETIME');
+
+                if (val instanceof Date) {
+                    val = standardizeDateTime(val);
+                } else if (isDateOrTimeCol && (typeof val === 'string' || typeof val === 'number')) {
+                    const parsed = parseDateTime(val);
+                    if (parsed) val = standardizeDateTime(parsed);
+                }
+                rowData[h] = val !== null && val !== undefined ? " " + String(val) : "";
+            });
+            wsRaw.addRow(rowData);
+        });
+
+        // Styling Sheet 2
+        const headerRow2 = wsRaw.getRow(1);
+        headerRow2.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        wsRaw.columns.forEach((col, idx) => {
+            const headerCell = headerRow2.getCell(idx + 1);
+            headerCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F81BD" } };
+            headerCell.alignment = { horizontal: "center", vertical: "middle" };
+
+            let maxLen = String(headerCell.value || "").length;
+            wsRaw.eachRow({ includeEmpty: false }, (row) => {
+                const cell = row.getCell(idx + 1);
+                const cellValue = String(cell.value || "");
+                if (cellValue.length > maxLen) maxLen = cellValue.length;
+            });
+            col.width = Math.min(Math.max(maxLen + 4, 15), 50);
+        });
+        wsRaw.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
             if (rowNumber > 1) {
                 row.eachCell((cell: any) => {
                     cell.alignment = { horizontal: "center", vertical: "middle" };
