@@ -17,7 +17,7 @@ import {
   FileCode, Play, Eye, Search, Filter, 
   ShieldCheck, Loader2, Zap, LayoutGrid, 
   Trash2, Database, Smartphone,
-  CheckCircle2
+  CheckCircle2, Copy, Mail
 } from "lucide-react";
 import { toast } from "sonner";
 import AlertModal from "@/components/ui/alert-modal";
@@ -102,6 +102,12 @@ export default function CdrFormatClient() {
   const [alert, setAlert] = useState({ isOpen: false, title: "", description: "", type: "info" as any });
   const [tokenModal, setTokenModal] = useState({ isOpen: false, currentBalance: 0, requiredTokens: 0 });
   const [sessionInfo, setSessionInfo] = useState<{ isSuper: boolean, tokens: number }>({ isSuper: true, tokens: 999999 });
+  
+  // Progress States
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [processedCount, setProcessedCount] = useState(0);
+  const [totalToProcess, setTotalToProcess] = useState(0);
 
   useEffect(() => {
       const fetchSession = async () => {
@@ -176,7 +182,7 @@ export default function CdrFormatClient() {
 
     const requiredTokens = numbers.length * (useApiLookup ? 20 : 10);
 
-    // 🚀 PROACTIVE TOKEN CHECK for both modes
+    // 🚀 PROACTIVE TOKEN CHECK
     try {
         const sRes = await fetch(getApiUrl("/api/auth/create-session"));
         const sData = await sRes.json();
@@ -193,10 +199,15 @@ export default function CdrFormatClient() {
     } catch (e) {}
 
     setLoadingLookup(true);
+    setIsProcessing(true);
+    setProgress(0);
+    setProcessedCount(0);
+    setTotalToProcess(numbers.length);
     setPreviews([]);
+    setAnalyzedNumbers([]); // Clear previous results for fresh lookup
 
     if (!useApiLookup) {
-        // Standard Mode — deduct tokens via cdr-token API
+        // Standard Mode (Local) - Process all at once since it's instant
         try {
             const deductRes = await fetch(getApiUrl("/api/tools/cdr-token"), {
                 method: "POST",
@@ -212,65 +223,77 @@ export default function CdrFormatClient() {
                     requiredTokens,
                 });
                 setLoadingLookup(false);
+                setIsProcessing(false);
                 return;
             }
 
-            if (!deductRes.ok) {
-                toast.error(deductData.error || "Token deduction failed.");
-                setLoadingLookup(false);
-                return;
-            }
-
+            const results = identifyLocal(numbers);
+            setAnalyzedNumbers(results);
+            setProcessedCount(numbers.length);
+            setProgress(100);
+            setLoadingLookup(false);
+            setIsProcessing(false);
+            toast.success(`Operators identified — ${requiredTokens} tokens deducted`);
             window.dispatchEvent(new Event("refresh-session"));
         } catch (e) {
-            toast.error("Could not verify tokens. Please try again.");
+            toast.error("Could not verify tokens.");
             setLoadingLookup(false);
-            return;
+            setIsProcessing(false);
         }
-
-        const results = identifyLocal(numbers);
-        setAnalyzedNumbers(results);
-        setLoadingLookup(false);
-        toast.success(`Operators identified — ${requiredTokens} tokens deducted`);
         return;
     }
 
-    // Live API Mode
-    try {
-        const res = await fetch(getApiUrl("/api/tools/pta-lookup"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ numbers }),
-        });
-        const data = await res.json();
-        
-        if (res.status === 403) {
-            setTokenModal({
-                isOpen: true,
-                currentBalance: data.currentBalance || 0,
-                requiredTokens,
+    // Live API Mode - Sequential processing for real-time progress
+    let completedResults: { number: string, operator: string }[] = [];
+    
+    for (let i = 0; i < numbers.length; i++) {
+        const currentNum = numbers[i];
+        try {
+            const res = await fetch(getApiUrl("/api/tools/pta-lookup"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ numbers: [currentNum] }), // One by one
             });
-            return;
+            const data = await res.json();
+            
+            if (res.status === 403) {
+                setTokenModal({
+                    isOpen: true,
+                    currentBalance: data.currentBalance || 0,
+                    requiredTokens: (numbers.length - i) * 20, // remaining
+                });
+                break;
+            }
+
+            if (res.ok && data.success && data.results) {
+                const result = {
+                    ...data.results[0],
+                    number: formatTo92(data.results[0].number)
+                };
+                completedResults = [...completedResults, result];
+                setAnalyzedNumbers(prev => [...prev, result]);
+            } else {
+                setAnalyzedNumbers(prev => [...prev, { number: formatTo92(currentNum), operator: "Error" }]);
+            }
+        } catch (error) {
+            setAnalyzedNumbers(prev => [...prev, { number: formatTo92(currentNum), operator: "Failed" }]);
         }
 
-        if (!res.ok) throw new Error(data.error || "Lookup failed");
-        
-        if (data.success && data.results) {
-            const results = data.results.map((r: any) => ({
-                ...r,
-                number: formatTo92(r.number)
-            }));
-            setAnalyzedNumbers(results);
-            toast.success("Operators identified (Live API)");
-            window.dispatchEvent(new Event("refresh-session"));
-        } else {
-            toast.error("Failed to identify operators.");
+        // Update progress
+        const nextCount = i + 1;
+        setProcessedCount(nextCount);
+        setProgress(Math.round((nextCount / numbers.length) * 100));
+
+        // Add a small delay between requests to stay safe, unless it's the last one
+        if (i < numbers.length - 1) {
+            await new Promise(r => setTimeout(r, 1500));
         }
-    } catch (error: any) {
-        toast.error(error.message || "Failed to identify operators.");
-    } finally {
-        setLoadingLookup(false);
     }
+
+    setLoadingLookup(false);
+    setIsProcessing(false);
+    toast.success("Live identification complete!");
+    window.dispatchEvent(new Event("refresh-session"));
   };
 
   const fetchInjectedHtml = async (templateFile: string, operatorKey: string) => {
@@ -377,6 +400,100 @@ export default function CdrFormatClient() {
       });
   };
 
+  const handleCopyTemplateText = (idx: number) => {
+    const iframe = document.getElementById(`iframe-preview-${idx}`) as HTMLIFrameElement;
+    if (!iframe) {
+      toast.error("Template preview not found.");
+      return;
+    }
+
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) {
+        toast.error("Could not access template document.");
+        return;
+      }
+
+      const formatOutput = doc.getElementById("formatoutput");
+      if (!formatOutput) {
+        toast.error("Template output element not found.");
+        return;
+      }
+
+      // innerText preserves standard layout and line breaks of <br/> elements
+      const text = formatOutput.innerText || formatOutput.textContent || "";
+      if (!text.trim()) {
+        toast.error("Template output is empty. Make sure input numbers are provided.");
+        return;
+      }
+
+      navigator.clipboard.writeText(text);
+      toast.success("Template text copied to clipboard! You can paste it into your email.");
+    } catch (e) {
+      console.error("Error copying template text:", e);
+      toast.error("Failed to copy template content.");
+    }
+  };
+
+  const handleEmailTemplateText = (idx: number, templateName: string) => {
+    const iframe = document.getElementById(`iframe-preview-${idx}`) as HTMLIFrameElement;
+    if (!iframe) {
+      toast.error("Template preview not found.");
+      return;
+    }
+
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) {
+        toast.error("Could not access template document.");
+        return;
+      }
+
+      const formatOutput = doc.getElementById("formatoutput");
+      if (!formatOutput) {
+        toast.error("Template output element not found.");
+        return;
+      }
+
+      const text = formatOutput.innerText || formatOutput.textContent || "";
+      if (!text.trim()) {
+        toast.error("Template output is empty.");
+        return;
+      }
+
+      // Check for URL length limits (approx 2000 chars is safe for most browsers/apps)
+      if (text.length > 1800) {
+        toast.info("Content is too large for automatic email. Please use the 'Copy Content' button and paste it manually.", {
+            duration: 6000
+        });
+        // Auto-copy as a convenience if it's too big
+        navigator.clipboard.writeText(text);
+        return;
+      }
+
+      const subject = encodeURIComponent(templateName);
+      const body = encodeURIComponent(text);
+
+      // We'll try to open Gmail Compose directly as it's the most common browser-based email
+      // This is much more reliable than mailto: for users who don't have a local mail app.
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=&su=${subject}&body=${body}`;
+      
+      const newWindow = window.open(gmailUrl, '_blank');
+      
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+        // Fallback to mailto if popup blocked or Gmail failed
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+        toast.success("Attempting to open mail app...");
+      } else {
+        toast.success("Opening Gmail Compose...");
+      }
+
+    } catch (e) {
+      console.error("Error opening email:", e);
+      toast.error("Failed to prepare email draft.");
+    }
+  };
+
   return (
     <div className="flex flex-col space-y-4 text-slate-900 pb-20">
       <AlertModal 
@@ -443,34 +560,49 @@ export default function CdrFormatClient() {
             </CardContent>
         </Card>
 
-        {/* Column 2: Identification Results */}
         <Card className="rounded-3xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
             <CardHeader className="bg-slate-50/50 border-b py-2 px-5 flex flex-row items-center justify-between">
                 <div className="flex items-center gap-2">
                     <Database size={14} className="text-slate-500" />
                     <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-tight">Operator Results</CardTitle>
                 </div>
-                {analyzedNumbers.length > 0 && (
-                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 uppercase">
-                        {analyzedNumbers.length} Found
-                    </span>
+                {(isProcessing || analyzedNumbers.length > 0) && (
+                    <div className="flex items-center gap-2">
+                        {isProcessing && (
+                            <span className="text-[9px] font-black text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100 uppercase animate-pulse">
+                                Processing {processedCount}/{totalToProcess}
+                            </span>
+                        )}
+                        <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 uppercase">
+                            {analyzedNumbers.length} Found
+                        </span>
+                    </div>
                 )}
             </CardHeader>
-            <CardContent className="p-3 flex-1 overflow-hidden">
+            <CardContent className="p-3 flex-1 overflow-hidden flex flex-col gap-3">
+                {isProcessing && (
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden shrink-0">
+                        <div 
+                            className="bg-indigo-600 h-full transition-all duration-500 ease-out"
+                            style={{ width: `${progress}%` }}
+                        ></div>
+                    </div>
+                )}
+
                 {analyzedNumbers.length > 0 ? (
-                    <div className="h-full overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
                         {analyzedNumbers.map((a, i) => (
                             <div key={i} className="flex items-center justify-between p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 group hover:border-indigo-300 hover:bg-white transition-all">
                                 <div className="flex items-center gap-2.5">
                                     <div className={cn(
                                         "w-2 h-2 rounded-full",
-                                        a.operator === "Unknown" || a.operator === "Not Found" ? "bg-slate-300" : "bg-emerald-500"
+                                        a.operator === "Unknown" || a.operator === "Not Found" || a.operator === "Error" || a.operator === "Failed" ? "bg-slate-300" : "bg-emerald-500"
                                     )}></div>
                                     <span className="text-[11px] font-mono font-bold text-slate-700">{a.number}</span>
                                 </div>
                                 <span className={cn(
                                     "text-[10px] font-black uppercase px-2 py-0.5 rounded-lg border",
-                                    a.operator === "Unknown" || a.operator === "Not Found" 
+                                    a.operator === "Unknown" || a.operator === "Not Found" || a.operator === "Error" || a.operator === "Failed"
                                         ? "bg-slate-100 text-slate-400 border-slate-200" 
                                         : "bg-indigo-50 text-indigo-700 border-indigo-100"
                                 )}>
@@ -479,10 +611,15 @@ export default function CdrFormatClient() {
                             </div>
                         ))}
                     </div>
-                ) : (
+                ) : !isProcessing ? (
                     <div className="h-full flex flex-col items-center justify-center text-center opacity-20 gap-2">
                         <Search size={40} />
                         <p className="text-[10px] font-black uppercase">No Data Identified</p>
+                    </div>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center opacity-20 gap-2">
+                        <Loader2 className="animate-spin" size={40} />
+                        <p className="text-[10px] font-black uppercase">Starting Identification...</p>
                     </div>
                 )}
             </CardContent>
@@ -578,16 +715,50 @@ export default function CdrFormatClient() {
               {previews.length > 0 ? (
                   <div className="flex flex-col items-center gap-12 min-w-max mx-auto">
                       {previews.map((prev, idx) => (
-                          <div key={idx} className="relative w-[900px] h-[1500px] bg-white shadow-[0_0_50px_rgba(0,0,0,0.1)] rounded-sm border border-slate-200 overflow-hidden group shrink-0">
-                              <div className="absolute top-0 left-0 right-0 h-1.5 bg-indigo-600 z-20"></div>
-                              <div className="absolute top-6 right-6 bg-indigo-600 text-white text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest z-20 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
-                                  {prev.name}
+                          <div key={idx} className="flex flex-col w-[900px] h-[1560px] bg-white shadow-[0_4px_30px_rgba(0,0,0,0.05)] rounded-2xl border border-slate-200 overflow-hidden shrink-0">
+                              {/* Beautiful Action Header Bar */}
+                              <div className="h-14 bg-slate-50 border-b border-slate-100 px-6 flex items-center justify-between shrink-0">
+                                  <div className="flex items-center gap-2.5">
+                                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
+                                      <span className="text-[11px] font-black uppercase text-slate-700 tracking-wider">
+                                          {prev.name}
+                                      </span>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-2">
+                                      {/* Copy Button */}
+                                      <Button
+                                          onClick={() => handleCopyTemplateText(idx)}
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-8 rounded-xl text-[10px] font-black uppercase border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 hover:text-emerald-700 transition-all gap-1.5 px-3 bg-white"
+                                      >
+                                          <Copy size={12} className="text-slate-500 group-hover:text-emerald-600" />
+                                          Copy Content
+                                      </Button>
+
+                                      {/* Email Button */}
+                                      <Button
+                                          onClick={() => handleEmailTemplateText(idx, prev.name)}
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-8 rounded-xl text-[10px] font-black uppercase border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 hover:text-indigo-700 transition-all gap-1.5 px-3 bg-white"
+                                      >
+                                          <Mail size={12} className="text-slate-500 group-hover:text-indigo-600" />
+                                          Send via Email
+                                      </Button>
+                                  </div>
                               </div>
-                              <iframe 
-                                  srcDoc={prev.html}
-                                  className="w-full h-full border-0 absolute inset-0"
-                                  sandbox="allow-scripts allow-same-origin allow-forms"
-                              />
+
+                              {/* Document iframe */}
+                              <div className="flex-1 relative bg-white">
+                                  <iframe 
+                                      id={`iframe-preview-${idx}`}
+                                      srcDoc={prev.html}
+                                      className="w-full h-full border-0 absolute inset-0"
+                                      sandbox="allow-scripts allow-same-origin allow-forms"
+                                  />
+                              </div>
                           </div>
                       ))}
                   </div>

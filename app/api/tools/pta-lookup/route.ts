@@ -9,24 +9,47 @@ export const dynamic = "force-dynamic";
 
 type LookupResult = { number: string; operator: string };
 
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Edge/122.0.0.0",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+];
+
+const getHeaders = () => {
+  const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  return {
+    "User-Agent": ua,
+    "Referer": "https://easyload.com.pk/",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Origin": "https://easyload.com.pk",
+    "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin"
+  };
+};
+
 async function fetchOperator(
   cleanNum: string,
   num: string,
   attempt = 1,
-  maxAttempts = 4
+  maxAttempts = 5
 ): Promise<LookupResult> {
   try {
     const res = await fetch(
       `https://easyload.com.pk/dingconnect.php?action=GetProviders&accountNumber=${cleanNum}`,
       {
         cache: "no-store",
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-          "Referer": "https://easyload.com.pk/",
-          "Accept": "application/json, text/plain, */*",
-        },
-        signal: AbortSignal.timeout(10000), // 10s timeout
+        headers: getHeaders(),
+        signal: AbortSignal.timeout(12000), // 12s timeout
       }
     );
 
@@ -38,7 +61,7 @@ async function fetchOperator(
       );
 
       if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 1500 * attempt));
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
         return fetchOperator(cleanNum, num, attempt + 1, maxAttempts);
       }
 
@@ -48,14 +71,14 @@ async function fetchOperator(
     let data: any;
     try {
       data = JSON.parse(rawText);
-      console.log(`[PTA Lookup API Response for ${cleanNum}]:`, data);
+      // console.log(`[PTA Lookup API Response for ${cleanNum}]:`, data);
     } catch {
       console.error(
         `Dingconnect returned non-JSON for ${cleanNum}: ${rawText.slice(0, 300)}`
       );
 
       if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 1500 * attempt));
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
         return fetchOperator(cleanNum, num, attempt + 1, maxAttempts);
       }
 
@@ -63,9 +86,10 @@ async function fetchOperator(
     }
 
     // 🔁 Rate-limited response mila — backoff karke retry karo
-    if (data?.Code === "RateLimited") {
+    if (data?.Code === "RateLimited" || data?.ResultCode === 3) {
+      console.warn(`Rate limit hit for ${cleanNum}, retrying (Attempt ${attempt}/${maxAttempts})...`);
       if (attempt < maxAttempts) {
-        const backoff = 1500 * attempt; // 1.5s, 3s, 4.5s...
+        const backoff = 2500 * attempt; // Incremental backoff
         await new Promise((r) => setTimeout(r, backoff));
         return fetchOperator(cleanNum, num, attempt + 1, maxAttempts);
       }
@@ -79,7 +103,7 @@ async function fetchOperator(
     console.error(`Fetch failed for ${cleanNum}:`, e?.message || e);
 
     if (attempt < maxAttempts) {
-      await new Promise((r) => setTimeout(r, 1500 * attempt));
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
       return fetchOperator(cleanNum, num, attempt + 1, maxAttempts);
     }
 
@@ -107,29 +131,25 @@ export async function POST(req: NextRequest) {
     }
 
     const results: LookupResult[] = [];
-    const batchSize = 1; // ⚠️ DingConnect ek waqt mein ek hi request accept karta hai — 1 hi rakhein
+    
+    // Process one by one with a small delay to avoid "simultaneous requests" error
+    for (let i = 0; i < numbers.length; i++) {
+      const num = numbers[i];
+      let cleanNum = num.trim().replace(/\D/g, "");
 
-    for (let i = 0; i < numbers.length; i += batchSize) {
-      const batch = numbers.slice(i, i + batchSize);
+      // Standardize to 923XXXXXXXXX format
+      if (cleanNum.length >= 10) {
+        cleanNum = "92" + cleanNum.slice(-10);
+      }
 
-      const batchResults = await Promise.all(
-        batch.map(async (num: string) => {
-          let cleanNum = num.trim().replace(/\D/g, "");
+      const result = await fetchOperator(cleanNum, num);
+      results.push(result);
 
-          // Standardize to 923XXXXXXXXX format
-          if (cleanNum.length >= 10) {
-            cleanNum = "92" + cleanNum.slice(-10);
-          }
-
-          return fetchOperator(cleanNum, num);
-        })
-      );
-
-      results.push(...batchResults);
-
-      // ⏳ delay after each batch (except the last one)
-      if (i + batchSize < numbers.length) {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
+      // ⏳ Controlled delay after each number to mimic human behavior
+      if (i < numbers.length - 1) {
+        const jitter = Math.floor(Math.random() * 500); // add 0-500ms random jitter
+        const baseDelay = results[results.length - 1].operator === "Rate Limited" ? 3000 : 1500;
+        await new Promise((resolve) => setTimeout(resolve, baseDelay + jitter));
       }
     }
 
