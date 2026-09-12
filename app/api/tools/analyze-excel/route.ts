@@ -604,11 +604,12 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
             if (filteredData.length > 0) {
                 const numBuffer = await buildWorkbookFromData(filteredData, headers, options, colRefs);
                 if (numBuffer) {
-                    let entryName = `${num}_${cleanBaseName}_Analyzed.xlsx`;
+                    let entryName = `${92 + num}_${cleanBaseName}_Analyzed.xlsx`;
                     // 🚀 SAFETY: if this exact filename was already used (e.g. normalization
                     // collision), make it unique instead of silently overwriting an earlier entry.
                     if (usedNames.has(entryName)) {
                         entryName = `${num}_${cleanBaseName}_${splitIdx}_Analyzed.xlsx`;
+                        
                     }
                     usedNames.add(entryName);
                     splitZip.file(entryName, numBuffer);
