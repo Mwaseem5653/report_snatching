@@ -234,6 +234,7 @@ export default function MatchedIMEIsView({ initialSession }: { initialSession?: 
                                 <SelectValue placeholder="Alert Status" />
                             </SelectTrigger>
                             <SelectContent>
+                                <SelectItem value="all">All Alerts</SelectItem>
                                 <SelectItem value="new">Pending Alerts</SelectItem>
                                 <SelectItem value="cleared">Status Clear</SelectItem>
                             </SelectContent>

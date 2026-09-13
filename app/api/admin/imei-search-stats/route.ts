@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/firebaseAdmin";
-import * as admin from "firebase-admin";
+import { sql } from "@/lib/db";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 
@@ -25,39 +24,36 @@ export async function GET(req: NextRequest) {
         const toDate = searchParams.get("toDate");
         const role = searchParams.get("role");
 
-        let query: any = adminDb.collection("imei_search_logs");
+        let query = sql`SELECT * FROM imei_search_logs WHERE 1=1`;
 
         // Period Filtering
-        const now = new Date();
         if (period === "today") {
-            query = query.where("date", "==", now.toISOString().split('T')[0]);
+            query = sql`${query} AND ("date" >= CURRENT_DATE - interval '1 day' OR "timestamp" >= NOW() - interval '24 hours')`;
         } else if (period === "custom") {
-            if (fromDate) {
-                const start = new Date(fromDate);
-                start.setHours(0, 0, 0, 0);
-                query = query.where("timestamp", ">=", admin.firestore.Timestamp.fromDate(start));
+            if (fromDate && toDate) {
+                query = sql`${query} AND "timestamp" >= ${fromDate}::timestamp AND "timestamp" <= ${toDate}::timestamp + interval '23 hours 59 minutes 59 seconds'`;
+            } else if (fromDate) {
+                query = sql`${query} AND "timestamp" >= ${fromDate}::timestamp`;
+            } else if (toDate) {
+                query = sql`${query} AND "timestamp" <= ${toDate}::timestamp + interval '23 hours 59 minutes 59 seconds'`;
             }
-            if (toDate) {
-                const end = new Date(toDate);
-                end.setHours(23, 59, 59, 999);
-                query = query.where("timestamp", "<=", admin.firestore.Timestamp.fromDate(end));
-            }
-        } else if (period !== "all") {
-            let limitDate = new Date();
-            if (period === "15days") limitDate.setDate(now.getDate() - 15);
-            else if (period === "1month") limitDate.setMonth(now.getMonth() - 1);
-            else if (period === "3months") limitDate.setMonth(now.getMonth() - 3);
-            
-            const startTimestamp = admin.firestore.Timestamp.fromDate(limitDate);
-            query = query.where("timestamp", ">=", startTimestamp);
+        } else if (period === "15days") {
+            query = sql`${query} AND "timestamp" >= NOW() - interval '15 days'`;
+        } else if (period === "1month") {
+            query = sql`${query} AND "timestamp" >= NOW() - interval '1 month'`;
+        } else if (period === "3months") {
+            query = sql`${query} AND "timestamp" >= NOW() - interval '3 months'`;
+        } else if (period === "6months") {
+            query = sql`${query} AND "timestamp" >= NOW() - interval '6 months'`;
+        } else if (period === "1year") {
+            query = sql`${query} AND "timestamp" >= NOW() - interval '1 year'`;
         }
 
         if (role && role !== "all") {
-            query = query.where("userRole", "==", role);
+            query = sql`${query} AND "userRole" = ${role}`;
         }
 
-        const snapshot = await query.get();
-        const logs = snapshot.docs.map((doc: any) => doc.data());
+        const logs = await query;
 
         // Aggregate by User
         const aggregation: Record<string, any> = {};
@@ -93,3 +89,4 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
+

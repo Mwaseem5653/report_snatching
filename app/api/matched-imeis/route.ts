@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/firebaseAdmin";
+import { sql } from "@/lib/db";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 
@@ -23,87 +23,61 @@ export async function GET(req: NextRequest) {
     const period = searchParams.get("period") || "all"; 
     const statusFilter = searchParams.get("status"); 
 
-    let queryRef: any = adminDb.collection("matched_imeis");
+    let query = sql`SELECT * FROM matched_imeis WHERE 1=1`;
 
     // 1. District Boundaries
     if (role === "admin" || role === "officer") {
-        if (Array.isArray(district)) {
-            if (district.length > 0) queryRef = queryRef.where("foundBy.district", "in", district);
-        } else if (district) {
-            queryRef = queryRef.where("foundBy.district", "==", district);
+        if (Array.isArray(district) && district.length > 0) {
+            const distList = district.map((d: string) => d.toLowerCase());
+            query = sql`${query} AND (
+                LOWER("originalDistrict") = ANY(${distList}) 
+                OR LOWER("foundBy"->>'district') = ANY(${distList})
+            )`;
+        } else if (typeof district === "string" && district) {
+            const distLower = district.toLowerCase();
+            query = sql`${query} AND (
+                LOWER("originalDistrict") = ${distLower} 
+                OR LOWER("foundBy"->>'district') = ${distLower}
+            )`;
         } else {
-            return NextResponse.json({ matches: [] });
+            return NextResponse.json({ success: true, matches: [] });
         }
     } else if (role !== "super_admin") {
-        return NextResponse.json({ matches: [] });
+        return NextResponse.json({ success: true, matches: [] });
     }
 
-    // Fetch with Timeout (prevent long hangs)
-    const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Database Timeout")), 5000)
-    );
-
-    let snapshot;
-    try {
-        snapshot = await Promise.race([
-            queryRef.get(),
-            timeoutPromise
-        ]);
-    } catch (e: any) {
-        console.error("Matched IMEIs Firestore Error:", e.message);
-        return NextResponse.json({ success: false, matches: [], error: "Database unreachable" });
+    if (period === "15days") {
+        query = sql`${query} AND "matchedAt" >= NOW() - interval '15 days'`;
+    } else if (period === "1month") {
+        query = sql`${query} AND "matchedAt" >= NOW() - interval '1 month'`;
+    } else if (period === "3months") {
+        query = sql`${query} AND "matchedAt" >= NOW() - interval '3 months'`;
+    } else if (period === "6months") {
+        query = sql`${query} AND "matchedAt" >= NOW() - interval '6 months'`;
+    } else if (period === "1year") {
+        query = sql`${query} AND "matchedAt" >= NOW() - interval '1 year'`;
     }
 
-    let matches = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+    if (imeiSearch) {
+        query = sql`${query} AND "imei" ILIKE ${'%' + imeiSearch + '%'}`;
+    }
 
-    // 2. In-Memory Filters
-    
+    let matches = await query;
+
     // Status Filter (Crucial for 'unseen' inbox logic)
     if (statusFilter && statusFilter !== "all") {
         if (statusFilter === "new") {
-            // Admins/Super Admins see all items that are NOT cleared
-            if (role === "super_admin" || role === "admin") {
-                matches = matches.filter((m: any) => m.status !== "cleared");
-            } else {
-                // Officers/Others see only 'new' items
-                matches = matches.filter((m: any) => m.status === "new");
-            }
-        } 
-        else if (statusFilter === "processed") {
-             matches = matches.filter((m: any) => m.status === "processed");
-        }
-        else if (statusFilter === "cleared") {
-            if (role === "super_admin") {
-                matches = matches.filter((m: any) => m.superAdminCleared === true);
-            } else if (role === "admin") {
-                matches = matches.filter((m: any) => m.adminCleared === true);
-            } else {
-                matches = matches.filter((m: any) => m.status === "cleared"); 
-            }
+            matches = matches.filter((m: any) => m.status !== "cleared");
+        } else if (statusFilter === "processed") {
+            matches = matches.filter((m: any) => m.status === "processed");
+        } else if (statusFilter === "cleared") {
+            matches = matches.filter((m: any) => m.status === "cleared" || m.superAdminCleared === true || m.adminCleared === true);
         }
     }
 
-    // Period Filter
-    if (period !== "all") {
-        const now = new Date();
-        let limitDate = new Date();
-        if (period === "15days") limitDate.setDate(now.getDate() - 15);
-        else if (period === "1month") limitDate.setMonth(now.getMonth() - 1);
-        else if (period === "3months") limitDate.setMonth(now.getMonth() - 3);
-        else if (period === "6months") limitDate.setMonth(now.getMonth() - 6);
-        else if (period === "1year") limitDate.setFullYear(now.getFullYear() - 1);
-        
-        const limitTime = limitDate.getTime();
-        matches = matches.filter((m: any) => (m.matchedAt?._seconds ? m.matchedAt._seconds * 1000 : 0) >= limitTime);
-    }
 
-    // IMEI Search
-    if (imeiSearch) {
-        matches = matches.filter((m: any) => m.imei?.includes(imeiSearch));
-    }
-
-    // 3. Sorting (Newest First)
-    matches.sort((a: any, b: any) => (b.matchedAt?._seconds || 0) - (a.matchedAt?._seconds || 0));
+    // Sorting (Newest First)
+    matches.sort((a: any, b: any) => new Date(b.matchedAt).getTime() - new Date(a.matchedAt).getTime());
 
     return NextResponse.json({ success: true, matches });
   } catch (error: any) {
@@ -128,7 +102,7 @@ export async function DELETE(req: NextRequest) {
 
     if (!id) return NextResponse.json({ error: "Notification ID required" }, { status: 400 });
 
-    await adminDb.collection("matched_imeis").doc(id).delete();
+    await sql`DELETE FROM matched_imeis WHERE "id" = ${id}`;
 
     return NextResponse.json({ success: true, message: "Notification deleted successfully" });
   } catch (error: any) {
@@ -136,3 +110,4 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+

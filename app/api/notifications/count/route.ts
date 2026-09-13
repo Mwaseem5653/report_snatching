@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/firebaseAdmin";
+import { sql } from "@/lib/db";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 
@@ -8,82 +8,68 @@ const SECRET = process.env.SESSION_JWT_SECRET!;
 export const dynamic = "force-dynamic";
 
 /**
- * 🔔 Notification Count API
- * Refactored to fetch and filter in-memory to avoid Firestore Indexing issues
+ * 🔔 Notification Count API (Using Neon DB)
  */
 export async function GET(req: NextRequest) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get("sessionToken")?.value;
 
-    if (!token) return NextResponse.json({ count: 0 });
+    if (!token) return NextResponse.json({ success: true, count: 0 });
 
     let decoded: any;
     try {
       decoded = jwt.verify(token, SECRET);
     } catch (err) {
-      return NextResponse.json({ count: 0 });
+      return NextResponse.json({ success: true, count: 0 });
     }
 
     const { role, district } = decoded;
     
     // Only certain roles see notifications
     if (!["super_admin", "admin", "officer"].includes(role)) {
-        return NextResponse.json({ count: 0 });
+        return NextResponse.json({ success: true, count: 0 });
     }
 
-    let queryRef: any = adminDb.collection("matched_imeis");
+    let query = sql`SELECT * FROM matched_imeis WHERE 1=1`;
 
-    // 1. Apply District Filter at Database Level (Efficiency)
+    // District filter for admin & officer
     if (role === "admin" || role === "officer") {
-        if (Array.isArray(district)) {
-            if (district.length > 0) {
-                queryRef = queryRef.where("foundBy.district", "in", district);
-            } else {
-                return NextResponse.json({ count: 0 });
-            }
-        } else if (district) {
-            queryRef = queryRef.where("foundBy.district", "==", district);
+        if (Array.isArray(district) && district.length > 0) {
+            const distList = district.map((d: string) => d.toLowerCase());
+            query = sql`${query} AND (
+                LOWER("originalDistrict") = ANY(${distList}) 
+                OR LOWER("foundBy"->>'district') = ANY(${distList})
+            )`;
+        } else if (typeof district === "string" && district) {
+            const distLower = district.toLowerCase();
+            query = sql`${query} AND (
+                LOWER("originalDistrict") = ${distLower} 
+                OR LOWER("foundBy"->>'district') = ${distLower}
+            )`;
         } else {
-            return NextResponse.json({ count: 0 });
+            return NextResponse.json({ success: true, count: 0 });
         }
     }
 
-    // 2. Fetch records with Timeout (to prevent long hangs on DNS failure)
-    const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Firestore Timeout")), 5000)
-    );
+    const matches = await query;
 
-    let snapshot;
-    try {
-        snapshot = await Promise.race([
-            queryRef.get(),
-            timeoutPromise
-        ]);
-    } catch (e: any) {
-        console.error("Notification Firestore Error:", e.message);
-        return NextResponse.json({ success: false, count: 0, error: "Database unavailable" });
-    }
-
-    let matches = snapshot.docs.map((doc: any) => doc.data());
-
-    // 3. Apply Status Filter in-memory (Security & Reliability)
     let finalCount = 0;
-
     if (role === "officer") {
         // Officers only alerted for 'new' matches
         finalCount = matches.filter((m: any) => m.status === "new").length;
     } else if (role === "super_admin") {
-        // Super Admin alerted for anything they haven't cleared personally
-        finalCount = matches.filter((m: any) => !m.superAdminCleared).length;
+        // Super Admin alerted for anything not cleared
+        finalCount = matches.filter((m: any) => !m.superAdminCleared && m.status !== "cleared").length;
     } else if (role === "admin") {
-        // Admin alerted for New or Processed items they haven't cleared
+        // Admin alerted for New or Processed items not cleared
         finalCount = matches.filter((m: any) => !m.adminCleared && (m.status === "new" || m.status === "processed")).length;
     }
 
     return NextResponse.json({ success: true, count: finalCount });
   } catch (error: any) {
     console.error("Notification Count Error:", error);
-    return NextResponse.json({ count: 0 });
+    return NextResponse.json({ success: true, count: 0 });
   }
 }
+

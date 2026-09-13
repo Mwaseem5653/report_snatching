@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/firebaseAdmin";
+import { sql } from "@/lib/db";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
-import * as admin from "firebase-admin";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
 export async function POST(req: NextRequest) {
   try {
-    const { imei, allImeis: requestedImeis } = await req.json();
+    const body = await req.json();
+    const { imei, allImeis: requestedImeis, user: clientUser } = body;
 
     if (!imei && (!requestedImeis || !Array.isArray(requestedImeis))) {
       return NextResponse.json({ success: false, message: "IMEI or allImeis array is required" }, { status: 400 });
@@ -27,24 +27,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const appsRef = adminDb.collection("applications");
+    if (!currentUser && clientUser) {
+      currentUser = clientUser;
+    }
+
     let query: any;
     let searchLabel: string;
 
     if (requestedImeis && Array.isArray(requestedImeis) && requestedImeis.length > 0) {
         // Search for any of the requested IMEIs in the allImeis array field
-        query = appsRef.where("allImeis", "array-contains-any", requestedImeis);
+        query = sql`SELECT * FROM applications WHERE "allImeis" && ${requestedImeis}`;
         searchLabel = requestedImeis.join(", ");
     } else {
-        const cleanIMEI = imei.trim();
-        // Search for the single IMEI in the allImeis array field
-        query = appsRef.where("allImeis", "array-contains", cleanIMEI);
+        const cleanIMEI = (imei || "").trim();
+        query = sql`SELECT * FROM applications WHERE ${cleanIMEI} = ANY("allImeis")`;
         searchLabel = cleanIMEI;
     }
 
-    // 2. Search for ACTIVE reports using the 'allImeis' array field
-    const snapshot = await query.get();
-    const allReports = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+    // 2. Search for ACTIVE reports
+    const allReports = await query;
     
     // Find the relevant report. If multiple, prefer pending ones.
     const activeReport = allReports.find((report: any) => report.status !== "complete") || allReports[0];
@@ -60,49 +61,52 @@ export async function POST(req: NextRequest) {
         }
     }
 
-    // 3. LOG THE SEARCH ATTEMPT (For Analytics)
-    if (currentUser) {
-        try {
-            await adminDb.collection("imei_search_logs").add({
-                userId: currentUser.uid,
-                userName: currentUser.name || "Unknown",
-                userEmail: currentUser.email || "Unknown",
-                userRole: currentUser.role || "Unknown",
-                userPs: currentUser.ps || "N/A",
-                searchedImei: searchLabel,
-                isMatch: isMatch,
-                timestamp: admin.firestore.Timestamp.now(),
-                date: new Date().toISOString().split('T')[0]
-            });
-        } catch (logErr) {
-            console.error("Failed to log IMEI search attempt:", logErr);
-        }
+    // 3. LOG THE SEARCH ATTEMPT (Always insert into Neon DB)
+    const logUserId = currentUser?.uid || "guest_user";
+    const logUserName = currentUser?.name || "Guest User";
+    const logUserEmail = currentUser?.email || "N/A";
+    const logUserRole = currentUser?.role || "public";
+    const logUserPs = currentUser?.ps || "N/A";
+
+    try {
+        await sql`
+            INSERT INTO imei_search_logs (
+                "userId", "userName", "userEmail", "userRole", "userPs", 
+                "searchedImei", "isMatch", "timestamp", "date"
+            ) VALUES (
+                ${logUserId}, ${logUserName}, ${logUserEmail}, 
+                ${logUserRole}, ${logUserPs}, ${searchLabel}, 
+                ${isMatch}, ${new Date().toISOString()}, ${new Date().toISOString().split('T')[0]}
+            )
+        `;
+    } catch (logErr) {
+        console.error("Failed to log IMEI search attempt:", logErr);
     }
+
 
     // 4. LOG THE RECOVERY MATCH (Only for Active/Stolen devices)
     const restrictedRoles = ["super_admin", "admin", "officer"];
     if (isMatch && currentUser && !restrictedRoles.includes(currentUser.role)) {
         // Only log if not already recovered
         if (status === "match_found") {
-            await adminDb.collection("matched_imeis").add({
-                imei: searchLabel,
-                applicationId,
-                applicantName: activeReport?.applicantName || "N/A",
-                crimeHead: activeReport?.crimeHead || "N/A",
-                originalPs: activeReport?.ps || "N/A",
-                originalDistrict: activeReport?.district || "N/A",
-                foundBy: {
-                    uid: currentUser.uid,
-                    name: currentUser.name || "Unknown",
-                    role: currentUser.role,
-                    email: currentUser.email || "",
-                    mobile: currentUser.mobile || "",
-                    ps: currentUser.ps || "",
-                    district: currentUser.district || ""
-                },
-                matchedAt: admin.firestore.Timestamp.now(),
-                status: "new"
-            });
+            await sql`
+                INSERT INTO matched_imeis (
+                    "imei", "applicationId", "applicantName", "crimeHead", 
+                    "originalPs", "originalDistrict", "foundBy", "matchedAt", "status"
+                ) VALUES (
+                    ${searchLabel}, ${applicationId}, ${activeReport?.applicantName || "N/A"}, 
+                    ${activeReport?.crimeHead || "N/A"}, ${activeReport?.ps || "N/A"}, 
+                    ${activeReport?.district || "N/A"}, ${JSON.stringify({
+                        uid: currentUser.uid,
+                        name: currentUser.name || "Unknown",
+                        role: currentUser.role,
+                        email: currentUser.email || "",
+                        mobile: currentUser.mobile || "",
+                        ps: currentUser.ps || "",
+                        district: currentUser.district || ""
+                    })}, ${new Date().toISOString()}, 'new'
+                )
+            `;
         }
     }
 

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/firebaseAdmin";
+import { sql } from "@/lib/db";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
-import * as admin from "firebase-admin";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -38,12 +37,12 @@ export async function GET(req: NextRequest) {
     }
     
     const search = searchParams.get("search")?.toLowerCase();
-    let queryRef: any = adminDb.collection("applications");
+    
+    // Build SQL Query
+    let query = sql`SELECT * FROM applications WHERE 1=1`;
 
     if (fromDate && toDate) {
-        const start = admin.firestore.Timestamp.fromDate(new Date(`${fromDate}T00:00:00`));
-        const end = admin.firestore.Timestamp.fromDate(new Date(`${toDate}T23:59:59`));
-        queryRef = queryRef.where("createdAt", ">=", start).where("createdAt", "<=", end);
+        query = sql`${query} AND "createdAt" >= ${fromDate}::timestamp AND "createdAt" <= ${toDate}::timestamp + interval '23 hours 59 minutes 59 seconds'`;
     }
 
     const hasAdvancedAccess = decoded.permissions?.advanced_reports === true;
@@ -52,50 +51,46 @@ export async function GET(req: NextRequest) {
         if (Array.isArray(requesterDistrict)) {
             if (requestedDistrict && requestedDistrict !== "all") {
                 if (requesterDistrict.includes(requestedDistrict)) {
-                    queryRef = queryRef.where("district", "==", requestedDistrict);
+                    query = sql`${query} AND "district" = ${requestedDistrict}`;
                 } else {
                     return NextResponse.json({ error: "Access denied" }, { status: 403 });
                 }
             } else {
-                if (requesterDistrict.length > 0) queryRef = queryRef.where("district", "in", requesterDistrict);
+                if (requesterDistrict.length > 0) query = sql`${query} AND "district" = ANY(${requesterDistrict})`;
                 else return NextResponse.json({ success: true, applications: [] });
             }
         } else if (requesterDistrict) {
-            queryRef = queryRef.where("district", "==", requesterDistrict);
+            query = sql`${query} AND "district" = ${requesterDistrict}`;
         } else {
             return NextResponse.json({ success: true, applications: [] });
         }
     } else if (role === "super_admin" || hasAdvancedAccess) {
         if (requestedDistrict && requestedDistrict !== "all") {
-            queryRef = queryRef.where("district", "==", requestedDistrict);
+            query = sql`${query} AND "district" = ${requestedDistrict}`;
         }
     } else if (role === "ps_user") {
-        if (requesterPs) queryRef = queryRef.where("ps", "==", requesterPs);
+        if (requesterPs) query = sql`${query} AND "ps" = ${requesterPs}`;
         else return NextResponse.json({ success: true, applications: [] });
     }
 
     if (status && status !== "none" && status !== "all") {
         if (status.includes(",")) {
             const statusArray = status.split(",");
-            queryRef = queryRef.where("status", "in", statusArray);
+            query = sql`${query} AND "status" = ANY(${statusArray})`;
         } else {
-            queryRef = queryRef.where("status", "==", status);
+            query = sql`${query} AND "status" = ${status}`;
         }
     }
 
-    const snap = await queryRef.get();
-    let applications = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    let applications = await query;
 
     // 3. Robust In-Memory Period Filter
     if (period && period !== "all" && period !== "custom") {
       const now = new Date();
       applications = applications.filter((app: any) => {
         if (!app.createdAt) return false;
+        const appDate = new Date(app.createdAt);
         
-        // Convert Firestore Timestamp/Seconds to JS Date
-        const appDate = app.createdAt.toDate ? app.createdAt.toDate() : (app.createdAt.seconds ? new Date(app.createdAt.seconds * 1000) : new Date(app.createdAt));
-        
-        // Today comparison: Last 24 hours window
         if (period === "today") {
             const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
             return appDate >= oneDayAgo;
@@ -111,7 +106,6 @@ export async function GET(req: NextRequest) {
             return appDate >= twelveHoursAgo;
         }
 
-        // Other periods
         let limitDate = new Date();
         if (period === "15days") limitDate.setDate(now.getDate() - 15);
         else if (period === "1month") limitDate.setMonth(now.getMonth() - 1);
@@ -127,14 +121,12 @@ export async function GET(req: NextRequest) {
       applications = applications.filter((app: any) => 
         app.applicantName?.toLowerCase().includes(search) ||
         app.cnic?.includes(search) ||
-        app.allImeis?.some((imei: string) => imei.includes(search)) ||
-        app.imei1?.includes(search)
+        (app.allImeis && app.allImeis.some((imei: string) => imei.includes(search)))
       );
     }
 
     // Handle multiple PS filter
     const psParam = searchParams.get("ps"); 
-    
     if (psParam) {
         const psArray = psParam.toLowerCase().split(",");
         applications = applications.filter((app: any) => 
@@ -142,7 +134,7 @@ export async function GET(req: NextRequest) {
         );
     }
 
-    applications.sort((a: any, b: any) => (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0) - (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0));
+    applications.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return NextResponse.json({ success: true, applications });
   } catch (error: any) {
@@ -154,8 +146,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const appsRef = adminDb.collection("applications");
-
+    
     let allImeis: string[] = [];
     if (body.devices && Array.isArray(body.devices)) {
         body.devices.forEach((d: any) => {
@@ -168,29 +159,37 @@ export async function POST(req: NextRequest) {
     }
 
     if (allImeis.length > 0) {
-        const duplicateCheck = await appsRef.where("allImeis", "array-contains-any", allImeis).limit(1).get();
-        if (!duplicateCheck.empty) {
+        const duplicateCheck = await sql`SELECT id FROM applications WHERE "allImeis" && ${allImeis} LIMIT 1`;
+        if (duplicateCheck.length > 0) {
             return NextResponse.json({ success: false, message: "One or more IMEI numbers already exist in the system." }, { status: 400 });
         }
     }
 
-    let finalOffenceDate: any = body.offenceDate || null;
-    if (body.offenceDate && typeof body.offenceDate === "string") {
-        const d = new Date(body.offenceDate);
-        if (!isNaN(d.getTime())) {
-            finalOffenceDate = admin.firestore.Timestamp.fromDate(d);
-        }
-    }
-
+    const id = require("crypto").randomUUID();
+    const createdAt = new Date().toISOString();
     const newApp = { 
         ...body, 
+        id,
         allImeis: allImeis, 
-        offenceDate: finalOffenceDate,
         status: "pending", 
-        createdAt: admin.firestore.Timestamp.now() 
+        createdAt 
     };
-    const docRef = await appsRef.add(newApp);
-    return NextResponse.json({ success: true, id: docRef.id });
+
+    await sql`
+        INSERT INTO applications (
+            "id", "applicantName", "applicantMobile", "cnic", "city", "district", "ps", "crimeHead", 
+            "offenceDate", "offenceTime", "offenceAddress", "note", "pictureUrl", "attachmentUrl", 
+            "otherLostProperty", "devices", "allImeis", "status", "createdAt"
+        ) VALUES (
+            ${id}, ${newApp.applicantName}, ${newApp.applicantMobile}, ${newApp.cnic}, ${newApp.city}, 
+            ${newApp.district}, ${newApp.ps}, ${newApp.crimeHead}, ${newApp.offenceDate || null}, 
+            ${newApp.offenceTime}, ${newApp.offenceAddress}, ${newApp.note}, ${newApp.pictureUrl}, 
+            ${newApp.attachmentUrl}, ${newApp.otherLostProperty}, ${JSON.stringify(newApp.devices)}, 
+            ${newApp.allImeis}, ${newApp.status}, ${createdAt}
+        )
+    `;
+
+    return NextResponse.json({ success: true, id });
   } catch (err: any) {
     console.error("POST /api/applications error:", err);
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
@@ -209,31 +208,29 @@ export async function PUT(req: NextRequest) {
 
     if (!id) return NextResponse.json({ error: "Application ID required" }, { status: 400 });
 
-    const appRef = adminDb.collection("applications").doc(id);
-    const appDoc = await appRef.get();
+    const appRes = await sql`SELECT * FROM applications WHERE "id" = ${id}`;
+    if (appRes.length === 0) return NextResponse.json({ error: "Application not found" }, { status: 404 });
 
-    if (!appDoc.exists) return NextResponse.json({ error: "Application not found" }, { status: 404 });
-
-    const appData: any = appDoc.data();
+    const appData = appRes[0];
     const currentStatus = appData.status;
 
     if (status === "processed" && currentStatus === "pending") {
-        await appRef.update({
-            status: "processed",
-            processedBy: {
-                uid: currentUser.uid,
-                name: currentUser.name,
-                mobile: currentUser.mobile,
-                role: currentUser.role,
-                buckle: currentUser.buckle || "N/A",
-                at: admin.firestore.Timestamp.now()
-            }
+        const processedBy = JSON.stringify({
+            uid: currentUser.uid,
+            name: currentUser.name,
+            mobile: currentUser.mobile,
+            role: currentUser.role,
+            buckle: currentUser.buckle || "N/A",
+            at: new Date().toISOString()
         });
+        await sql`UPDATE applications SET "status" = 'processed', "processedBy" = ${processedBy} WHERE "id" = ${id}`;
         return NextResponse.json({ success: true, message: "Application marked as processed" });
     }
 
     if (status === "complete" && currentStatus === "processed") {
-        if (appData.processedBy?.uid !== currentUser.uid) {
+        const processedBy = typeof appData.processedBy === 'string' ? JSON.parse(appData.processedBy) : appData.processedBy;
+        
+        if (processedBy?.uid !== currentUser.uid) {
             return NextResponse.json({ error: "Only the processing officer can mark this case as complete." }, { status: 403 });
         }
 
@@ -241,24 +238,30 @@ export async function PUT(req: NextRequest) {
             return NextResponse.json({ error: "Final remarks/comments are mandatory to complete the case." }, { status: 400 });
         }
 
-        await appRef.update({
-            status: "complete",
-            comments: comments,
-            completedAt: admin.firestore.Timestamp.now(),
-            completedBy: {
-                uid: currentUser.uid,
-                name: currentUser.name,
-                mobile: currentUser.mobile,
-                role: currentUser.role,
-                buckle: currentUser.buckle || "N/A"
-            }
+        const completedBy = JSON.stringify({
+            uid: currentUser.uid,
+            name: currentUser.name,
+            mobile: currentUser.mobile,
+            role: currentUser.role,
+            buckle: currentUser.buckle || "N/A"
         });
+        await sql`UPDATE applications SET "status" = 'complete', "comments" = ${comments}, "completedAt" = ${new Date().toISOString()}, "completedBy" = ${completedBy} WHERE "id" = ${id}`;
         return NextResponse.json({ success: true, message: "Application marked as complete" });
     }
 
     if (currentUser.role === "admin" || currentUser.role === "super_admin") {
         const { id, ...updates } = body;
-        await appRef.update(updates);
+        const keys = Object.keys(updates);
+        if (keys.length === 0) return NextResponse.json({ success: true });
+        
+        // Dynamic update
+        let updateQuery = sql`UPDATE applications SET `;
+        keys.forEach((key, index) => {
+            updateQuery = sql`${updateQuery} "${key}" = ${updates[key]} ${index < keys.length - 1 ? sql`, ` : sql``}`;
+        });
+        updateQuery = sql`${updateQuery} WHERE "id" = ${id}`;
+        
+        await updateQuery;
         return NextResponse.json({ success: true, message: "Application updated by Admin" });
     }
 
@@ -292,12 +295,9 @@ export async function DELETE(req: NextRequest) {
 
     if (!id) return NextResponse.json({ error: "Application ID required" }, { status: 400 });
 
-    const appRef = adminDb.collection("applications").doc(id);
-    const appDoc = await appRef.get();
+    const res = await sql`DELETE FROM applications WHERE "id" = ${id} RETURNING "id"`;
 
-    if (!appDoc.exists) return NextResponse.json({ error: "Application not found" }, { status: 404 });
-
-    await appRef.delete();
+    if (res.length === 0) return NextResponse.json({ error: "Application not found" }, { status: 404 });
 
     return NextResponse.json({ success: true, message: "Application deleted successfully" });
 

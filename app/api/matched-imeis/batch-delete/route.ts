@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/firebaseAdmin";
+import { sql } from "@/lib/db";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 
@@ -22,15 +22,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No notification IDs provided" }, { status: 400 });
     }
 
-    const batch = adminDb.batch();
-    const collection = adminDb.collection("matched_imeis");
-
-    ids.forEach((id: string) => {
-      const docRef = collection.doc(id);
-      batch.delete(docRef);
-    });
-
-    await batch.commit();
+    await sql`DELETE FROM matched_imeis WHERE "id" = ANY(${ids})`;
 
     return NextResponse.json({ success: true, message: `${ids.length} notifications deleted successfully` });
   } catch (error: any) {
@@ -38,3 +30,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+

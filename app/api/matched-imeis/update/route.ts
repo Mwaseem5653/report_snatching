@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/firebaseAdmin";
+import { sql } from "@/lib/db";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
-import * as admin from "firebase-admin";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -22,19 +21,21 @@ export async function POST(req: NextRequest) {
     }
 
     const currentUser: any = jwt.verify(token, SECRET);
-    const matchRef = adminDb.collection("matched_imeis").doc(matchId);
-    const matchDoc = await matchRef.get();
-
-    if (!matchDoc.exists) {
+    
+    // Get existing record from Neon DB
+    const matchRes = await sql`SELECT * FROM matched_imeis WHERE "id" = ${matchId}`;
+    if (matchRes.length === 0) {
       return NextResponse.json({ error: "Record not found" }, { status: 404 });
     }
+    const matchDoc = matchRes[0];
 
-    const updateData: any = {};
+    const updateFields: any = {};
+    const now = new Date().toISOString();
 
     if (action === "officer_view") {
-        updateData.officerNote = note || "";
-        updateData.status = "processed"; // Just processed
-        updateData.viewedBy = {
+        updateFields.officerNote = note || "";
+        updateFields.status = "processed";
+        updateFields.viewedBy = JSON.stringify({
             uid: currentUser.uid,
             name: currentUser.name,
             role: currentUser.role,
@@ -42,14 +43,14 @@ export async function POST(req: NextRequest) {
             mobile: currentUser.mobile || "",
             ps: currentUser.ps || "",
             district: currentUser.district || "",
-            at: admin.firestore.Timestamp.now()
-        };
+            at: now
+        });
     } 
     else if (action === "admin_acknowledge") {
-        updateData.status = "cleared";
-        updateData.superAdminCleared = true;
-        updateData.adminCleared = true;
-        updateData.acknowledgedBy = {
+        updateFields.status = "cleared";
+        updateFields.superAdminCleared = true;
+        updateFields.adminCleared = true;
+        updateFields.acknowledgedBy = JSON.stringify({
             uid: currentUser.uid,
             name: currentUser.name,
             role: currentUser.role,
@@ -57,29 +58,40 @@ export async function POST(req: NextRequest) {
             mobile: currentUser.mobile || "",
             ps: currentUser.ps || "",
             district: currentUser.district || "",
-            at: admin.firestore.Timestamp.now()
-        };
+            at: now
+        });
 
         // 🚀 ALSO UPDATE ORIGINAL APPLICATION STATUS
-        const applicationId = matchDoc.data()?.applicationId;
+        const applicationId = matchDoc.applicationId;
         if (applicationId) {
-            await adminDb.collection("applications").doc(applicationId).update({
-                status: "processed",
-                processedBy: {
+            await sql`
+                UPDATE applications SET 
+                "status" = 'processed', 
+                "processedBy" = ${JSON.stringify({
                     uid: currentUser.uid,
                     name: currentUser.name,
-                    at: admin.firestore.Timestamp.now(),
+                    at: now,
                     note: note || "Automatically processed via IMEI Match"
-                }
-            });
+                })}
+                WHERE "id" = ${applicationId}
+            `;
         }
     } 
     else if (action === "not_clear") {
-        updateData.status = "processed"; // Reset to processed, not new
-        updateData.acknowledgedBy = admin.firestore.FieldValue.delete();
+        updateFields.status = "processed";
+        updateFields.acknowledgedBy = null;
     }
 
-    await matchRef.update(updateData);
+    // Dynamic update
+    const keys = Object.keys(updateFields);
+    if (keys.length > 0) {
+        let updateQuery = sql`UPDATE matched_imeis SET `;
+        keys.forEach((key, index) => {
+            updateQuery = sql`${updateQuery} "${key}" = ${updateFields[key]} ${index < keys.length - 1 ? sql`, ` : sql``}`;
+        });
+        updateQuery = sql`${updateQuery} WHERE "id" = ${matchId}`;
+        await updateQuery;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

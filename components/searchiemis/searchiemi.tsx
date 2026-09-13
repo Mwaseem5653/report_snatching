@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import { db } from "@/firebaseconfig";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { CheckCircle, XCircle, Search, Loader2 } from "lucide-react";
 import { getApiUrl } from "@/lib/utils";
 
@@ -67,7 +65,17 @@ const IMEISearch: React.FC<IMEISearchProps> = ({ currentUser }) => {
       const res = await fetch(getApiUrl("/api/search-imei"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imei: imeiInput }),
+        credentials: "include",
+        body: JSON.stringify({ 
+          imei: imeiInput,
+          user: currentUser ? {
+            uid: currentUser.profile?.uid || currentUser.profile?.id || currentUser.name,
+            name: currentUser.name,
+            email: currentUser.profile?.email || "",
+            role: currentUser.role,
+            ps: currentUser.profile?.ps || currentUser.profile?.psName || "N/A"
+          } : undefined
+        }),
       });
 
       const data = await res.json();
