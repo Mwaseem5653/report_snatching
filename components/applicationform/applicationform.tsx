@@ -152,6 +152,7 @@ export default function AddApplicationForm({ currentUser }: AddApplicationFormPr
         attachmentUrl: attestedUrl,
         otherLostProperty: formData.otherLostProperty,
         devices: formData.devices,
+        role: "official",
       };
 
       const res = await addApplication(payload);

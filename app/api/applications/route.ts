@@ -167,9 +167,11 @@ export async function POST(req: NextRequest) {
 
     const id = require("crypto").randomUUID();
     const createdAt = new Date().toISOString();
+    const appRole = body.role === "user" || body.role === "citizen" ? "user" : (body.role || "official");
     const newApp = { 
         ...body, 
         id,
+        role: appRole,
         allImeis: allImeis, 
         status: "pending", 
         createdAt 
@@ -179,13 +181,13 @@ export async function POST(req: NextRequest) {
         INSERT INTO applications (
             "id", "applicantName", "applicantMobile", "cnic", "city", "district", "ps", "crimeHead", 
             "offenceDate", "offenceTime", "offenceAddress", "note", "pictureUrl", "attachmentUrl", 
-            "otherLostProperty", "devices", "allImeis", "status", "createdAt"
+            "otherLostProperty", "devices", "allImeis", "status", "createdAt", "role"
         ) VALUES (
             ${id}, ${newApp.applicantName}, ${newApp.applicantMobile}, ${newApp.cnic}, ${newApp.city}, 
             ${newApp.district}, ${newApp.ps}, ${newApp.crimeHead}, ${newApp.offenceDate || null}, 
             ${newApp.offenceTime}, ${newApp.offenceAddress}, ${newApp.note}, ${newApp.pictureUrl}, 
             ${newApp.attachmentUrl}, ${newApp.otherLostProperty}, ${JSON.stringify(newApp.devices)}, 
-            ${newApp.allImeis}, ${newApp.status}, ${createdAt}
+            ${newApp.allImeis}, ${newApp.status}, ${createdAt}, ${appRole}
         )
     `;
 
