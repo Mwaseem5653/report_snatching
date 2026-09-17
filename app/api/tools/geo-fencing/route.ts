@@ -120,8 +120,33 @@ function parseDateTime(val: any): Date | null {
                      .replace(/:\s*(AM|PM|A|P|am|pm|a|p)/i, ' $1')
                      .replace(/\s+/g, ' ');
 
+    // 🚀 Handle M/D/YYYY (US format — Zong CDR) — must be checked BEFORE DD/MM/YYYY
+    // because "8/17/2026" has second segment=17 (> 12) which proves it is M/D/YYYY,
+    // not DD/MM/YYYY. The old DD/MM path would treat day=8 month=17 → overflow → wrong year.
+    const matchMDYY = cleaned.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\s*(AM|PM|A|P|am|pm|a|p)?)?/i);
+    if (matchMDYY) {
+        const seg1 = parseInt(matchMDYY[1], 10);
+        const seg2 = parseInt(matchMDYY[2], 10);
+        // If seg2 > 12 it cannot be a month → this is definitely M/D/YYYY
+        if (seg2 > 12) {
+            const month = seg1 - 1;
+            const day = seg2;
+            const year = parseInt(matchMDYY[3], 10);
+            let hour = matchMDYY[4] ? parseInt(matchMDYY[4], 10) : 0;
+            const min = matchMDYY[5] ? parseInt(matchMDYY[5], 10) : 0;
+            const sec = matchMDYY[6] ? parseInt(matchMDYY[6], 10) : 0;
+            const ampmRaw = matchMDYY[7] ? matchMDYY[7].toUpperCase() : null;
+            let ampm = ampmRaw === "A" ? "AM" : ampmRaw === "P" ? "PM" : ampmRaw;
+            if (ampm === "PM" && hour < 12) hour += 12;
+            if (ampm === "AM" && hour === 12) hour = 0;
+            const dt = new Date(year, month, day, hour, min, sec);
+            if (!isNaN(dt.getTime())) return dt;
+        }
+    }
+
     // 🚀 Explicitly handle DD/MM/YYYY or DD-MM-YYYY format (Pakistani/UK CDR standard)
     const matchDDMM = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\s*(AM|PM|A|P|am|pm|a|p)?)?/i);
+
     if (matchDDMM) {
         const day = parseInt(matchDDMM[1], 10);
         const month = parseInt(matchDDMM[2], 10) - 1;
@@ -298,7 +323,7 @@ export async function POST(req: NextRequest) {
     const bCol = findColumn(headers, ['CALL_DIALED_NUM', 'DLG_NO', 'B-Party', 'CALL_ORIG_NUM', 'B_NUMBER', 'B', 'DLG NO', 'MSISDN_B', 'B Party', 'B.Party', 'DEST_ADDR']);
     const timeCol = findColumn(headers, ['Date And Time', 'START_TIME', 'CALL_TIME', 'DATETIME', 'STR TM', 'TIME', 'STRT_TM', 'CALL_START_DT_TM', 'DATE_TIME', 'Call Date', 'Event Time', 'USAGE_START_DATE']);
     // 🚀 NEW: Duration column, used for the "Exclusive To Time Period" sheets
-    const durCol = findColumn(headers, ['Duration', 'DURATION', 'CALL_DURATION', 'Call Duration', 'DURATION_SEC', 'Duration(Sec)', 'Duration (sec)', 'DUR']);
+    const durCol = findColumn(headers, ['DRTN', 'Duration', 'DURATION', 'CALL_DURATION', 'Call Duration', 'DURATION_SEC', 'Duration(Sec)', 'Duration (sec)', 'DUR']);
 
         if (!aCol || !timeCol) {
             return NextResponse.json({ error: "Required columns (A-Party and Time) not found." }, { status: 400 });

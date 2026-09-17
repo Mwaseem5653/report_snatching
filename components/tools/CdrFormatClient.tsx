@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 
 import {
   Select,
@@ -14,25 +16,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { 
-  FileCode, Play, Eye, Search, Filter, 
+  Play, Eye, Search, 
   ShieldCheck, Loader2, Zap, LayoutGrid, 
-  Trash2, Database, Smartphone,
-  CheckCircle2, Copy, Mail
+  Trash2, Database, Smartphone, Calendar,
+  Copy, Mail, Check, FileText, FileDown
 } from "lucide-react";
 import { toast } from "sonner";
 import AlertModal from "@/components/ui/alert-modal";
 import TokenExpiredModal from "@/components/ui/token-expired-modal";
 import { cn, getApiUrl } from "@/lib/utils";
-
-const TEMPLATES = [
-  { name: "Jazz CDR 6 Month", file: "jazz cdr 6 MONTH.html", operatorKey: "Jazz" },
-  { name: "Telenor CDR 6 Month", file: "Telenor 6 month cdr.html", operatorKey: "Telenor" },
-  { name: "Zong CDR 6 Month", file: "zong cdr 6 MONTH.html", operatorKey: "Zong" },
-  { name: "Ufone Single CDR 1 Year", file: "ufone single cdr 1 year.html", operatorKey: "Ufone" },
-  { name: "Ufone Multi CDR 1 Year", file: "ufone 2 or more cdr 1 year.html", operatorKey: "Ufone" },
-  { name: "IMEI Format 3 Month", file: "imei format 3 month.html", operatorKey: "All" },
-  { name: "IMEI Format 6 Month", file: "imei format 6 month.html", operatorKey: "All" },
-];
+import { 
+  generateFilledPerformaDocx, 
+  downloadDocxBlob, 
+  shareOrAttachPerformaDocx, 
+  formatDateDDMMYYYY 
+} from "@/lib/docx-performa";
+import { 
+  CDR_TEMPLATES, 
+  CdrDurationPreset,
+  CdrTemplateConfig, 
+  CdrGeneratedResult, 
+  findCdrTemplate,
+  extract15DigitIMEIs,
+  extract12DigitNumbers
+} from "@/lib/cdr-templates";
 
 const OPERATOR_CODES: Record<string, string> = {
     // Jazz (Mobilink legacy)
@@ -43,9 +50,9 @@ const OPERATOR_CODES: Record<string, string> = {
     "310": "Zong", "311": "Zong", "312": "Zong", "313": "Zong", "314": "Zong",
     "315": "Zong", "316": "Zong", "317": "Zong", "318": "Zong", "319": "Zong",
 
-    // Jazz (Warid legacy, ab Jazz mein merge ho chuka)
-    "320": "Jazz", "321": "Jazz", "322": "Jazz", "323": "Jazz", "324": "Jazz",
-    "325": "Jazz", "326": "Jazz", "327": "Jazz", "328": "Jazz", "329": "Jazz",
+    // Warid legacy (now Jazz network)
+    "320": "Jazz / Warid", "321": "Jazz / Warid", "322": "Jazz / Warid", "323": "Jazz / Warid", "324": "Jazz / Warid",
+    "325": "Jazz / Warid", "326": "Jazz / Warid", "327": "Jazz / Warid", "328": "Jazz / Warid", "329": "Jazz / Warid",
 
     // Ufone
     "330": "Ufone", "331": "Ufone", "332": "Ufone", "333": "Ufone", "334": "Ufone",
@@ -62,23 +69,17 @@ const OPERATOR_CODES: Record<string, string> = {
     "370": "Zong", "371": "Zong",
 };
 
-/**
- * Kisi bhi Pakistani mobile number se operator detect karo.
- * Accepts: 03001234567, 3001234567, +923001234567, 00923001234567, 923001234567
- */
 export function getOperator(rawNumber: string): string | null {
-    // sirf digits rakho
     let num = rawNumber.replace(/\D/g, "");
 
-    // country code normalize karo -> local "03XXXXXXXXX" format mein le aao
     if (num.startsWith("0092")) num = num.slice(4);
     else if (num.startsWith("92")) num = num.slice(2);
 
-    if (num.startsWith("3") && num.length === 10) num = "0" + num; // "3001234567" -> "03001234567"
+    if (num.startsWith("3") && num.length === 10) num = "0" + num;
 
-    if (!/^03\d{9}$/.test(num)) return null; // invalid number
+    if (!/^03\d{9}$/.test(num)) return null;
 
-    const prefix = num.slice(1, 4); // "0" ke baad 3 digits nikal lo, e.g. "300"
+    const prefix = num.slice(1, 4);
     return OPERATOR_CODES[prefix] ?? null;
 }
 
@@ -91,14 +92,92 @@ const formatTo92 = (num: string) => {
     return clean;
 };
 
+interface FormatDurationConfig {
+  preset: CdrDurationPreset;
+  customDays: number;
+}
+
+interface OperatorRowConfig {
+  key: "jazz" | "telenor" | "zong" | "ufone" | "imei";
+  name: string;
+  cdrTemplateId: string;
+  locTemplateId?: string;
+  idpTemplateId?: string;
+  hasLoc: boolean;
+  hasIdp: boolean;
+  operatorKey: string;
+  isImei?: boolean;
+}
+
+const OPERATOR_ROWS: OperatorRowConfig[] = [
+  { key: "jazz", name: "Jazz / Warid", cdrTemplateId: "jazz", locTemplateId: "loc-jazz", idpTemplateId: "idp-jazz", hasLoc: true, hasIdp: true, operatorKey: "Jazz" },
+  { key: "telenor", name: "Telenor", cdrTemplateId: "telenor", locTemplateId: "loc-telenor", idpTemplateId: "idp-telenor", hasLoc: true, hasIdp: true, operatorKey: "Telenor" },
+  { key: "zong", name: "Zong", cdrTemplateId: "zong", locTemplateId: "loc-zong", idpTemplateId: "idp-zong", hasLoc: true, hasIdp: true, operatorKey: "Zong" },
+  { key: "ufone", name: "Ufone", cdrTemplateId: "ufone", locTemplateId: "loc-ufone", idpTemplateId: "idp-ufone", hasLoc: true, hasIdp: true, operatorKey: "Ufone" },
+  { key: "imei", name: "IMEI All Networks", cdrTemplateId: "imei", hasLoc: false, hasIdp: false, operatorKey: "All", isImei: true },
+];
+
+const DEFAULT_DURATIONS: Record<string, FormatDurationConfig> = {
+  jazz: { preset: "6m", customDays: 180 },
+  telenor: { preset: "6m", customDays: 175 },
+  zong: { preset: "6m", customDays: 180 },
+  ufone: { preset: "1y", customDays: 365 },
+  imei: { preset: "6m", customDays: 170 },
+};
+
+export interface CombinedCdrOutput {
+  title: string;
+  html: string;
+  text: string;
+  cdrCount: number;
+  locCount?: number;
+  idpCount: number;
+  totalNumbers: number;
+  numbers?: string[];
+  periodDays?: number;
+}
+
 export default function CdrFormatClient() {
   const [rawInput, setRawInput] = useState("");
   const [useApiLookup, setUseApiLookup] = useState(false);
   const [loadingLookup, setLoadingLookup] = useState(false);
   const [analyzedNumbers, setAnalyzedNumbers] = useState<{ number: string, operator: string }[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
-  const [previews, setPreviews] = useState<{ name: string, html: string }[]>([]);
-  const [viewMode, setViewMode] = useState<"single" | "all">("single");
+  
+  // Single Unified Combined Output
+  const [combinedOutput, setCombinedOutput] = useState<CombinedCdrOutput | null>(null);
+  const [activeViewTab, setActiveViewTab] = useState<"rendered" | "text" | "html">("rendered");
+  const [copied, setCopied] = useState(false);
+  const [generatingDocx, setGeneratingDocx] = useState(false);
+  
+  // CDR Checkboxes per operator
+  const [selectedCdr, setSelectedCdr] = useState<Record<string, boolean>>({
+    jazz: true,
+    telenor: true,
+    zong: true,
+    ufone: true,
+    imei: true,
+  });
+
+  // LOC Checkboxes in the same row per operator
+  const [selectedLoc, setSelectedLoc] = useState<Record<string, boolean>>({
+    jazz: false,
+    telenor: false,
+    zong: false,
+    ufone: false,
+  });
+
+  // IDP Checkboxes in the same row per operator
+  const [selectedIdp, setSelectedIdp] = useState<Record<string, boolean>>({
+    jazz: false,
+    telenor: false,
+    zong: false,
+    ufone: false,
+  });
+
+  // Individual Separate Date Filter per Operator
+  const [formatDurations, setFormatDurations] = useState<Record<string, FormatDurationConfig>>(DEFAULT_DURATIONS);
+
   const [alert, setAlert] = useState({ isOpen: false, title: "", description: "", type: "info" as any });
   const [tokenModal, setTokenModal] = useState({ isOpen: false, currentBalance: 0, requiredTokens: 0 });
   const [sessionInfo, setSessionInfo] = useState<{ isSuper: boolean, tokens: number }>({ isSuper: true, tokens: 999999 });
@@ -127,9 +206,75 @@ export default function CdrFormatClient() {
       return () => window.removeEventListener("refresh-session", fetchSession);
   }, []);
 
+  const getFormatEffectiveDays = (opKey: string) => {
+    const config = formatDurations[opKey] || DEFAULT_DURATIONS[opKey] || { preset: "6m", customDays: 180 };
+    if (config.preset === "custom") {
+      return { days: config.customDays > 0 ? config.customDays : 180, label: `Custom (${config.customDays}d)` };
+    }
+    switch (config.preset) {
+      case "3m": return { days: opKey === "imei" ? 85 : 90, label: "3M" };
+      case "6m": return { days: opKey === "telenor" || opKey === "ufone" ? 175 : opKey === "imei" ? 170 : 180, label: "6M" };
+      case "9m": return { days: 270, label: "9M" };
+      case "1y": return { days: 365, label: "1Y" };
+      default: return { days: 180, label: "6M" };
+    }
+  };
+
+  const handleDurationPresetChange = (opKey: string, preset: CdrDurationPreset) => {
+    setFormatDurations(prev => {
+      const current = prev[opKey] || DEFAULT_DURATIONS[opKey] || { preset: "6m", customDays: 180 };
+      return {
+        ...prev,
+        [opKey]: { ...current, preset },
+      };
+    });
+  };
+
+  const handleCustomDaysChange = (opKey: string, days: number) => {
+    setFormatDurations(prev => {
+      const current = prev[opKey] || DEFAULT_DURATIONS[opKey] || { preset: "custom", customDays: 180 };
+      return {
+        ...prev,
+        [opKey]: { ...current, customDays: days },
+      };
+    });
+  };
+
+  // Extract strict counts
+  const operatorCounts = useMemo(() => {
+    const rawLines = rawInput.split(/[\n,]+/).map(l => l.trim()).filter(Boolean);
+    
+    // Strict 15-digit IMEIs only
+    const validImeis = rawLines.filter(line => line.replace(/\D/g, "").length === 15);
+
+    // Strict 10-12 digit mobile numbers only
+    const validPhoneLines = rawLines.filter(line => line.replace(/\D/g, "").length !== 15);
+
+    const list = analyzedNumbers.length > 0 ? analyzedNumbers : validPhoneLines.map(num => {
+      const formatted = formatTo92(num);
+      const cleanForPrefix = formatted.startsWith("92") ? formatted.substring(2) : formatted;
+      const prefix = cleanForPrefix.substring(0, 3);
+      const op = OPERATOR_CODES[prefix] || "Unknown";
+      return { number: formatted, operator: op };
+    });
+
+    const jazzCount = list.filter(item => item.operator.toLowerCase().includes("jazz") || item.operator.toLowerCase().includes("warid")).length;
+    const telenorCount = list.filter(item => item.operator.toLowerCase().includes("telenor")).length;
+    const zongCount = list.filter(item => item.operator.toLowerCase().includes("zong")).length;
+    const ufoneCount = list.filter(item => item.operator.toLowerCase().includes("ufone")).length;
+
+    return {
+      jazz: jazzCount,
+      telenor: telenorCount,
+      zong: zongCount,
+      ufone: ufoneCount,
+      imei: validImeis.length,
+      totalNumbers: list.length,
+    };
+  }, [rawInput, analyzedNumbers]);
+
   const checkTemplateTokens = async (templateCount: number) => {
       const requiredTokens = templateCount * 5;
-      
       if (!sessionInfo.isSuper && sessionInfo.tokens < requiredTokens) {
           setTokenModal({
               isOpen: true,
@@ -138,28 +283,16 @@ export default function CdrFormatClient() {
           });
           return false;
       }
-
-      try {
-          const sRes = await fetch(getApiUrl("/api/auth/create-session"));
-          const sData = await sRes.json();
-          if (sData.authenticated && sData.role !== "super_admin") {
-              if ((sData.tokens || 0) < requiredTokens) {
-                  setTokenModal({
-                      isOpen: true,
-                      currentBalance: sData.tokens || 0,
-                      requiredTokens,
-                  });
-                  return false;
-              }
-          }
-      } catch (e) {}
-
       return true;
   };
 
   const handleAutoFormat = () => {
       const lines = rawInput.split("\n").map(l => l.trim()).filter(l => l);
-      const formatted = lines.map(l => formatTo92(l)).join("\n");
+      const formatted = lines.map(l => {
+        const digits = l.replace(/\D/g, "");
+        if (digits.length === 15) return digits; // Keep IMEI as 15 digits
+        return formatTo92(l);
+      }).join("\n");
       setRawInput(formatted);
   };
 
@@ -174,40 +307,28 @@ export default function CdrFormatClient() {
   };
 
   const handleLookup = async () => {
-    const numbers = rawInput.split("\n").map(n => n.trim()).filter(n => n);
+    const rawLines = rawInput.split("\n").map(n => n.trim()).filter(Boolean);
+    const numbers = rawLines.filter(line => line.replace(/\D/g, "").length !== 15);
+    
     if (numbers.length === 0) {
-      toast.error("Please enter numbers first.");
+      if (rawLines.some(line => line.replace(/\D/g, "").length === 15)) {
+        toast.info("15-digit IMEIs detected. You can directly generate the IMEI format!");
+        return;
+      }
+      toast.error("Please enter mobile numbers first.");
       return;
     }
 
     const requiredTokens = numbers.length * (useApiLookup ? 20 : 10);
-
-    // 🚀 PROACTIVE TOKEN CHECK
-    try {
-        const sRes = await fetch(getApiUrl("/api/auth/create-session"));
-        const sData = await sRes.json();
-        if (sData.authenticated && sData.role !== "super_admin") {
-            if ((sData.tokens || 0) < requiredTokens) {
-                setTokenModal({
-                    isOpen: true,
-                    currentBalance: sData.tokens || 0,
-                    requiredTokens,
-                });
-                return;
-            }
-        }
-    } catch (e) {}
-
     setLoadingLookup(true);
     setIsProcessing(true);
     setProgress(0);
     setProcessedCount(0);
     setTotalToProcess(numbers.length);
-    setPreviews([]);
-    setAnalyzedNumbers([]); // Clear previous results for fresh lookup
+    setCombinedOutput(null);
+    setAnalyzedNumbers([]);
 
     if (!useApiLookup) {
-        // Standard Mode (Local) - Process all at once since it's instant
         try {
             const deductRes = await fetch(getApiUrl("/api/tools/cdr-token"), {
                 method: "POST",
@@ -243,16 +364,14 @@ export default function CdrFormatClient() {
         return;
     }
 
-    // Live API Mode - Sequential processing for real-time progress
-    let completedResults: { number: string, operator: string }[] = [];
-    
+    // Live API Mode
     for (let i = 0; i < numbers.length; i++) {
         const currentNum = numbers[i];
         try {
             const res = await fetch(getApiUrl("/api/tools/pta-lookup"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ numbers: [currentNum] }), // One by one
+                body: JSON.stringify({ numbers: [currentNum] }),
             });
             const data = await res.json();
             
@@ -260,7 +379,7 @@ export default function CdrFormatClient() {
                 setTokenModal({
                     isOpen: true,
                     currentBalance: data.currentBalance || 0,
-                    requiredTokens: (numbers.length - i) * 20, // remaining
+                    requiredTokens: (numbers.length - i) * 20,
                 });
                 break;
             }
@@ -270,7 +389,6 @@ export default function CdrFormatClient() {
                     ...data.results[0],
                     number: formatTo92(data.results[0].number)
                 };
-                completedResults = [...completedResults, result];
                 setAnalyzedNumbers(prev => [...prev, result]);
             } else {
                 setAnalyzedNumbers(prev => [...prev, { number: formatTo92(currentNum), operator: "Error" }]);
@@ -279,12 +397,10 @@ export default function CdrFormatClient() {
             setAnalyzedNumbers(prev => [...prev, { number: formatTo92(currentNum), operator: "Failed" }]);
         }
 
-        // Update progress
         const nextCount = i + 1;
         setProcessedCount(nextCount);
         setProgress(Math.round((nextCount / numbers.length) * 100));
 
-        // Add a small delay between requests to stay safe, unless it's the last one
         if (i < numbers.length - 1) {
             await new Promise(r => setTimeout(r, 1500));
         }
@@ -296,206 +412,513 @@ export default function CdrFormatClient() {
     window.dispatchEvent(new Event("refresh-session"));
   };
 
-  const fetchInjectedHtml = async (templateFile: string, operatorKey: string) => {
-    try {
-        const res = await fetch(getApiUrl(`/templates/cdr/${templateFile}`));
-        if (!res.ok) return null;
-        
-        let html = await res.text();
-        const regex = /(<textarea[^>]*id=["']formatinput["'][^>]*>)([\s\S]*?)(<\/textarea>)/i;
-        
-        let numbersToInject: string[] = [];
-        const allFormattedInput = rawInput.split("\n").map(n => formatTo92(n.trim())).filter(n => n);
-
-        if (operatorKey === "All") {
-            numbersToInject = analyzedNumbers.length > 0 ? analyzedNumbers.map(a => a.number) : allFormattedInput;
-        } else {
-            // Robust matching: Check if operator name contains the key or vice versa
-            numbersToInject = analyzedNumbers
-                .filter(a => {
-                    const op = a.operator.toLowerCase();
-                    const key = operatorKey.toLowerCase();
-                    return op.includes(key) || key.includes(op);
-                })
-                .map(a => a.number);
-            
-            if (analyzedNumbers.length === 0) {
-                numbersToInject = allFormattedInput;
-            }
-        }
-
-        const payload = numbersToInject.join("\n");
-        const injectedHtml = html.replace(regex, (match, start, content, end) => {
-            const disabledStart = start.replace("<textarea", "<textarea disabled readonly ");
-            return `${disabledStart}${payload}${end}`;
-        });
-        const script = `
-          <script>
-            document.addEventListener('DOMContentLoaded', function() {
-              setTimeout(function() { if (typeof changeFormat === 'function') { changeFormat(); } }, 500);
-            });
-          </script>
-        `;
-        return injectedHtml + script;
-    } catch (e) { return null; }
-  };
-
-  const handleGenerate = async (templateFile: string) => {
-    const config = TEMPLATES.find(t => t.file === templateFile);
-    if (!config) return;
-
-    const canProceed = await checkTemplateTokens(1);
-    if (!canProceed) return;
-
-    setViewMode("single");
-    setSelectedTemplate(templateFile);
-
-    const html = await fetchInjectedHtml(templateFile, config.operatorKey);
-    if (html) {
-        setPreviews([{ name: config.name, html }]);
-        toast.success(`Generated ${config.name}`);
-    }
-  };
-
-  const handleGenerateAll = async () => {
-    if (analyzedNumbers.length === 0) {
-        toast.error("Please identify operators first.");
-        return;
+  const getNumbersForOperator = (operatorKey: string, isImei: boolean = false) => {
+    const rawLines = rawInput.split(/[\n,]+/).map(n => n.trim()).filter(Boolean);
+    
+    // Strict IMEI filtering: only lines where digit count is strictly 15
+    if (isImei) {
+      return rawLines.filter(line => line.replace(/\D/g, "").length === 15);
     }
 
-    setViewMode("all");
-    const activeTemplates = TEMPLATES.filter(t => 
-        t.operatorKey !== "All" && 
-        analyzedNumbers.some(a => {
+    // Strict phone number filtering: ignore 15-digit IMEIs
+    const phoneLines = rawLines.filter(line => line.replace(/\D/g, "").length !== 15);
+    const allFormattedInput = phoneLines.map(n => formatTo92(n));
+
+    if (operatorKey === "All") {
+        return analyzedNumbers.length > 0 ? analyzedNumbers.map(a => a.number) : allFormattedInput;
+    }
+
+    const filtered = analyzedNumbers
+        .filter(a => {
             const op = a.operator.toLowerCase();
-            const key = t.operatorKey.toLowerCase();
+            const key = operatorKey.toLowerCase();
             return op.includes(key) || key.includes(op);
         })
-    );
+        .map(a => a.number);
 
-    if (activeTemplates.length === 0) {
-        toast.warning("No specific operators identified to auto-generate.");
+    if (analyzedNumbers.length === 0) {
+        const localList = identifyLocal(phoneLines);
+        const matched = localList
+          .filter(a => {
+            const op = a.operator.toLowerCase();
+            const key = operatorKey.toLowerCase();
+            return op.includes(key) || key.includes(op);
+          })
+          .map(a => a.number);
+        // Sirf matched numbers return karo — agar koi Ufone/Jazz/etc number nahi to empty return karo
+        return matched;
+    }
+
+    return filtered;
+  };
+
+  const handleGenerateSingleRow = async (row: OperatorRowConfig) => {
+    const isCdr = selectedCdr[row.key];
+    const isLoc = row.hasLoc && selectedLoc[row.key];
+    const isIdp = row.hasIdp && selectedIdp[row.key];
+
+    if (!isCdr && !isLoc && !isIdp) {
+      toast.error(`Please check CDR, LOC or IDP for ${row.name}`);
+      return;
+    }
+
+    const inputData = getNumbersForOperator(row.operatorKey, row.isImei);
+    if (inputData.length === 0) {
+        if (row.isImei) {
+          toast.error("Please enter valid 15-digit IMEIs.");
+        } else {
+          toast.error(`Please enter valid mobile numbers for ${row.name}.`);
+        }
         return;
     }
 
-    const canProceed = await checkTemplateTokens(activeTemplates.length);
+    const countToGen = (isCdr ? 1 : 0) + (isLoc ? 1 : 0) + (isIdp ? 1 : 0);
+    const canProceed = await checkTemplateTokens(countToGen);
     if (!canProceed) return;
 
-    setViewMode("all");
-    const generated = [];
-    for (const t of activeTemplates) {
-        const html = await fetchInjectedHtml(t.file, t.operatorKey);
-        if (html) generated.push({ name: t.name, html });
+    const cdrResults: { name: string; result: CdrGeneratedResult }[] = [];
+    const locResults: { name: string; result: CdrGeneratedResult }[] = [];
+    const idpResults: { name: string; result: CdrGeneratedResult }[] = [];
+
+    // 1. CDR format first
+    if (isCdr) {
+      const cdrT = findCdrTemplate(row.cdrTemplateId);
+      if (cdrT) {
+        const { days, label } = getFormatEffectiveDays(row.key);
+        const result = cdrT.generate(inputData, { customDays: days, durationLabel: label });
+        if (result.totalCount > 0) cdrResults.push({ name: cdrT.name, result });
+      }
     }
-    setPreviews(generated);
-    toast.success(`Generated ${generated.length} templates!`);
+
+    // 2. LOC format second (after CDR, before IDP)
+    if (isLoc && row.locTemplateId) {
+      const locT = findCdrTemplate(row.locTemplateId);
+      if (locT) {
+        const result = locT.generate(inputData);
+        if (result.totalCount > 0) locResults.push({ name: locT.name, result });
+      }
+    }
+
+    // 3. IDP format third
+    if (isIdp && row.idpTemplateId) {
+      const idpT = findCdrTemplate(row.idpTemplateId);
+      if (idpT) {
+        const result = idpT.generate(inputData);
+        if (result.totalCount > 0) idpResults.push({ name: idpT.name, result });
+      }
+    }
+
+    if (cdrResults.length === 0 && locResults.length === 0 && idpResults.length === 0) {
+      toast.warning(`No matching numbers found for ${row.name}`);
+      return;
+    }
+
+    // Compile into ONE Combined Output: CDRs -> LOCs -> IDPs!
+    const sectionsHtml: string[] = [];
+    const sectionsText: string[] = [];
+
+    if (cdrResults.length > 0) {
+      sectionsHtml.push(cdrResults.map(c => c.result.html).join("<br/><br/>"));
+      sectionsText.push(cdrResults.map(c => c.result.text.trim()).join("\n\n\n"));
+    }
+
+    if (locResults.length > 0) {
+      sectionsHtml.push(locResults.map(l => l.result.html).join("<br/><br/>"));
+      sectionsText.push(locResults.map(l => l.result.text.trim()).join("\n\n\n"));
+    }
+
+    if (idpResults.length > 0) {
+      sectionsHtml.push(idpResults.map(i => i.result.html).join("<br/><br/>"));
+      sectionsText.push(idpResults.map(i => i.result.text.trim()).join("\n\n\n"));
+    }
+
+    const combinedHtml = sectionsHtml.join("<br/><br/><br/><hr style='border:1px dashed #cbd5e1; margin:20px 0;' /><br/>");
+    const combinedText = sectionsText.join("\n\n\n\n----------------------------------------\n\n\n\n");
+
+    setCombinedOutput({
+      title: `${row.name} Request`,
+      html: combinedHtml,
+      text: combinedText,
+      cdrCount: cdrResults.length,
+      locCount: locResults.length,
+      idpCount: idpResults.length,
+      totalNumbers: cdrResults[0]?.result.totalCount || locResults[0]?.result.totalCount || idpResults[0]?.result.totalCount || 0,
+      numbers: inputData,
+      periodDays: getFormatEffectiveDays(row.key).days,
+    });
+
+    toast.success(`Generated ${row.name} combined output!`);
   };
 
-  const hasDataForOperator = (opKey: string) => {
-      if (opKey === "All") return rawInput.trim().length > 0;
-      return analyzedNumbers.some(a => {
-          const op = a.operator.toLowerCase();
-          const key = opKey.toLowerCase();
-          return op.includes(key) || key.includes(op);
+  const handleGenerateSelected = async () => {
+    // 1. Mobile CDRs
+    const mobileCdrTasks = OPERATOR_ROWS.filter(r => !r.isImei && selectedCdr[r.key]);
+    
+    // 2. IMEI CDR
+    const imeiCdrTask = OPERATOR_ROWS.find(r => r.isImei && selectedCdr[r.key]);
+
+    // 3. LOCs
+    const locTasks = OPERATOR_ROWS.filter(r => r.hasLoc && r.locTemplateId && selectedLoc[r.key]);
+
+    // 4. IDPs
+    const idpTasks = OPERATOR_ROWS.filter(r => r.hasIdp && r.idpTemplateId && selectedIdp[r.key]);
+
+    const totalTasks = mobileCdrTasks.length + (imeiCdrTask ? 1 : 0) + locTasks.length + idpTasks.length;
+    if (totalTasks === 0) {
+      toast.error("Please select at least one CDR, LOC, or IDP format checkbox.");
+      return;
+    }
+
+    const canProceed = await checkTemplateTokens(totalTasks);
+    if (!canProceed) return;
+
+    const generatedMobileCdr: { name: string; result: CdrGeneratedResult }[] = [];
+    const generatedImeiCdr: { name: string; result: CdrGeneratedResult }[] = [];
+    const generatedLoc: { name: string; result: CdrGeneratedResult }[] = [];
+    const generatedIdp: { name: string; result: CdrGeneratedResult }[] = [];
+
+    // Generate Mobile CDRs
+    for (const row of mobileCdrTasks) {
+      const template = findCdrTemplate(row.cdrTemplateId);
+      if (!template) continue;
+
+      const inputData = getNumbersForOperator(row.operatorKey, false);
+      if (inputData.length === 0) continue;
+
+      const { days, label } = getFormatEffectiveDays(row.key);
+      const result = template.generate(inputData, {
+        customDays: days,
+        durationLabel: label,
       });
+
+      if (result.totalCount > 0) {
+        generatedMobileCdr.push({ name: template.name, result });
+      }
+    }
+
+    // Generate IMEI CDR only if valid 15-digit IMEIs exist
+    if (imeiCdrTask) {
+      const template = findCdrTemplate(imeiCdrTask.cdrTemplateId);
+      if (template) {
+        const inputData = getNumbersForOperator(imeiCdrTask.operatorKey, true);
+        if (inputData.length > 0) {
+          const { days, label } = getFormatEffectiveDays(imeiCdrTask.key);
+          const result = template.generate(inputData, {
+            customDays: days,
+            durationLabel: label,
+          });
+          if (result.totalCount > 0) {
+            generatedImeiCdr.push({ name: template.name, result });
+          }
+        }
+      }
+    }
+
+    // Generate LOCs (after CDR, before IDP)
+    for (const row of locTasks) {
+      if (!row.locTemplateId) continue;
+      const template = findCdrTemplate(row.locTemplateId);
+      if (!template) continue;
+
+      const inputData = getNumbersForOperator(row.operatorKey, false);
+      if (inputData.length === 0) continue;
+
+      const result = template.generate(inputData);
+      if (result.totalCount > 0) {
+        generatedLoc.push({ name: template.name, result });
+      }
+    }
+
+    // Generate IDPs
+    for (const row of idpTasks) {
+      if (!row.idpTemplateId) continue;
+      const template = findCdrTemplate(row.idpTemplateId);
+      if (!template) continue;
+
+      const inputData = getNumbersForOperator(row.operatorKey, false);
+      if (inputData.length === 0) continue;
+
+      const result = template.generate(inputData);
+      if (result.totalCount > 0) {
+        generatedIdp.push({ name: template.name, result });
+      }
+    }
+
+    if (generatedMobileCdr.length === 0 && generatedImeiCdr.length === 0 && generatedLoc.length === 0 && generatedIdp.length === 0) {
+      toast.warning("No matching numbers or 15-digit IMEIs found for selected formats.");
+      return;
+    }
+
+    // Build unified combined document with clean spacing in exact order:
+    // 1. Mobile CDRs
+    // 2. Space + IMEI (if present)
+    // 3. Space + LOCs (if present)
+    // 4. Space + IDPs (if present)
+    const htmlSections: string[] = [];
+    const textSections: string[] = [];
+
+    // Add Mobile CDRs
+    if (generatedMobileCdr.length > 0) {
+      htmlSections.push(generatedMobileCdr.map(c => c.result.html).join("<br/><br/>"));
+      textSections.push(generatedMobileCdr.map(c => c.result.text.trim()).join("\n\n\n"));
+    }
+
+    // Add IMEI with clear spacing before it
+    if (generatedImeiCdr.length > 0) {
+      htmlSections.push(generatedImeiCdr.map(c => c.result.html).join("<br/><br/>"));
+      textSections.push(generatedImeiCdr.map(c => c.result.text.trim()).join("\n\n\n"));
+    }
+
+    // Add LOCs (after CDR, before IDP)
+    if (generatedLoc.length > 0) {
+      htmlSections.push(generatedLoc.map(l => l.result.html).join("<br/><br/>"));
+      textSections.push(generatedLoc.map(l => l.result.text.trim()).join("\n\n\n"));
+    }
+
+    // Add IDPs with clear divider before it
+    if (generatedIdp.length > 0) {
+      htmlSections.push(generatedIdp.map(i => i.result.html).join("<br/><br/>"));
+      textSections.push(generatedIdp.map(i => i.result.text.trim()).join("\n\n\n"));
+    }
+
+    const combinedHtml = htmlSections.join("<br/><br/><br/><hr style='border:1px dashed #cbd5e1; margin:24px 0;' /><br/>");
+    const combinedText = textSections.join("\n\n\n\n----------------------------------------\n\n\n\n");
+
+    const totalCdrCount = generatedMobileCdr.length + generatedImeiCdr.length;
+    const totalNum = generatedMobileCdr.reduce((acc, curr) => acc + curr.result.totalCount, 0) +
+                     generatedImeiCdr.reduce((acc, curr) => acc + curr.result.totalCount, 0);
+
+    const titleParts: string[] = [];
+    if (totalCdrCount > 0) titleParts.push(`${totalCdrCount} CDR`);
+    if (generatedLoc.length > 0) titleParts.push(`${generatedLoc.length} LOC`);
+    if (generatedIdp.length > 0) titleParts.push(`${generatedIdp.length} IDP`);
+
+    // Collect all unique processed numbers in order
+    const allNumbersProcessed: string[] = [];
+    const seenNumbers = new Set<string>();
+
+    [...generatedMobileCdr, ...generatedImeiCdr, ...generatedLoc, ...generatedIdp].forEach(g => {
+      g.result.items?.forEach(num => {
+        if (!seenNumbers.has(num)) {
+          seenNumbers.add(num);
+          allNumbersProcessed.push(num);
+        }
+      });
+    });
+
+    // Fallback if items was not populated in result
+    if (allNumbersProcessed.length === 0) {
+      const rawLines = rawInput.split(/[\n,]+/).map(n => n.trim()).filter(Boolean);
+      rawLines.forEach(l => {
+        const d = l.replace(/\D/g, "");
+        if (d.length === 15) {
+          allNumbersProcessed.push(d);
+        } else if (d.length >= 10) {
+          allNumbersProcessed.push(formatTo92(l));
+        }
+      });
+    }
+
+    setCombinedOutput({
+      title: `Combined Request (${titleParts.join(" + ")})`,
+      html: combinedHtml,
+      text: combinedText,
+      cdrCount: totalCdrCount,
+      locCount: generatedLoc.length,
+      idpCount: generatedIdp.length,
+      totalNumbers: totalNum,
+      numbers: allNumbersProcessed,
+      periodDays: 180,
+    });
+
+    toast.success(`Generated unified document (${titleParts.join(" + ")})!`);
   };
 
-  const handleCopyTemplateText = (idx: number) => {
-    const iframe = document.getElementById(`iframe-preview-${idx}`) as HTMLIFrameElement;
-    if (!iframe) {
-      toast.error("Template preview not found.");
+  const toggleSelectAll = (check: boolean) => {
+    const updatedCdr: Record<string, boolean> = {};
+    const updatedLoc: Record<string, boolean> = {};
+    const updatedIdp: Record<string, boolean> = {};
+
+    OPERATOR_ROWS.forEach(r => {
+      updatedCdr[r.key] = check;
+      if (r.hasLoc) updatedLoc[r.key] = check;
+      if (r.hasIdp) updatedIdp[r.key] = check;
+    });
+
+    setSelectedCdr(updatedCdr);
+    setSelectedLoc(updatedLoc);
+    setSelectedIdp(updatedIdp);
+  };
+
+  const totalSelectedCount = useMemo(() => {
+    let count = 0;
+    OPERATOR_ROWS.forEach(r => {
+      if (selectedCdr[r.key]) count++;
+      if (r.hasLoc && selectedLoc[r.key]) count++;
+      if (r.hasIdp && selectedIdp[r.key]) count++;
+    });
+    return count;
+  }, [selectedCdr, selectedLoc, selectedIdp]);
+
+  const handleCopy = async () => {
+    if (!combinedOutput?.text) {
+      toast.error("No output content to copy.");
       return;
     }
 
     try {
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!doc) {
-        toast.error("Could not access template document.");
-        return;
-      }
-
-      const formatOutput = doc.getElementById("formatoutput");
-      if (!formatOutput) {
-        toast.error("Template output element not found.");
-        return;
-      }
-
-      // innerText preserves standard layout and line breaks of <br/> elements
-      const text = formatOutput.innerText || formatOutput.textContent || "";
-      if (!text.trim()) {
-        toast.error("Template output is empty. Make sure input numbers are provided.");
-        return;
-      }
-
-      navigator.clipboard.writeText(text);
-      toast.success("Template text copied to clipboard! You can paste it into your email.");
-    } catch (e) {
-      console.error("Error copying template text:", e);
-      toast.error("Failed to copy template content.");
-    }
-  };
-
-  const handleEmailTemplateText = (idx: number, templateName: string) => {
-    const iframe = document.getElementById(`iframe-preview-${idx}`) as HTMLIFrameElement;
-    if (!iframe) {
-      toast.error("Template preview not found.");
-      return;
-    }
-
-    try {
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!doc) {
-        toast.error("Could not access template document.");
-        return;
-      }
-
-      const formatOutput = doc.getElementById("formatoutput");
-      if (!formatOutput) {
-        toast.error("Template output element not found.");
-        return;
-      }
-
-      const text = formatOutput.innerText || formatOutput.textContent || "";
-      if (!text.trim()) {
-        toast.error("Template output is empty.");
-        return;
-      }
-
-      // Check for URL length limits (approx 2000 chars is safe for most browsers/apps)
-      if (text.length > 1800) {
-        toast.info("Content is too large for automatic email. Please use the 'Copy Content' button and paste it manually.", {
-            duration: 6000
-        });
-        // Auto-copy as a convenience if it's too big
-        navigator.clipboard.writeText(text);
-        return;
-      }
-
-      const subject = encodeURIComponent(templateName);
-      const body = encodeURIComponent(text);
-
-      // We'll try to open Gmail Compose directly as it's the most common browser-based email
-      // This is much more reliable than mailto: for users who don't have a local mail app.
-      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=&su=${subject}&body=${body}`;
-      
-      const newWindow = window.open(gmailUrl, '_blank');
-      
-      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-        // Fallback to mailto if popup blocked or Gmail failed
-        window.location.href = `mailto:?subject=${subject}&body=${body}`;
-        toast.success("Attempting to open mail app...");
+      if (combinedOutput.html && typeof ClipboardItem !== "undefined") {
+        const textBlob = new Blob([combinedOutput.text], { type: "text/plain" });
+        const htmlBlob = new Blob([combinedOutput.html], { type: "text/html" });
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/plain": textBlob,
+            "text/html": htmlBlob,
+          })
+        ]);
       } else {
-        toast.success("Opening Gmail Compose...");
+        await navigator.clipboard.writeText(combinedOutput.text);
+      }
+      setCopied(true);
+      toast.success("Complete CDR + IDP content copied (with table formatting)!");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      await navigator.clipboard.writeText(combinedOutput.text);
+      setCopied(true);
+      toast.success("Complete CDR + IDP content copied to clipboard!");
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const getActiveNumbersToFill = (): string[] => {
+    if (combinedOutput?.numbers && combinedOutput.numbers.length > 0) {
+      return combinedOutput.numbers;
+    }
+    const rawLines = rawInput.split(/[\n,]+/).map(n => n.trim()).filter(Boolean);
+    const nums: string[] = [];
+    rawLines.forEach(l => {
+      const d = l.replace(/\D/g, "");
+      if (d.length === 15) {
+        nums.push(d);
+      } else if (d.length >= 10) {
+        nums.push(formatTo92(l));
+      }
+    });
+    return nums;
+  };
+
+  const handleDownloadDocx = async () => {
+    const nums = getActiveNumbersToFill();
+    if (nums.length === 0) {
+      toast.error("Please enter/process mobile numbers or IMEIs first.");
+      return;
+    }
+
+    try {
+      setGeneratingDocx(true);
+      toast.loading("Generating Performa Word Document (.docx)...", { id: "docx-gen" });
+      const docxBlob = await generateFilledPerformaDocx(nums, {
+        referenceDate: new Date(),
+        periodDays: combinedOutput?.periodDays || 180,
+      });
+      const fileName = `Technical_Assistance_Performa_${formatDateDDMMYYYY(new Date())}.docx`;
+      downloadDocxBlob(docxBlob, fileName);
+      toast.dismiss("docx-gen");
+      toast.success("Word Performa (.docx) with filled numbers & current date downloaded!");
+    } catch (err: any) {
+      console.error(err);
+      toast.dismiss("docx-gen");
+      toast.error("Failed to generate DOCX performa: " + (err?.message || "Unknown error"));
+    } finally {
+      setGeneratingDocx(false);
+    }
+  };
+
+  const handleEmail = async () => {
+    if (!combinedOutput?.text) {
+      toast.error("No output content to email.");
+      return;
+    }
+
+    const isWeb = typeof window !== "undefined" && !window.location.protocol.includes("capacitor");
+    let mailWindow: Window | null = null;
+    if (isWeb) {
+      // Synchronously open blank window to bypass popup blocker
+      mailWindow = window.open("", "_blank");
+    }
+
+    const nums = getActiveNumbersToFill();
+    const fileName = `Technical_Assistance_Performa_${formatDateDDMMYYYY(new Date())}.docx`;
+    const emailSubject = "Official TECHNICAL ASSISTANCE REQUEST FORM";
+    const recipientEmail = "diclandhi1@gmail.com";
+
+    try {
+      setGeneratingDocx(true);
+      toast.loading("Performa docx generate ho raha hai...", { id: "email-docx" });
+      
+      const docxBlob = await generateFilledPerformaDocx(nums, {
+        referenceDate: new Date(),
+        periodDays: combinedOutput?.periodDays || 180,
+      });
+
+      toast.dismiss("email-docx");
+
+      // Auto-copy Rich HTML table to clipboard so user can press Ctrl+V in Gmail for a 100% perfect table!
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        try {
+          if (combinedOutput.html && typeof ClipboardItem !== "undefined") {
+            const textBlob = new Blob([combinedOutput.text], { type: "text/plain" });
+            const htmlBlob = new Blob([combinedOutput.html], { type: "text/html" });
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                "text/html": htmlBlob,
+                "text/plain": textBlob,
+              }),
+            ]);
+          } else {
+            await navigator.clipboard.writeText(combinedOutput.text);
+          }
+        } catch {
+          try { await navigator.clipboard.writeText(combinedOutput.text); } catch {}
+        }
       }
 
-    } catch (e) {
-      console.error("Error opening email:", e);
-      toast.error("Failed to prepare email draft.");
+      // In browser: download docx
+      downloadDocxBlob(docxBlob, fileName);
+
+      if (isWeb) {
+        const encSubject = encodeURIComponent(emailSubject);
+        const encBody = encodeURIComponent(combinedOutput.text.substring(0, 1800));
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=${encodeURIComponent(recipientEmail)}&su=${encSubject}&body=${encBody}`;
+
+        if (mailWindow && !mailWindow.closed) {
+          mailWindow.location.href = gmailUrl;
+        } else {
+          window.location.href = `mailto:${recipientEmail}?subject=${encSubject}&body=${encBody}`;
+        }
+        toast.success("Performa download ho gaya aur Gmail khul gaya hai!", { duration: 7000 });
+      } else {
+        // In native mobile app (Capacitor Android): Direct file attachment to Gmail app
+        await shareOrAttachPerformaDocx(
+          docxBlob,
+          fileName,
+          emailSubject,
+          combinedOutput.text
+        );
+        toast.success("Performa document ready!");
+      }
+    } catch (err: any) {
+      if (mailWindow && !mailWindow.closed) mailWindow.close();
+      console.error(err);
+      toast.dismiss("email-docx");
+      toast.error("Error preparing document: " + (err?.message || "Unknown error"));
+    } finally {
+      setGeneratingDocx(false);
     }
   };
 
   return (
-    <div className="flex flex-col space-y-4 text-slate-900 pb-20">
+    <div className="flex flex-col space-y-3 text-slate-900 pb-16">
       <AlertModal 
         isOpen={alert.isOpen}
         onClose={() => setAlert({ ...alert, isOpen: false })}
@@ -511,265 +934,386 @@ export default function CdrFormatClient() {
         toolName="CDR Generator"
       />
       
-      {/* 🔹 TOP SECTION: INPUT, RESULTS & FORMATS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* 🔹 TOP SECTION: ULTRA-COMPACT 3 BALANCED COLUMNS */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
         
-        {/* Column 1: Input Area */}
-        <Card className="rounded-3xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
-            <CardHeader className="bg-slate-50/50 border-b py-2 px-5 flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <Smartphone size={14} className="text-slate-500" />
-                    <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-tight">Mobile Numbers</CardTitle>
+        {/* Column 1: Input Area (4 Cols) */}
+        <Card className="lg:col-span-4 rounded-2xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[340px]">
+            <CardHeader className="bg-slate-50/80 border-b py-1.5 px-3 flex flex-row items-center justify-between shrink-0">
+                <div className="flex items-center gap-1.5">
+                    <Smartphone size={13} className="text-slate-500" />
+                    <CardTitle className="text-[10px] font-black uppercase text-slate-600 tracking-tight">Numbers / IMEIs</CardTitle>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 bg-white/50 border border-slate-200 px-2 py-1 rounded-xl">
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-1.5 py-0.5 rounded-lg">
                         <span className="text-[8px] font-black uppercase text-slate-400">Live API</span>
                         <Switch 
                             checked={useApiLookup} 
                             onCheckedChange={setUseApiLookup} 
-                            className="h-4 w-8 data-[state=checked]:bg-indigo-600 scale-75 origin-right" 
+                            className="h-3.5 w-7 data-[state=checked]:bg-indigo-600 scale-75 origin-right" 
                         />
                     </div>
                     <button 
-                        onClick={() => { setRawInput(""); setAnalyzedNumbers([]); setPreviews([]); setSelectedTemplate(""); }}
+                        onClick={() => { setRawInput(""); setAnalyzedNumbers([]); setCombinedOutput(null); setSelectedTemplate(""); }}
                         className="text-slate-300 hover:text-red-500 transition-colors"
+                        title="Clear Input"
                     >
-                        <Trash2 size={14} />
+                        <Trash2 size={13} />
                     </button>
                 </div>
             </CardHeader>
-            <CardContent className="p-3 space-y-3 flex flex-col flex-1">
+            <CardContent className="p-2 space-y-2 flex flex-col flex-1 overflow-hidden">
                 <Textarea 
                     value={rawInput} 
                     onChange={(e) => setRawInput(e.target.value)} 
                     onBlur={handleAutoFormat}
-                    placeholder="Paste numbers here..."
-                    className="flex-1 rounded-2xl border-slate-200 font-mono text-[10px] leading-tight focus:ring-orange-500 bg-slate-50/20"
+                    placeholder="Paste numbers (03001234567...) or 15-digit IMEIs..."
+                    className="flex-1 rounded-xl border-slate-200 font-mono text-[10px] leading-tight focus:ring-orange-500 bg-slate-50/20 resize-none p-2"
                 />
                 <Button 
                     onClick={handleLookup} 
                     disabled={loadingLookup}
                     className={cn(
-                        "w-full h-12 rounded-2xl font-black uppercase tracking-tight text-[11px] shadow-lg transition-all",
-                        useApiLookup ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20" : "bg-orange-600 hover:bg-orange-700 shadow-orange-600/20"
+                        "w-full h-8 rounded-xl font-black uppercase tracking-tight text-[10px] shadow transition-all shrink-0",
+                        useApiLookup ? "bg-indigo-600 hover:bg-indigo-700" : "bg-orange-600 hover:bg-orange-700"
                     )}
                 >
-                    {loadingLookup ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <ShieldCheck size={16} className="mr-2" />}
-                    {useApiLookup ? "Live API Identification" : "Identify Operators"}
+                    {loadingLookup ? <Loader2 className="animate-spin mr-1.5 h-3.5 w-3.5"/> : <ShieldCheck size={14} className="mr-1.5" />}
+                    {useApiLookup ? "Live Identify" : "Identify Operators"}
                 </Button>
             </CardContent>
         </Card>
 
-        <Card className="rounded-3xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
-            <CardHeader className="bg-slate-50/50 border-b py-2 px-5 flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <Database size={14} className="text-slate-500" />
-                    <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-tight">Operator Results</CardTitle>
+        {/* Column 2: Operator Results (4 Cols) */}
+        <Card className="lg:col-span-4 rounded-2xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[340px]">
+            <CardHeader className="bg-slate-50/80 border-b py-1.5 px-3 flex flex-row items-center justify-between shrink-0">
+                <div className="flex items-center gap-1.5">
+                    <Database size={13} className="text-slate-500" />
+                    <CardTitle className="text-[10px] font-black uppercase text-slate-600 tracking-tight">Operator Results</CardTitle>
                 </div>
                 {(isProcessing || analyzedNumbers.length > 0) && (
-                    <div className="flex items-center gap-2">
-                        {isProcessing && (
-                            <span className="text-[9px] font-black text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100 uppercase animate-pulse">
-                                Processing {processedCount}/{totalToProcess}
-                            </span>
-                        )}
-                        <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 uppercase">
-                            {analyzedNumbers.length} Found
-                        </span>
-                    </div>
+                    <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 uppercase">
+                        {analyzedNumbers.length} Found
+                    </span>
                 )}
             </CardHeader>
-            <CardContent className="p-3 flex-1 overflow-hidden flex flex-col gap-3">
+            <CardContent className="p-2 flex-1 overflow-hidden flex flex-col gap-1.5">
                 {isProcessing && (
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden shrink-0">
+                    <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden shrink-0">
                         <div 
-                            className="bg-indigo-600 h-full transition-all duration-500 ease-out"
+                            className="bg-indigo-600 h-full transition-all duration-300"
                             style={{ width: `${progress}%` }}
                         ></div>
                     </div>
                 )}
 
                 {analyzedNumbers.length > 0 ? (
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
-                        {analyzedNumbers.map((a, i) => (
-                            <div key={i} className="flex items-center justify-between p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 group hover:border-indigo-300 hover:bg-white transition-all">
-                                <div className="flex items-center gap-2.5">
-                                    <div className={cn(
-                                        "w-2 h-2 rounded-full",
-                                        a.operator === "Unknown" || a.operator === "Not Found" || a.operator === "Error" || a.operator === "Failed" ? "bg-slate-300" : "bg-emerald-500"
-                                    )}></div>
-                                    <span className="text-[11px] font-mono font-bold text-slate-700">{a.number}</span>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                            {analyzedNumbers.map((a, i) => (
+                                <div key={i} className="flex items-center justify-between px-2 py-1 bg-slate-50/80 rounded-lg border border-slate-100 text-[10px]">
+                                    <span className="font-mono font-bold text-slate-700 truncate">{a.number}</span>
+                                    <span className={cn(
+                                        "text-[9px] font-black uppercase px-1.5 py-0.2 rounded border shrink-0",
+                                        a.operator === "Unknown" || a.operator === "Not Found" || a.operator === "Error"
+                                            ? "bg-slate-100 text-slate-400 border-slate-200" 
+                                            : "bg-indigo-50 text-indigo-700 border-indigo-100"
+                                    )}>
+                                        {a.operator}
+                                    </span>
                                 </div>
-                                <span className={cn(
-                                    "text-[10px] font-black uppercase px-2 py-0.5 rounded-lg border",
-                                    a.operator === "Unknown" || a.operator === "Not Found" || a.operator === "Error" || a.operator === "Failed"
-                                        ? "bg-slate-100 text-slate-400 border-slate-200" 
-                                        : "bg-indigo-50 text-indigo-700 border-indigo-100"
-                                )}>
-                                    {a.operator}
-                                </span>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
                 ) : !isProcessing ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center opacity-20 gap-2">
-                        <Search size={40} />
-                        <p className="text-[10px] font-black uppercase">No Data Identified</p>
+                    <div className="h-full flex flex-col items-center justify-center text-center opacity-30 gap-1">
+                        <Search size={24} />
+                        <p className="text-[9px] font-bold uppercase">No Operators Yet</p>
                     </div>
                 ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-center opacity-20 gap-2">
-                        <Loader2 className="animate-spin" size={40} />
-                        <p className="text-[10px] font-black uppercase">Starting Identification...</p>
+                    <div className="h-full flex flex-col items-center justify-center text-center opacity-40 gap-1">
+                        <Loader2 className="animate-spin" size={24} />
+                        <p className="text-[9px] font-bold uppercase">Identifying...</p>
                     </div>
                 )}
             </CardContent>
         </Card>
 
-        {/* Column 3: Available Formats */}
-        <Card className="rounded-3xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
-            <CardHeader className="bg-slate-50/50 border-b py-2 px-5 flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <LayoutGrid size={14} className="text-slate-500" />
-                    <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-tight">Available Formats</CardTitle>
+        {/* Column 3: Formats (Single Row per Operator with CDR + Date Dropdown + IDP Checkbox) (4 Cols) */}
+        <Card className="lg:col-span-4 rounded-2xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[340px]">
+            <CardHeader className="bg-slate-50/80 border-b py-1.5 px-3 flex flex-row items-center justify-between shrink-0">
+                <div className="flex items-center gap-1.5">
+                    <LayoutGrid size={13} className="text-slate-500" />
+                    <CardTitle className="text-[10px] font-black uppercase text-slate-600 tracking-tight">Available Formats</CardTitle>
                 </div>
-                {analyzedNumbers.length > 0 && (
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={handleGenerateAll}
-                        className="h-6 text-[9px] font-black uppercase text-indigo-600 hover:bg-indigo-50 px-2 rounded-full border border-indigo-100"
-                    >
-                        <Zap size={10} className="mr-1 fill-indigo-600" /> Auto Build All
-                    </Button>
-                )}
+                <div className="flex items-center gap-1.5 text-[8px] font-black uppercase">
+                    <button onClick={() => toggleSelectAll(true)} className="text-indigo-600 hover:underline">Select All</button>
+                    <span className="text-slate-300">•</span>
+                    <button onClick={() => toggleSelectAll(false)} className="text-slate-400 hover:underline">None</button>
+                </div>
             </CardHeader>
-            <CardContent className="p-3 flex-1 overflow-hidden">
-                <div className="grid grid-cols-2 gap-2 h-full content-start overflow-y-auto pr-1 custom-scrollbar">
-                    {TEMPLATES.map((t) => {
-                        const active = hasDataForOperator(t.operatorKey);
-                        const isSelected = selectedTemplate === t.file && viewMode === "single";
+            
+            <CardContent className="p-2 flex-1 overflow-hidden flex flex-col justify-between gap-1.5">
+                {/* 📋 Single Row per Operator with CDR Checkbox, Count, Date Filter & IDP Checkbox */}
+                <div className="space-y-1.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+                    {OPERATOR_ROWS.map((row) => {
+                        const count = operatorCounts[row.key as keyof typeof operatorCounts] || 0;
+                        const isCdrChecked = !!selectedCdr[row.key];
+                        const isLocChecked = !!selectedLoc[row.key];
+                        const isIdpChecked = !!selectedIdp[row.key];
+                        const durationConfig = formatDurations[row.key] || DEFAULT_DURATIONS[row.key] || { preset: "6m", customDays: 180 };
+
                         return (
-                            <button
-                                key={t.file}
-                                onClick={() => handleGenerate(t.file)}
+                            <div
+                                key={row.key}
                                 className={cn(
-                                    "relative px-3 py-4 rounded-2xl border text-center transition-all duration-200 flex flex-col items-center justify-center gap-2 group overflow-hidden",
-                                    isSelected 
-                                        ? "bg-indigo-600 border-indigo-600 shadow-md ring-2 ring-indigo-600 ring-offset-1" 
-                                        : active 
-                                            ? "bg-indigo-50 border-indigo-200 hover:bg-indigo-100"
-                                            : "bg-slate-50 border-slate-100 hover:bg-white hover:border-orange-200"
+                                    "flex items-center justify-between px-2 py-1 rounded-xl border transition-all gap-1.5",
+                                    isCdrChecked || isLocChecked || isIdpChecked
+                                        ? "border-indigo-200 bg-white shadow-xs" 
+                                        : "border-slate-100 bg-slate-50/50 opacity-60 hover:opacity-100"
                                 )}
                             >
-                                <FileCode size={18} className={cn(isSelected ? "text-white" : active ? "text-indigo-600" : "text-slate-400")} />
-                                <span className={cn("text-[10px] font-black uppercase tracking-tight leading-tight", isSelected ? "text-white" : active ? "text-indigo-700" : "text-slate-600")}>
-                                    {t.name}
+                                {/* Left: CDR Checkbox + Operator Name */}
+                                <div className="flex items-center gap-1.5 min-w-[72px] flex-1">
+                                    <Checkbox 
+                                        id={`chk-cdr-${row.key}`}
+                                        checked={isCdrChecked} 
+                                        onCheckedChange={(c) => setSelectedCdr(prev => ({ ...prev, [row.key]: !!c }))}
+                                        className="h-3.5 w-3.5 rounded data-[state=checked]:bg-indigo-600 border-slate-300 shrink-0"
+                                    />
+                                    <label htmlFor={`chk-cdr-${row.key}`} className="cursor-pointer text-[10px] font-black uppercase text-slate-800 truncate select-none">
+                                        {row.name.replace(" / Warid", "").replace(" All Networks", "")}
+                                    </label>
+                                </div>
+
+                                {/* Count Badge */}
+                                <span className={cn(
+                                    "text-[9px] font-black px-1.5 py-0.2 rounded font-mono shrink-0",
+                                    count > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400"
+                                )}>
+                                    {count}
                                 </span>
-                            </button>
+
+                                {/* Date Dropdown for CDR */}
+                                <div className="flex items-center gap-1 shrink-0">
+                                    <div className="w-[74px]">
+                                        <Select 
+                                            value={durationConfig.preset} 
+                                            onValueChange={(val: CdrDurationPreset) => handleDurationPresetChange(row.key, val)}
+                                        >
+                                            <SelectTrigger className="h-6 text-[9px] font-bold uppercase rounded-lg border-slate-200 bg-slate-50 px-1 py-0">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="3m" className="text-[9px] uppercase font-bold">3M</SelectItem>
+                                                <SelectItem value="6m" className="text-[9px] uppercase font-bold">6M</SelectItem>
+                                                <SelectItem value="9m" className="text-[9px] uppercase font-bold">9M</SelectItem>
+                                                <SelectItem value="1y" className="text-[9px] uppercase font-bold">1Y</SelectItem>
+                                                <SelectItem value="custom" className="text-[9px] uppercase font-bold text-orange-600">Custom</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <Input
+                                          type="number"
+                                          min={1}
+                                          max={3650}
+                                          value={durationConfig.customDays}
+                                          onChange={(e) => handleCustomDaysChange(row.key, parseInt(e.target.value) || 0)}
+                                          className={cn(
+                                              "h-6 text-[9px] font-mono font-bold px-1 py-0 rounded border-orange-300 bg-orange-50/50 text-center",
+                                              "transition-all duration-500 ease-out overflow-hidden origin-right",
+                                              durationConfig.preset === "custom"
+                                                  ? "w-12 opacity-100 scale-100 ml-1"
+                                                  : "w-0 opacity-0 scale-90 ml-0 px-0 pointer-events-none border-0"
+                                          )}
+                                          placeholder="d"
+                                          tabIndex={durationConfig.preset !== "custom" ? -1 : 0}
+                                      />
+                                </div>
+
+                                {/* LOC Checkbox in the same row */}
+                                {row.hasLoc ? (
+                                    <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-lg shrink-0">
+                                        <Checkbox 
+                                            id={`chk-loc-${row.key}`}
+                                            checked={isLocChecked} 
+                                            onCheckedChange={(c) => setSelectedLoc(prev => ({ ...prev, [row.key]: !!c }))}
+                                            className="h-3 w-3 rounded data-[state=checked]:bg-emerald-600 border-slate-300"
+                                        />
+                                        <label htmlFor={`chk-loc-${row.key}`} className="cursor-pointer text-[8px] font-black uppercase text-emerald-700 select-none">
+                                            LOC
+                                        </label>
+                                    </div>
+                                ) : (
+                                    <div className="w-[42px] shrink-0"></div>
+                                )}
+
+                                {/* IDP Checkbox in the same row */}
+                                {row.hasIdp ? (
+                                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-lg shrink-0">
+                                        <Checkbox 
+                                            id={`chk-idp-${row.key}`}
+                                            checked={isIdpChecked} 
+                                            onCheckedChange={(c) => setSelectedIdp(prev => ({ ...prev, [row.key]: !!c }))}
+                                            className="h-3 w-3 rounded data-[state=checked]:bg-purple-600 border-slate-300"
+                                        />
+                                        <label htmlFor={`chk-idp-${row.key}`} className="cursor-pointer text-[8px] font-black uppercase text-purple-700 select-none">
+                                            IDP
+                                        </label>
+                                    </div>
+                                ) : (
+                                    <div className="w-[42px] shrink-0"></div>
+                                )}
+
+                                {/* Quick Play Button */}
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleGenerateSingleRow(row)}
+                                    className="h-6 w-6 p-0 rounded-lg text-indigo-600 hover:bg-indigo-50 shrink-0"
+                                    title={`Generate ${row.name}`}
+                                >
+                                    <Play size={10} className="fill-indigo-600" />
+                                </Button>
+                            </div>
                         );
                     })}
                 </div>
+
+                {/* 🚀 Compact Batch Action Button */}
+                <Button 
+                    onClick={handleGenerateSelected}
+                    className="w-full h-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-black uppercase tracking-tight text-[10px] shadow-sm shrink-0"
+                >
+                    <Zap size={12} className="mr-1 fill-white" />
+                    Build Unified Document ({totalSelectedCount})
+                </Button>
             </CardContent>
         </Card>
       </div>
 
-      {/* 🔹 BOTTOM SECTION: LIVE PREVIEW */}
-      <Card className="border-slate-200 rounded-[1.5rem] overflow-hidden shadow-2xl flex flex-col bg-white min-h-[800px]">
-          <div className="bg-white border-b border-slate-100 p-4 shrink-0 flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                      <Eye size={18} />
+      {/* 🔹 BOTTOM SECTION: SINGLE COMBINED PREVIEW DOCUMENT (CDR ON TOP + IMEI (IF 15 DIGITS) + IDP DIRECTLY BELOW) */}
+      <Card className="border-slate-200 rounded-2xl overflow-hidden shadow-xl flex flex-col bg-white min-h-[600px]">
+          <div className="bg-white border-b border-slate-100 py-2.5 px-4 shrink-0 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                      <Eye size={16} />
                   </div>
                   <div>
-                      <CardTitle className="text-sm font-black text-slate-800 uppercase tracking-tight leading-none">Live Template View</CardTitle>
-                      <p className="text-[10px] font-bold text-slate-400 mt-1 italic">Official Document Preview</p>
+                      <CardTitle className="text-xs font-black text-slate-800 uppercase tracking-tight leading-none">Unified Document Output</CardTitle>
+                      <p className="text-[9px] font-bold text-slate-400 mt-0.5">
+                        {combinedOutput 
+                          ? `${combinedOutput.cdrCount} CDR Format(s) + ${combinedOutput.idpCount} IDP Format(s) in One Master Document`
+                          : "Awaiting generation"}
+                      </p>
                   </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                  <div className="w-64">
-                      <Select value={selectedTemplate} onValueChange={handleGenerate}>
-                          <SelectTrigger className="h-10 text-[10px] font-black uppercase rounded-xl border-slate-200 bg-slate-50/50">
-                              <SelectValue placeholder="Manual Template Select" />
-                          </SelectTrigger>
-                          <SelectContent>
-                              {TEMPLATES.map(t => (
-                                  <SelectItem key={t.file} value={t.file} className="text-[10px] uppercase font-bold">{t.name}</SelectItem>
-                              ))}
-                          </SelectContent>
-                      </Select>
-                  </div>
-                  {selectedTemplate && (
-                      <Button 
-                          size="sm" 
-                          onClick={() => handleGenerate(selectedTemplate)} 
-                          className="h-10 rounded-xl bg-orange-600 hover:bg-orange-700 font-black uppercase text-[10px] px-6 shadow-lg shadow-orange-600/20"
+              {/* Action Buttons: Tab View, Copy All, Send Email */}
+              {combinedOutput && (
+                  <div className="flex items-center gap-2">
+                      <div className="flex bg-slate-200/50 p-0.5 rounded-xl text-[9px] font-black uppercase">
+                          <button
+                            onClick={() => setActiveViewTab("rendered")}
+                            className={`px-2 py-1 rounded-lg transition-all ${
+                              activeViewTab === "rendered" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500"
+                            }`}
+                          >
+                            Document
+                          </button>
+                          <button
+                            onClick={() => setActiveViewTab("text")}
+                            className={`px-2 py-1 rounded-lg transition-all ${
+                              activeViewTab === "text" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500"
+                            }`}
+                          >
+                            Plain Text
+                          </button>
+                          <button
+                            onClick={() => setActiveViewTab("html")}
+                            className={`px-2 py-1 rounded-lg transition-all ${
+                              activeViewTab === "html" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500"
+                            }`}
+                          >
+                            HTML
+                          </button>
+                      </div>
+
+                      <Button
+                        onClick={handleCopy}
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-xl text-[10px] font-black uppercase border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 hover:text-emerald-700 transition-all gap-1.5 px-3 bg-white"
                       >
-                          <Play size={12} className="mr-1 fill-white" /> Refresh View
+                        {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} className="text-slate-500" />}
+                        {copied ? "Copied All" : "Copy All"}
                       </Button>
-                  )}
-              </div>
+
+                      <Button
+                        onClick={handleDownloadDocx}
+                        disabled={generatingDocx}
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-xl text-[10px] font-black uppercase border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all gap-1.5 px-3"
+                        title="Download filled Word Performa (.docx) with current date"
+                      >
+                        {generatingDocx ? (
+                          <Loader2 size={12} className="animate-spin text-blue-600" />
+                        ) : (
+                          <FileDown size={12} className="text-blue-600" />
+                        )}
+                        Word (.docx)
+                      </Button>
+
+                      <Button
+                        onClick={handleEmail}
+                        disabled={generatingDocx}
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-xl text-[10px] font-black uppercase border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 hover:text-indigo-700 transition-all gap-1.5 px-3 bg-white"
+                      >
+                        {generatingDocx ? (
+                          <Loader2 size={12} className="animate-spin text-indigo-600" />
+                        ) : (
+                          <Mail size={12} className="text-slate-500 hover:text-indigo-600" />
+                        )}
+                        Send via Email
+                      </Button>
+                  </div>
+              )}
           </div>
           
-          <div className="flex-1 bg-slate-100/50 overflow-auto custom-scrollbar p-2">
-              {previews.length > 0 ? (
-                  <div className="flex flex-col items-center gap-12 min-w-max mx-auto">
-                      {previews.map((prev, idx) => (
-                          <div key={idx} className="flex flex-col w-[900px] h-[1560px] bg-white shadow-[0_4px_30px_rgba(0,0,0,0.05)] rounded-2xl border border-slate-200 overflow-hidden shrink-0">
-                              {/* Beautiful Action Header Bar */}
-                              <div className="h-14 bg-slate-50 border-b border-slate-100 px-6 flex items-center justify-between shrink-0">
-                                  <div className="flex items-center gap-2.5">
-                                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
-                                      <span className="text-[11px] font-black uppercase text-slate-700 tracking-wider">
-                                          {prev.name}
-                                      </span>
-                                  </div>
-                                  
-                                  <div className="flex items-center gap-2">
-                                      {/* Copy Button */}
-                                      <Button
-                                          onClick={() => handleCopyTemplateText(idx)}
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-8 rounded-xl text-[10px] font-black uppercase border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 hover:text-emerald-700 transition-all gap-1.5 px-3 bg-white"
-                                      >
-                                          <Copy size={12} className="text-slate-500 group-hover:text-emerald-600" />
-                                          Copy Content
-                                      </Button>
+          <div className="flex-1 bg-slate-100/50 overflow-auto custom-scrollbar p-6">
+              {combinedOutput ? (
+                  <div className="w-[900px] min-h-[550px] bg-white shadow-[0_4px_30px_rgba(0,0,0,0.06)] rounded-2xl border border-slate-200 overflow-hidden mx-auto p-8 font-mono text-[13px] leading-relaxed text-slate-800 select-text">
+                      {activeViewTab === "rendered" && (
+                        <div
+                          className="prose max-w-none text-slate-900 font-mono tracking-tight"
+                          dangerouslySetInnerHTML={{ __html: combinedOutput.html }}
+                        />
+                      )}
 
-                                      {/* Email Button */}
-                                      <Button
-                                          onClick={() => handleEmailTemplateText(idx, prev.name)}
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-8 rounded-xl text-[10px] font-black uppercase border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 hover:text-indigo-700 transition-all gap-1.5 px-3 bg-white"
-                                      >
-                                          <Mail size={12} className="text-slate-500 group-hover:text-indigo-600" />
-                                          Send via Email
-                                      </Button>
-                                  </div>
-                              </div>
+                      {activeViewTab === "text" && (
+                        <pre className="whitespace-pre-wrap font-mono text-slate-800 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                          {combinedOutput.text}
+                        </pre>
+                      )}
 
-                              {/* Document iframe */}
-                              <div className="flex-1 relative bg-white">
-                                  <iframe 
-                                      id={`iframe-preview-${idx}`}
-                                      srcDoc={prev.html}
-                                      className="w-full h-full border-0 absolute inset-0"
-                                      sandbox="allow-scripts allow-same-origin allow-forms"
-                                  />
-                              </div>
-                          </div>
-                      ))}
+                      {activeViewTab === "html" && (
+                        <pre className="whitespace-pre-wrap font-mono text-[11px] text-emerald-400 bg-slate-900 p-4 rounded-xl border border-slate-800">
+                          {combinedOutput.html}
+                        </pre>
+                      )}
                   </div>
               ) : (
-                  <div className="h-full flex flex-col items-center justify-center p-20 text-center opacity-30 gap-6">
-                      <div className="p-8 bg-slate-200 rounded-full animate-pulse">
-                        <Zap size={80} className="text-slate-400" />
+                  <div className="h-full flex flex-col items-center justify-center p-16 text-center opacity-30 gap-4">
+                      <div className="p-6 bg-slate-200 rounded-full animate-pulse">
+                        <Zap size={48} className="text-slate-400" />
                       </div>
-                      <div className="space-y-2">
-                          <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Awaiting Command</h3>
-                          <p className="text-xs font-bold uppercase tracking-tight">Identify operators or select a template above to generate view</p>
+                      <div className="space-y-1">
+                          <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Awaiting Command</h3>
+                          <p className="text-[10px] font-bold uppercase">Select desired CDR and IDP checkboxes in the operator rows and click 'Build Unified Document'</p>
                       </div>
                   </div>
               )}

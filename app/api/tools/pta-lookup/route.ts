@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     const decoded: any = jwt.verify(token, SECRET);
 
     // 20 tokens per number for live API identification
-    const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, numbers.length * 20);
+    const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, numbers.length * 10);
     if (!tokenCheck.success) {
       return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
     }

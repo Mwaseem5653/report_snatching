@@ -7,7 +7,6 @@ import { logToolUsage } from "@/lib/usageLogger";
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
 async function fetchSingleSimData(term: string) {
-    const API_URL = "https://simsdatabases.com/apis/simsNumber.php";
     const CHECK_URL = "https://simsdatabases.com/apis/number_check.php";
     const APP_KEY = process.env.SIMINFO;
 
@@ -158,7 +157,7 @@ export async function POST(req: NextRequest) {
         if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         const decoded: any = jwt.verify(token, SECRET);
 
-        const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, targets.length * 40);
+        const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, targets.length * 5);
         if (!tokenCheck.success) {
             return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
         }
