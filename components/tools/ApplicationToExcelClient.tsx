@@ -28,6 +28,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { locationData } from "@/components/location/location";
+import { or } from "firebase/firestore";
 
 export default function ApplicationToExcelClient() {
   const [loading, setLoading] = useState(false);
@@ -309,7 +310,7 @@ export default function ApplicationToExcelClient() {
     }
   };
 
-  if (currentUser?.role !== "super_admin") {
+  if (currentUser?.role !== "super_admin" && currentUser?.role !== "officer"  ) {
       return (
           <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
               <AlertCircle size={48} className="text-red-500" />
