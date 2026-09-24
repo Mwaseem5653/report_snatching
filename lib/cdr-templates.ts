@@ -8,10 +8,10 @@ export interface CdrDurationOption {
 
 export const CDR_DURATION_PRESETS: CdrDurationOption[] = [
   { key: "3m", label: "3 Months", defaultDays: 90 },
-  { key: "6m", label: "6 Months", defaultDays: 180 },
+  { key: "6m", label: "6 Months", defaultDays: 170 },
   { key: "9m", label: "9 Months", defaultDays: 270 },
-  { key: "1y", label: "1 Year", defaultDays: 365 },
-  { key: "custom", label: "Custom Days", defaultDays: 180 },
+  { key: "1y", label: "1 Year", defaultDays: 360 },
+  { key: "custom", label: "Custom Days", defaultDays: 170 },
 ];
 
 export interface CdrTemplateConfig {
@@ -297,7 +297,7 @@ export const CDR_TEMPLATES: CdrTemplateConfig[] = [
     operatorKey: "Ufone",
     type: "msisdn",
     defaultDays: 175,
-    description: "Format: MSISDN|All/Both|MM/DD/YYYY|MM/DD/YYYY|92333...:",
+    description: "Format: Single: MSISDN|All|MM/DD/YYYY|MM/DD/YYYY|92333... | Multiple: MSISDN|Both|MM/DD/YYYY|MM/DD/YYYY|92333...:92333...",
     generate: (input, options) => {
       const items = extract12DigitNumbers(input);
       if (items.length === 0) {
@@ -384,8 +384,9 @@ export const CDR_TEMPLATES: CdrTemplateConfig[] = [
       }
 
       // Ufone
+      const imeiMode = items.length === 1 ? "All" : "Both";
       html += "<br/><br/><br/>";
-      html += `IMEI|Both|${dates.prior.ufone}|${dates.curr.ufone}|${items.join(":")}`;
+      html += `IMEI|${imeiMode}|${dates.prior.ufone}|${dates.curr.ufone}|${items.join(":")}`;
 
       let text = items.join("\n") + "\n\n";
 
@@ -393,7 +394,7 @@ export const CDR_TEMPLATES: CdrTemplateConfig[] = [
       text += `TPI:${tpiList}:${dates.prior.minus}:${dates.curr.minus}:\n\n\n`;
       text += items.map(im => `I;${im.slice(0, -1)};${dates.prior.slash};${dates.curr.slash};`).join("\n") + "\n\n\n";
       text += `PERIOD FROM ${dates.prior.slash} TO DATE. ${items.join(",")}\n\n\n`;
-      text += `IMEI|Both|${dates.prior.ufone}|${dates.curr.ufone}|${items.join(":")}`;
+      text += `IMEI|${imeiMode}|${dates.prior.ufone}|${dates.curr.ufone}|${items.join(":")}`;
 
       return {
         html,

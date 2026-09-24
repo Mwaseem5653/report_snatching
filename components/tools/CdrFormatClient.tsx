@@ -118,10 +118,10 @@ const OPERATOR_ROWS: OperatorRowConfig[] = [
 ];
 
 const DEFAULT_DURATIONS: Record<string, FormatDurationConfig> = {
-  jazz: { preset: "6m", customDays: 180 },
-  telenor: { preset: "6m", customDays: 175 },
-  zong: { preset: "6m", customDays: 180 },
-  ufone: { preset: "1y", customDays: 365 },
+  jazz: { preset: "6m", customDays: 170 },
+  telenor: { preset: "6m", customDays: 170 },
+  zong: { preset: "6m", customDays: 170 },
+  ufone: { preset: "1y", customDays: 360 },
   imei: { preset: "6m", customDays: 170 },
 };
 
@@ -207,16 +207,16 @@ export default function CdrFormatClient() {
   }, []);
 
   const getFormatEffectiveDays = (opKey: string) => {
-    const config = formatDurations[opKey] || DEFAULT_DURATIONS[opKey] || { preset: "6m", customDays: 180 };
+    const config = formatDurations[opKey] || DEFAULT_DURATIONS[opKey] || { preset: "6m", customDays: 170 };
     if (config.preset === "custom") {
-      return { days: config.customDays > 0 ? config.customDays : 180, label: `Custom (${config.customDays}d)` };
+      return { days: config.customDays > 0 ? config.customDays : 170, label: `Custom (${config.customDays}d)` };
     }
     switch (config.preset) {
-      case "3m": return { days: opKey === "imei" ? 85 : 90, label: "3M" };
-      case "6m": return { days: opKey === "telenor" || opKey === "ufone" ? 175 : opKey === "imei" ? 170 : 180, label: "6M" };
+      case "3m": return { days: 90, label: "3M" };
+      case "6m": return { days: 170, label: "6M" };
       case "9m": return { days: 270, label: "9M" };
-      case "1y": return { days: 365, label: "1Y" };
-      default: return { days: 180, label: "6M" };
+      case "1y": return { days: 360, label: "1Y" };
+      default: return { days: 170, label: "6M" };
     }
   };
 
@@ -790,6 +790,75 @@ export default function CdrFormatClient() {
     }
   };
 
+  const handleDownloadTxt = () => {
+    if (!combinedOutput?.text) {
+      toast.error("No output content to download.");
+      return;
+    }
+
+    const allLines = combinedOutput.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    
+    const msisdnLines = allLines.filter(l => l.startsWith("MSISDN|"));
+    const imeiLines = allLines.filter(l => l.startsWith("IMEI|"));
+    const otherLines = allLines.filter(l => 
+      l.startsWith("TPN:") || 
+      l.startsWith("PERIOD FROM") || 
+      l.startsWith("A;") || 
+      l.startsWith("I;") || 
+      l.startsWith("TPS:") || 
+      l.startsWith("LOC")
+    );
+
+    const downloadFile = (text: string, filename: string) => {
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    };
+
+    let downloadedAny = false;
+
+    // 1. Download MSISDN file if MSISDN| lines exist
+    if (msisdnLines.length > 0) {
+      const msisdnText = msisdnLines.join("\n");
+      const isSingle = msisdnText.startsWith("MSISDN|All") || (!msisdnText.includes(":") && !msisdnText.includes("\n"));
+      const filename = isSingle ? "MSISDN ALL.txt" : "MSISDN BOTH.txt";
+      downloadFile(msisdnText, filename);
+      toast.success(`Downloaded ${filename}`);
+      downloadedAny = true;
+    }
+
+    // 2. Download IMEI file if IMEI| lines exist (in separate file)
+    if (imeiLines.length > 0) {
+      const imeiText = imeiLines.join("\n");
+      const isSingle = imeiText.startsWith("IMEI|All") || (!imeiText.includes(":") && !imeiText.includes("\n"));
+      const filename = isSingle ? "IMEI ALL.txt" : "IMEI BOTH.txt";
+
+      if (downloadedAny) {
+        setTimeout(() => {
+          downloadFile(imeiText, filename);
+          toast.success(`Downloaded ${filename}`);
+        }, 350);
+      } else {
+        downloadFile(imeiText, filename);
+        toast.success(`Downloaded ${filename}`);
+        downloadedAny = true;
+      }
+    }
+
+    // 3. Fallback for other formats if neither MSISDN| nor IMEI| lines were found
+    if (!downloadedAny) {
+      const fallbackText = otherLines.length > 0 ? otherLines.join("\n") : allLines.join("\n");
+      downloadFile(fallbackText, "CDR_Request.txt");
+      toast.success("Downloaded CDR_Request.txt");
+    }
+  };
+
   const getActiveNumbersToFill = (): string[] => {
     if (combinedOutput?.numbers && combinedOutput.numbers.length > 0) {
       return combinedOutput.numbers;
@@ -1248,6 +1317,17 @@ export default function CdrFormatClient() {
                       >
                         {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} className="text-slate-500" />}
                         {copied ? "Copied All" : "Copy All"}
+                      </Button>
+
+                      <Button
+                        onClick={handleDownloadTxt}
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-xl text-[10px] font-black uppercase border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400 transition-all gap-1.5 px-3"
+                        title="Download .txt file"
+                      >
+                        <FileText size={12} className="text-emerald-600" />
+                        Download TXT
                       </Button>
 
                       <Button

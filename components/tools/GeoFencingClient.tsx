@@ -166,13 +166,13 @@ export default function GeoFencingClient() {
                 <CardContent className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-6">
                     {!file ? (
                         <div className="relative group cursor-pointer w-full max-w-md">
-                            <input type="file" accept=".xlsx, .csv" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                            <input type="file" accept=".xlsx, .csv, .txt, .tsv" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
                             <div className="border-2 border-dashed border-slate-200 rounded-[2.5rem] p-12 group-hover:border-blue-400 group-hover:bg-blue-50/50 transition-all duration-300">
                                 <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:bg-white transition-transform shadow-sm">
                                     <UploadCloud size={40} className="text-slate-300 group-hover:text-blue-500" />
                                 </div>
                                 <h3 className="text-lg font-bold text-slate-800">Upload CDR Document</h3>
-                                <p className="text-xs text-slate-400 mt-1 uppercase font-black tracking-widest">XLSX or CSV Format Only</p>
+                                <p className="text-xs text-slate-400 mt-1 uppercase font-black tracking-widest">XLSX, CSV or TXT Format</p>
                             </div>
                         </div>
                     ) : (

@@ -1,19 +1,14 @@
-LOC
-MOBILINK
-A;923300868712;
-A;923300868712;
+only for Ufone if single num ki cdr chaye h to ouput pattern ye hoga
+MSISDN|All|09/22/2025|09/22/2026|923317533578
+multiple num ki cdr chaye h to patter ye hoga ufone k lye sirf 
+MSISDN|Both|03/18/2026|09/09/2026|923352465951:923352559900:923328183399  
+ufone k lye auto detect karey k single h to single wala pattern or ek see zyada h to both wala pattern bannega
 
-LOC
-ZONG
-3182632559,3182632559
+issi tara iemi k lye bhi 
 
-LOC
-TELENOR
-923300868712
-923300868712
+single imei 
+IMEI|Both|05/24/2026|08/17/2026|863518031693697
+ek see zyada 
+IMEI|Both|06/13/2026|09/07/2026|355878970451381:355878976101642:357450681255366:357450681255374:353317840443502:353317849160396:350343556968758:353980436968750:350343556562148:353980436562140
 
-LOC
-UFONE
-923300868712
-923300868712
-
+ye sample output h

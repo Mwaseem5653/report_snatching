@@ -234,23 +234,126 @@ function getTimeMinutes(timeStr: string, period: string) {
 }
 
 function findColumn(headers: string[], candidates: string[]): string | null {
-    const upperHeaders = headers.map(h => String(h).trim().toUpperCase());
+    const upperHeaders = headers.map(h => String(h || "").trim().toUpperCase());
+    
+    // Pass 1: Exact match
     for (const cand of candidates) {
-        const candUpper = cand.toUpperCase();
+        const candUpper = cand.trim().toUpperCase();
         const foundIdx = upperHeaders.indexOf(candUpper);
         if (foundIdx !== -1) return headers[foundIdx];
     }
+
+    // Pass 2: Normalized match (alphanumeric only)
+    for (const cand of candidates) {
+        const candNorm = cand.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+        if (!candNorm) continue;
+        const foundIdx = upperHeaders.findIndex(h => h.replace(/[^A-Z0-9]/g, "") === candNorm);
+        if (foundIdx !== -1) return headers[foundIdx];
+    }
+
+    // Pass 3: Substring match (candidate inside header or header inside candidate)
+    for (const cand of candidates) {
+        const candUpper = cand.trim().toUpperCase();
+        if (candUpper.length < 2) continue; // skip single letters to avoid false positives
+        const foundIdx = upperHeaders.findIndex(h => h.includes(candUpper) || (h.length >= 3 && candUpper.includes(h)));
+        if (foundIdx !== -1) return headers[foundIdx];
+    }
+
     return null;
 }
 
 function findTableHeaders(rows: any[][]) {
-    const keywords = ['dld_no', 'msisdn', 'a-party', 'a_number', 'a', 'dld no', 'phone', 'number', 'msisdn_a', 'a party', 'a.party', 'source_addr', 'call_dialed_num', 'b-party', 'b_number', 'date and time', 'start_time', 'call_time', 'datetime', 'str tm', 'time', 'strt_tm', 'usage_start_date'];
-    for (let i = 0; i < Math.min(rows.length, 25); i++) {
+    const keywords = [
+        'dld_no', 'msisdn', 'a-party', 'a_number', 'a_party', 'a', 'dld no', 'phone', 'number', 'msisdn_a', 
+        'a party', 'a.party', 'source_addr', 'call_dialed_num', 'b-party', 'b_party', 'b_number', 'b', 'dlg no',
+        'date and time', 'start_time', 'call_time', 'datetime', 'str tm', 'time', 'strt_tm', 'usage_start_date',
+        'calling', 'called', 'duration', 'date', 'party', 'source', 'destination', 'dt_tm', 'timestamp'
+    ];
+    for (let i = 0; i < Math.min(rows.length, 30); i++) {
+        if (!rows[i] || !Array.isArray(rows[i])) continue;
         const values = rows[i].map(v => String(v || "").trim().toLowerCase());
         const matchCount = values.filter(v => keywords.some(k => v.includes(k))).length;
-        if (matchCount >= 2) return { index: i, headers: rows[i].map(h => String(h || "")) };
+        if (matchCount >= 2) return { index: i, headers: rows[i].map(h => String(h || "").trim()) };
     }
-    return { index: 0, headers: rows[0] ? rows[0].map(h => String(h || "")) : [] };
+    return { index: 0, headers: rows[0] ? rows[0].map(h => String(h || "").trim()) : [] };
+}
+
+function parseCsvLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+                current += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    result.push(current.trim());
+    return result;
+}
+
+function parseTextToRows(buffer: Buffer): any[][] {
+    let text = buffer.toString('utf-8');
+    // Check for UTF-16 encoding (contains null bytes)
+    if (text.includes('\0')) {
+        text = buffer.toString('utf16le');
+    }
+    if (text.charCodeAt(0) === 0xFEFF) {
+        text = text.slice(1);
+    }
+    const lines = text.split(/\r?\n/);
+    const rows: any[][] = [];
+
+    // Scan first 3 lines to find the delimiter with highest column count
+    let delimiter = ',';
+    let maxDelimCount = 0;
+
+    for (let i = 0; i < Math.min(lines.length, 3); i++) {
+        const line = lines[i];
+        if (!line || !line.trim()) continue;
+        const tabs = (line.match(/\t/g) || []).length;
+        const commas = (line.match(/,/g) || []).length;
+        const pipes = (line.match(/\|/g) || []).length;
+        const semicolons = (line.match(/;/g) || []).length;
+
+        const maxInLine = Math.max(tabs, commas, pipes, semicolons);
+        if (maxInLine > maxDelimCount) {
+            maxDelimCount = maxInLine;
+            if (tabs === maxInLine) delimiter = '\t';
+            else if (pipes === maxInLine) delimiter = '|';
+            else if (semicolons === maxInLine) delimiter = ';';
+            else if (commas === maxInLine) delimiter = ',';
+        }
+    }
+
+    // Fallback if no standard delimiter punctuation found but lines have multiple spaces
+    const useMultiSpace = maxDelimCount === 0;
+
+    for (const line of lines) {
+        if (!line || !line.trim()) continue;
+        
+        let rowCells: string[] = [];
+        if (useMultiSpace) {
+            rowCells = line.trim().split(/\s{2,}/).map(cell => cell.trim().replace(/^"|"$/g, ''));
+        } else if (delimiter === ',') {
+            rowCells = parseCsvLine(line);
+        } else {
+            rowCells = line.split(delimiter).map(cell => cell.trim().replace(/^"|"$/g, ''));
+        }
+        rows.push(rowCells);
+    }
+
+    return rows;
 }
 
 import { Readable } from "stream";
@@ -280,54 +383,62 @@ export async function POST(req: NextRequest) {
       if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
   
       const buffer = await file.arrayBuffer();
-      const wb = new ExcelJS.Workbook();
-      const isCsv = file.name.toLowerCase().endsWith(".csv");
-  
-      if (isCsv) {
-          const stream = Readable.from(Buffer.from(buffer));
-          await wb.csv.read(stream);
+      const fileNameLower = file.name.toLowerCase();
+      const isTextFile = fileNameLower.endsWith(".txt") || fileNameLower.endsWith(".csv") || fileNameLower.endsWith(".tsv");
+      const rawRows: any[][] = [];
+
+      if (isTextFile) {
+          const parsed = parseTextToRows(Buffer.from(buffer));
+          rawRows.push(...parsed);
       } else {
-          await wb.xlsx.load(buffer);
-      }
-  
-      let ws = wb.worksheets[0];
-      for (const sheet of wb.worksheets) {
-          if (sheet.rowCount > 1) {
-              ws = sheet;
-              break;
+          try {
+              const wb = new ExcelJS.Workbook();
+              await wb.xlsx.load(buffer);
+              let ws = wb.worksheets[0];
+              for (const sheet of wb.worksheets) {
+                  if (sheet.rowCount > 1) {
+                      ws = sheet;
+                      break;
+                  }
+              }
+              if (ws) {
+                  ws.eachRow({ includeEmpty: true }, (row) => {
+                      const rowData = Array.isArray(row.values) ? row.values.slice(1) : [];
+                      const processedRow = (rowData as any[]).map(val => {
+                          if (val && typeof val === 'object') {
+                              if (val.result !== undefined) return val.result;
+                              if (val instanceof Date) return val;
+                              if (val.text !== undefined) return val.text;
+                              return String(val);
+                          }
+                          return val === null || val === undefined ? "" : val;
+                      });
+                      rawRows.push(processedRow);
+                  });
+              }
+          } catch (excelErr) {
+              const parsed = parseTextToRows(Buffer.from(buffer));
+              rawRows.push(...parsed);
           }
       }
-    
-    const rawRows: any[][] = [];
-    ws.eachRow({ includeEmpty: true }, (row) => {
-        const rowData = Array.isArray(row.values) ? row.values.slice(1) : [];
-        // exceljs row.values is 1-indexed and might contain objects for dates/formulas
-        const processedRow = (rowData as any[]).map(val => {
-            if (val && typeof val === 'object') {
-                if (val.result !== undefined) return val.result;
-                if (val instanceof Date) return val;
-                if (val.text !== undefined) return val.text;
-                return String(val);
-            }
-            return val === null || val === undefined ? "" : val;
-        });
-        rawRows.push(processedRow);
-    });
 
     if (rawRows.length < 2) return NextResponse.json({ error: "Insufficient data in file" }, { status: 400 });
 
     const { index: headerIndex, headers } = findTableHeaders(rawRows);
     const dataRows = rawRows.slice(headerIndex + 1);
 
-    const aCol = findColumn(headers, ['DLD_NO', 'MSISDN', 'A-Party', 'A_NUMBER', 'A', 'DLD NO', 'PHONE', 'NUMBER', 'MSISDN_A', 'A Party', 'A.Party', 'SOURCE_ADDR']);
-    const bCol = findColumn(headers, ['CALL_DIALED_NUM', 'DLG_NO', 'B-Party', 'CALL_ORIG_NUM', 'B_NUMBER', 'B', 'DLG NO', 'MSISDN_B', 'B Party', 'B.Party', 'DEST_ADDR']);
-    const timeCol = findColumn(headers, ['Date And Time', 'START_TIME', 'CALL_TIME', 'DATETIME', 'STR TM', 'TIME', 'STRT_TM', 'CALL_START_DT_TM', 'DATE_TIME', 'Call Date', 'Event Time', 'USAGE_START_DATE']);
+    const aCol = findColumn(headers, ['DLD_NO', 'MSISDN', 'A-Party', 'A_PARTY', 'A_NUMBER', 'A-NUMBER', 'A_NUM', 'A-NUM', 'A', 'DLD NO', 'PHONE', 'NUMBER', 'MSISDN_A', 'A Party', 'A.Party', 'SOURCE_ADDR', 'SOURCE_ADDR_A', 'SOURCE_NUMBER', 'CALLING_NO', 'CALLING_NUMBER', 'CALLING_NUM', 'CALLING_PARTY', 'ORIG_NO', 'ORIGINATING_NUM', 'ORIGINATING_NUMBER', 'MOBILE_NO', 'CELL_NO', 'PARTY_A', 'CHARGED_PARTY', 'CALLER']);
+    const bCol = findColumn(headers, ['CALL_DIALED_NUM', 'DLG_NO', 'B-Party', 'B_PARTY', 'CALL_ORIG_NUM', 'B_NUMBER', 'B-NUMBER', 'B_NUM', 'B-NUM', 'B', 'DLG NO', 'MSISDN_B', 'B Party', 'B.Party', 'DEST_ADDR', 'DEST_NUMBER', 'CALLED_NO', 'CALLED_NUMBER', 'CALLED_NUM', 'CALLED_PARTY', 'TERMINATING_NUM', 'RECEIVER', 'PARTY_B', 'DIALED_NUM', 'DIALED_NUMBER', 'CALLEE']);
+    const timeCol = findColumn(headers, ['Date And Time', 'DATE_TIME', 'DATE AND TIME', 'START_TIME', 'START TIME', 'CALL_TIME', 'CALL TIME', 'CALL_START_TIME', 'DATETIME', 'STR TM', 'TIME', 'STRT_TM', 'CALL_START_DT_TM', 'Call Date', 'CALL_DATE', 'Event Time', 'EVENT_TIME', 'USAGE_START_DATE', 'TIMESTAMP', 'DATE/TIME', 'DATE / TIME', 'DATE', 'TIME_STAMP', 'START_DT', 'CALL_DT', 'SETUP_TIME', 'REC_DATE_TIME']);
     // 🚀 NEW: Duration column, used for the "Exclusive To Time Period" sheets
-    const durCol = findColumn(headers, ['DRTN', 'Duration', 'DURATION', 'CALL_DURATION', 'Call Duration', 'DURATION_SEC', 'Duration(Sec)', 'Duration (sec)', 'DUR']);
+    const durCol = findColumn(headers, ['DRTN', 'Duration', 'DURATION', 'CALL_DURATION', 'Call Duration', 'DURATION_SEC', 'Duration(Sec)', 'Duration (sec)', 'DUR', 'CALL_DUR']);
 
-        if (!aCol || !timeCol) {
-            return NextResponse.json({ error: "Required columns (A-Party and Time) not found." }, { status: 400 });
-        }
+    if (!aCol || !timeCol) {
+        const foundStr = headers.filter(h => h && h.trim()).join(", ");
+        return NextResponse.json({ 
+            error: `Required columns (A-Party and Time) not found. Detected headers in your file: [${foundStr || "None"}]` 
+        }, { status: 400 });
+    }
 
         const aIdx = headers.indexOf(aCol);
         const bIdx = bCol ? headers.indexOf(bCol) : -1;
@@ -481,15 +592,15 @@ export async function POST(req: NextRequest) {
 
         // --- Sheet 1: ProvidedSheet (Original sheet analyzed - Put FIRST as requested) ---
         const wsProvided = outWb.addWorksheet("ProvidedSheet");
-        ws.eachRow({ includeEmpty: true }, (row, rowNumber) => {
-            const newRow = wsProvided.getRow(rowNumber);
-            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-                let val = cell.value;
-                if (val && typeof val === 'object') {
-                    if ((val as any).result !== undefined) val = (val as any).result;
-                    else if ((val as any).text !== undefined) val = (val as any).text;
+        rawRows.forEach((row, rowIdx) => {
+            const newRow = wsProvided.getRow(rowIdx + 1);
+            row.forEach((val, colIdx) => {
+                let cellVal = val;
+                if (cellVal && typeof cellVal === 'object') {
+                    if ((cellVal as any).result !== undefined) cellVal = (cellVal as any).result;
+                    else if ((cellVal as any).text !== undefined) cellVal = (cellVal as any).text;
                 }
-                newRow.getCell(colNumber).value = val;
+                newRow.getCell(colIdx + 1).value = cellVal;
             });
             newRow.commit();
         });
@@ -526,7 +637,7 @@ export async function POST(req: NextRequest) {
         });
 
         // Fill Raw Data Headers (spacer column in between)
-        headers.forEach((h, idx) => {
+        headers.forEach((h: string, idx: number) => {
             const cell = headerRow1.getCell(SPACER_COL + idx + 1);
             cell.value = h;
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F81BD" } };
@@ -584,7 +695,7 @@ export async function POST(req: NextRequest) {
             // Raw Data columns — all matched raw rows dumped alongside (independent list)
             if (i < totalRawRows) {
                 const rawRow = fullMatchedOriginals[i];
-                headers.forEach((h, colIdx) => {
+                headers.forEach((h: string, colIdx: number) => {
                     let val = rawRow[colIdx];
                     const headerUpper = h.toUpperCase();
                     const isDateOrTimeCol = headerUpper.includes('TIME') || headerUpper.includes('DATE') || headerUpper.includes('STRT_TM') || headerUpper.includes('DATETIME');
