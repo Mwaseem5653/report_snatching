@@ -827,7 +827,7 @@ export default function CdrFormatClient() {
     if (msisdnLines.length > 0) {
       const msisdnText = msisdnLines.join("\n");
       const isSingle = msisdnText.startsWith("MSISDN|All") || (!msisdnText.includes(":") && !msisdnText.includes("\n"));
-      const filename = isSingle ? "MSISDN ALL.txt" : "MSISDN BOTH.txt";
+      const filename = isSingle ? "MSISDN All.txt" : "MSISDN Both.txt";
       downloadFile(msisdnText, filename);
       toast.success(`Downloaded ${filename}`);
       downloadedAny = true;
@@ -837,7 +837,7 @@ export default function CdrFormatClient() {
     if (imeiLines.length > 0) {
       const imeiText = imeiLines.join("\n");
       const isSingle = imeiText.startsWith("IMEI|All") || (!imeiText.includes(":") && !imeiText.includes("\n"));
-      const filename = isSingle ? "IMEI ALL.txt" : "IMEI BOTH.txt";
+      const filename = isSingle ? "IMEI All.txt" : "IMEI Both.txt";
 
       if (downloadedAny) {
         setTimeout(() => {
