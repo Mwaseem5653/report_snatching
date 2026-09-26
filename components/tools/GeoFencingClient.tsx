@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { getApiUrl } from "@/lib/utils";
 import AlertModal from "@/components/ui/alert-modal";
 import TokenExpiredModal from "@/components/ui/token-expired-modal";
+import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/uploadHelper";
 
 export default function GeoFencingClient() {
   const [file, setFile] = useState<File | null>(null);
@@ -54,15 +55,28 @@ export default function GeoFencingClient() {
 
     setLoading(true);
     setResultUrl(null);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("fromTime", fromTime);
-    formData.append("fromPeriod", fromPeriod);
-    formData.append("toTime", toTime);
-    formData.append("toPeriod", toPeriod);
-    formData.append("includeB", includeB.toString());
+
+    let uploadedPublicId = "";
 
     try {
+      // 🚀 Step 1: Upload file to Cloudinary first (avoids 413 size limit on serverless)
+      toast.info("Uploading file...");
+      const uploadRes = await uploadFileToStorage(file, "geo-fencing");
+      const cloudinaryUrl = uploadRes.secure_url;
+      uploadedPublicId = uploadRes.public_id;
+
+      // 🚀 Step 2: Send Cloudinary URL to backend (not the raw file)
+      const formData = new FormData();
+      formData.append("cloudinaryUrl", cloudinaryUrl);
+      formData.append("cloudinaryPublicId", uploadedPublicId);
+      formData.append("fileName", file.name);
+      formData.append("fromTime", fromTime);
+      formData.append("fromPeriod", fromPeriod);
+      formData.append("toTime", toTime);
+      formData.append("toPeriod", toPeriod);
+      formData.append("includeB", includeB.toString());
+
+      toast.info("Processing data...");
       const res = await fetch(getApiUrl("/api/tools/geo-fencing"), {
         method: "POST",
         body: formData,
@@ -82,11 +96,16 @@ export default function GeoFencingClient() {
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       setResultUrl(url);
+      uploadedPublicId = ""; // Backend deletes it on success, no client cleanup needed
       window.dispatchEvent(new Event("refresh-session"));
       toast.success("Analysis Complete!");
     } catch (error: any) {
       toast.error(error?.message || "Network error. Please try again.");
     } finally {
+      // 🚀 Cleanup: if upload succeeded but processing failed, delete from Cloudinary
+      if (uploadedPublicId) {
+        await deleteFileFromStorage(uploadedPublicId);
+      }
       setLoading(false);
     }
   };

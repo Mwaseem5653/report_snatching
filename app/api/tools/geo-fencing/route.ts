@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
 import { logToolUsage } from "@/lib/usageLogger";
+import { deleteFileFromStorageServer } from "@/lib/storageAdmin";
 
 export const maxDuration = 300; // 5 minutes timeout for processing large CDR files
 export const dynamic = "force-dynamic";
@@ -362,6 +363,7 @@ function parseTextToRows(buffer: Buffer): any[][] {
 import { Readable } from "stream";
 
 export async function POST(req: NextRequest) {
+    let publicIdToClean = "";
     try {
       const cookieStore = await cookies();
       const token = cookieStore.get("sessionToken")?.value;
@@ -372,21 +374,31 @@ export async function POST(req: NextRequest) {
       await logToolUsage(decoded, "Geo Fencing");
   
       const formData = await req.formData();
-      const file = formData.get("file") as File;
+
+      // 🚀 Cloudinary-based file handling (same as Excel Analyzer)
+      const cloudinaryUrl = formData.get("cloudinaryUrl") as string;
+      const cloudinaryPublicId = formData.get("cloudinaryPublicId") as string;
+      const fileName = formData.get("fileName") as string;
       const fromTime = formData.get("fromTime") as string;
       const fromPeriod = formData.get("fromPeriod") as string;
       const toTime = formData.get("toTime") as string;
       const toPeriod = formData.get("toPeriod") as string;
       const includeB = formData.get("includeB") === "true";
-      
-      if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+
+      if (!cloudinaryUrl) return NextResponse.json({ error: "No file provided" }, { status: 400 });
+
+      publicIdToClean = cloudinaryPublicId || "";
       
       // 🚀 Deduct 10 General Tokens
       const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, 10);
       if (!tokenCheck.success) return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
-  
-      const buffer = await file.arrayBuffer();
-      const fileNameLower = file.name.toLowerCase();
+
+      // 🚀 Download file from Cloudinary
+      const fileRes = await fetch(cloudinaryUrl);
+      if (!fileRes.ok) throw new Error("Failed to download file from Cloudinary");
+      const buffer = await fileRes.arrayBuffer();
+
+      const fileNameLower = (fileName || "").toLowerCase();
       const isTextFile = fileNameLower.endsWith(".txt") || fileNameLower.endsWith(".csv") || fileNameLower.endsWith(".tsv");
       const rawRows: any[][] = [];
 
@@ -905,5 +917,10 @@ export async function POST(req: NextRequest) {
     } catch (error: any) {
         console.error("Geo Fencing Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
+    } finally {
+        // 🚀 Always delete file from Cloudinary after processing (success or failure)
+        if (publicIdToClean) {
+            await deleteFileFromStorageServer(publicIdToClean);
+        }
     }
 }
