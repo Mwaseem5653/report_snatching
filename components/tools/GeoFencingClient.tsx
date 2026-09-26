@@ -69,11 +69,11 @@ export default function GeoFencingClient() {
       });
 
       if (!res.ok) {
-        const errData = await res.json();
+        const errData = await res.json().catch(() => ({ error: `Server HTTP ${res.status}: ${res.statusText || "Deployment Timeout or Size Limit Error"}` }));
         if (res.status === 403) {
             setTokenModal({ isOpen: true, currentBalance: errData.currentBalance || 0, requiredTokens: 10 });
         } else {
-            setAlert({ isOpen: true, title: "Process Error", description: errData.error || "An unexpected error occurred.", type: "error" });
+            setAlert({ isOpen: true, title: "Process Error", description: errData.error || "An unexpected error occurred during processing.", type: "error" });
         }
         setLoading(false);
         return;
@@ -85,7 +85,7 @@ export default function GeoFencingClient() {
       window.dispatchEvent(new Event("refresh-session"));
       toast.success("Analysis Complete!");
     } catch (error: any) {
-      toast.error("Network error. Please try again.");
+      toast.error(error?.message || "Network error. Please try again.");
     } finally {
       setLoading(false);
     }

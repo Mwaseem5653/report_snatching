@@ -5,6 +5,9 @@ import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
 import { logToolUsage } from "@/lib/usageLogger";
 
+export const maxDuration = 300; // 5 minutes timeout for processing large CDR files
+export const dynamic = "force-dynamic";
+
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
 // --- Helper: Normalize Phone Number ---
@@ -475,11 +478,22 @@ export async function POST(req: NextRequest) {
 
         const fullMatchedOriginals = windowRows.map(r => r.original);
 
-        // A-Party and B-Party kept as two SEPARATE lists (not merged). Numbers are
-        // SELECTED based on the given time window (only numbers active in that window
-        // are included), but their First Call / Last Call / Count are computed from the
-        // WHOLE SHEET — so if a selected number appears anywhere else too, that counts
-        // toward its total and can push First/Last outside the window.
+        // 🚀 OPTIMIZATION: Pre-index full history in Map for O(1) lookups (Prevents serverless timeouts on large files)
+        const numberHistoryMap = new Map<string, typeof processedRows>();
+        for (let i = 0; i < processedRows.length; i++) {
+            const r = processedRows[i];
+            if (r.aNorm) {
+                let list = numberHistoryMap.get(r.aNorm);
+                if (!list) { list = []; numberHistoryMap.set(r.aNorm, list); }
+                list.push(r);
+            }
+            if (r.bNorm && r.bNorm !== r.aNorm) {
+                let list = numberHistoryMap.get(r.bNorm);
+                if (!list) { list = []; numberHistoryMap.set(r.bNorm, list); }
+                list.push(r);
+            }
+        }
+
         const uniqueA = Array.from(new Set(windowRows.map(r => r.aNorm!)));
         const uniqueB = includeB
             ? Array.from(new Set(windowRows.map(r => r.bNorm).filter((b): b is string => b !== null)))
@@ -487,8 +501,7 @@ export async function POST(req: NextRequest) {
 
         const aResults: any[] = [];
         for (const aNorm of uniqueA) {
-            // Full-sheet history for this A number (every appearance, as A or B, anywhere in the sheet)
-            const history = processedRows.filter(r => r.aNorm === aNorm || (bIdx !== -1 && r.bNorm === aNorm));
+            const history = numberHistoryMap.get(aNorm) || [];
             if (history.length === 0) continue;
             const first = history[0];
             const last = history[history.length - 1];
@@ -504,8 +517,7 @@ export async function POST(req: NextRequest) {
         const bResults: any[] = [];
         if (includeB) {
             for (const bNorm of uniqueB) {
-                // Full-sheet history for this B number (every appearance, as A or B, anywhere in the sheet)
-                const history = processedRows.filter(r => r.aNorm === bNorm || (bIdx !== -1 && r.bNorm === bNorm));
+                const history = numberHistoryMap.get(bNorm) || [];
                 if (history.length === 0) continue;
                 const first = history[0];
                 const last = history[history.length - 1];
@@ -519,11 +531,6 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 🚀 NEW: "Exclusive To Time Period" — numbers whose ENTIRE sheet-wide activity
-        // (every single record, on any date) falls inside the selected time window. If a
-        // number is used even once outside the window (before or after it, on any day),
-        // it is removed from this list entirely. Count = how many times it repeats inside
-        // the window.
         const isInWindow = (minutes: number) => {
             if (isOvernight) {
                 return minutes >= startMin || minutes <= endMin;
@@ -531,8 +538,6 @@ export async function POST(req: NextRequest) {
             return minutes >= startMin && minutes <= endMin;
         };
 
-        // 🚀 NEW: helper to build a " | " separated string of durations for a set of
-        // matched rows, in the same order as those rows (so it lines up with each call).
         const getDurations = (history: typeof processedRows) => {
             if (durIdx === -1) return "";
             return history
@@ -545,10 +550,10 @@ export async function POST(req: NextRequest) {
 
         const exclusiveAResults: any[] = [];
         for (const aNorm of uniqueA) {
-            const fullHistory = processedRows.filter(r => r.aNorm === aNorm || (bIdx !== -1 && r.bNorm === aNorm));
+            const fullHistory = numberHistoryMap.get(aNorm) || [];
             if (fullHistory.length === 0) continue;
             const allInsideWindow = fullHistory.every(r => isInWindow(r.minutes));
-            if (!allInsideWindow) continue; // used outside the window somewhere -> excluded
+            if (!allInsideWindow) continue;
             const first = fullHistory[0];
             const last = fullHistory[fullHistory.length - 1];
             exclusiveAResults.push({
@@ -557,21 +562,20 @@ export async function POST(req: NextRequest) {
                 'A First Call': standardizeDateTime(first.dt),
                 'A Last Call': standardizeDateTime(last.dt),
                 'A Count': fullHistory.length,
-                'A Duration': getDurations(fullHistory), // 🚀 NEW
-                _firstTs: first.dt!.getTime() // 🚀 kept for time-sequence sorting below
+                'A Duration': getDurations(fullHistory),
+                _firstTs: first.dt!.getTime()
             });
         }
-        // Two orderings of the same data: by count (desc) and by chronological sequence (asc)
         const exclusiveAByCount = [...exclusiveAResults].sort((a, b) => b['A Count'] - a['A Count']);
         const exclusiveAByTime = [...exclusiveAResults].sort((a, b) => a._firstTs - b._firstTs);
 
         const exclusiveBResults: any[] = [];
         if (includeB) {
             for (const bNorm of uniqueB) {
-                const fullHistory = processedRows.filter(r => r.aNorm === bNorm || (bIdx !== -1 && r.bNorm === bNorm));
+                const fullHistory = numberHistoryMap.get(bNorm) || [];
                 if (fullHistory.length === 0) continue;
                 const allInsideWindow = fullHistory.every(r => isInWindow(r.minutes));
-                if (!allInsideWindow) continue; // used outside the window somewhere -> excluded
+                if (!allInsideWindow) continue;
                 const first = fullHistory[0];
                 const last = fullHistory[fullHistory.length - 1];
                 exclusiveBResults.push({
@@ -580,8 +584,8 @@ export async function POST(req: NextRequest) {
                     'B First Call': standardizeDateTime(first.dt),
                     'B Last Call': standardizeDateTime(last.dt),
                     'B Count': fullHistory.length,
-                    'B Duration': getDurations(fullHistory), // 🚀 NEW
-                    _firstTs: first.dt!.getTime() // 🚀 kept for time-sequence sorting below
+                    'B Duration': getDurations(fullHistory),
+                    _firstTs: first.dt!.getTime()
                 });
             }
         }
@@ -605,10 +609,12 @@ export async function POST(req: NextRequest) {
             newRow.commit();
         });
 
-        // Column width auto-adjust for ProvidedSheet
+        // Column width auto-adjust for ProvidedSheet (sampling first 200 rows for speed)
         wsProvided.columns.forEach((col, idx) => {
             let maxLen = 15;
+            let count = 0;
             wsProvided.eachRow({ includeEmpty: false }, (row) => {
+                if (count++ > 200) return;
                 const cell = row.getCell(idx + 1);
                 const cellValue = String(cell.value || "");
                 if (cellValue.length > maxLen) maxLen = cellValue.length;
@@ -730,7 +736,9 @@ export async function POST(req: NextRequest) {
                 continue;
             }
             let maxLen = 15;
+            let count = 0;
             wsSummary.eachRow({ includeEmpty: false }, (row) => {
+                if (count++ > 200) return;
                 const cell = row.getCell(colIdx);
                 const cellValue = String(cell.value || "");
                 if (cellValue.length > maxLen) maxLen = cellValue.length;
@@ -739,9 +747,6 @@ export async function POST(req: NextRequest) {
         }
 
         // --- Sheet 3: Exclusive To Time Period ---
-        // Numbers that ONLY ever appear (as A or B, on any date, anywhere in the sheet)
-        // inside the selected time window. If a number was used even once outside the
-        // window, it does not appear here at all.
         const wsExclusive = outWb.addWorksheet("Exclusive To Time Period");
         const exclusiveHeaders = [
             'A Number', 'A Date', 'A First Call', 'A Last Call', 'A Count', 'A Duration',
@@ -806,10 +811,12 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // Column width auto-adjust for Sheet 3
+        // Column width auto-adjust for Sheet 3 (sampling first 200 rows)
         for (let colIdx = 1; colIdx <= exclusiveHeaders.length; colIdx++) {
             let maxLen = 15;
+            let count = 0;
             wsExclusive.eachRow({ includeEmpty: false }, (row) => {
+                if (count++ > 200) return;
                 const cell = row.getCell(colIdx);
                 const cellValue = String(cell.value || "");
                 if (cellValue.length > maxLen) maxLen = cellValue.length;
@@ -818,8 +825,6 @@ export async function POST(req: NextRequest) {
         }
 
         // --- Sheet 4: Exclusive To Time Period (By Time Sequence) ---
-        // Same exclusive-numbers data as Sheet 3, but ordered chronologically by first
-        // call time instead of by count.
         const wsExclusiveByTime = outWb.addWorksheet("Exclusive (By Time)");
         exclusiveHeaders.forEach((h, idx) => {
             const cell = wsExclusiveByTime.getRow(1).getCell(idx + 1);
@@ -875,10 +880,12 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // Column width auto-adjust for Sheet 4
+        // Column width auto-adjust for Sheet 4 (sampling first 200 rows)
         for (let colIdx = 1; colIdx <= exclusiveHeaders.length; colIdx++) {
             let maxLen = 15;
+            let count = 0;
             wsExclusiveByTime.eachRow({ includeEmpty: false }, (row) => {
+                if (count++ > 200) return;
                 const cell = row.getCell(colIdx);
                 const cellValue = String(cell.value || "");
                 if (cellValue.length > maxLen) maxLen = cellValue.length;

