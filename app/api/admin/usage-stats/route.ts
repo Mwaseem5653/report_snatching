@@ -98,10 +98,7 @@ export async function GET(req: NextRequest) {
             }
         });
 
-        const HIDDEN_EMAILS = ["faisal.sammo@gmail.com"];
-        const result = Object.values(aggregation).filter(
-            (u: any) => !HIDDEN_EMAILS.includes(u.email?.toLowerCase().trim())
-        );
+        const result = Object.values(aggregation);
 
         return NextResponse.json({ success: true, stats: result });
 
