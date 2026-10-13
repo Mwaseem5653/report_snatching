@@ -65,6 +65,11 @@ class ApplicationCache {
         delete this.store[key];
         delete this.lastUsedFilters[key];
     }
+
+    public clearAll() {
+        this.store = {};
+        this.lastUsedFilters = {};
+    }
 }
 
 export const appCache = ApplicationCache.getInstance();

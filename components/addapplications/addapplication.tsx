@@ -149,6 +149,15 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
     if (isInitialized) handleSearch();
   }, [isInitialized, filterStatus, filterPeriod, filterPs, officerUid]);
 
+  useEffect(() => {
+    const handleRefresh = () => {
+      appCache.clearAll();
+      if (isInitialized) handleSearch(true);
+    };
+    window.addEventListener("refresh-applications", handleRefresh);
+    return () => window.removeEventListener("refresh-applications", handleRefresh);
+  }, [isInitialized, filterStatus, filterPeriod, filterPs, searchQuery]);
+
   // Extract all PS names from locationData
   const allPS = Object.values(locationData).flatMap(city => 
     Object.values(city.districts).flatMap(district => district.ps)

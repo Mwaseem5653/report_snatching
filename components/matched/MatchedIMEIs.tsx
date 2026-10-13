@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn, getApiUrl } from "@/lib/utils";
+import { appCache } from "@/lib/applicationCache";
 import {
   Dialog,
   DialogContent,
@@ -141,16 +142,24 @@ export default function MatchedIMEIsView({ initialSession }: { initialSession?: 
             body: JSON.stringify({ matchId: id, note, action })
         });
 
-        if (res.ok) {
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            appCache.clearAll();
+            alert("✅ Added to Process successfully!");
             if (!targetId) { 
                 setSelectedMatch(null); 
                 setNote("");
             }
             fetchMatches();
             window.dispatchEvent(new Event('focus')); // Refresh header notifs
+            window.dispatchEvent(new Event('refresh-applications')); // Invalidate and refresh application lists
+        } else {
+            alert(data.error || "Failed to update status");
         }
     } catch (err) {
         console.error("Action error:", err);
+        alert("Failed to update status due to network error");
     } finally {
         setLoadingAction(null);
     }
@@ -190,8 +199,8 @@ export default function MatchedIMEIsView({ initialSession }: { initialSession?: 
 
   const isClearedForUser = (match: any) => {
       if (!currentUser) return false;
-      if (currentUser.role === "super_admin") return !!match.superAdminCleared;
-      if (currentUser.role === "admin") return !!match.adminCleared;
+      if (currentUser.role === "super_admin") return !!match.superAdminCleared || match.status === "cleared";
+      if (currentUser.role === "admin") return !!match.adminCleared || match.status === "cleared";
       return match.status === "cleared";
   };
 
@@ -399,7 +408,7 @@ export default function MatchedIMEIsView({ initialSession }: { initialSession?: 
                       <FileCheck className="text-blue-600" size={18} /> Case Process Log
                   </h3>
                   <div className="space-y-6">
-                      {currentUser?.role === "super_admin" && (
+                      {(currentUser?.role === "super_admin" || currentUser?.role === "admin") && (
                           <div className="space-y-6">
                               <div className="space-y-3">
                                   <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Case Status / Process Note</Label>
@@ -415,9 +424,9 @@ export default function MatchedIMEIsView({ initialSession }: { initialSession?: 
 
                               <div className={cn(
                                   "pt-4 border-t border-slate-200 grid gap-4",
-                                  !isClearedForUser(selectedMatch) ? "grid-cols-2" : "grid-cols-1"
+                                  currentUser?.role === "super_admin" && !isClearedForUser(selectedMatch) ? "grid-cols-2" : "grid-cols-1"
                               )}>
-                                  {!isClearedForUser(selectedMatch) && (
+                                  {currentUser?.role === "super_admin" && !isClearedForUser(selectedMatch) && (
                                       <Button 
                                         onClick={handleDeleteNotification}
                                         disabled={loadingAction !== null}

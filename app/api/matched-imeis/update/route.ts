@@ -29,13 +29,10 @@ export async function POST(req: NextRequest) {
     }
     const matchDoc = matchRes[0];
 
-    const updateFields: any = {};
     const now = new Date().toISOString();
 
     if (action === "officer_view") {
-        updateFields.officerNote = note || "";
-        updateFields.status = "processed";
-        updateFields.viewedBy = JSON.stringify({
+        const viewedBy = JSON.stringify({
             uid: currentUser.uid,
             name: currentUser.name,
             role: currentUser.role,
@@ -45,12 +42,16 @@ export async function POST(req: NextRequest) {
             district: currentUser.district || "",
             at: now
         });
+        await sql`
+            UPDATE matched_imeis SET 
+            "status" = 'processed',
+            "officerNote" = ${note || ""},
+            "viewedBy" = ${viewedBy}
+            WHERE "id" = ${matchId}
+        `;
     } 
     else if (action === "admin_acknowledge") {
-        updateFields.status = "cleared";
-        updateFields.superAdminCleared = true;
-        updateFields.adminCleared = true;
-        updateFields.acknowledgedBy = JSON.stringify({
+        const ackData = JSON.stringify({
             uid: currentUser.uid,
             name: currentUser.name,
             role: currentUser.role,
@@ -61,36 +62,68 @@ export async function POST(req: NextRequest) {
             at: now
         });
 
-        // 🚀 ALSO UPDATE ORIGINAL APPLICATION STATUS
-        const applicationId = matchDoc.applicationId;
-        if (applicationId) {
+        // 1. Update matched_imeis record(s)
+        await sql`
+            UPDATE matched_imeis SET 
+            "status" = 'cleared',
+            "superAdminCleared" = true,
+            "adminCleared" = true,
+            "acknowledgedBy" = ${ackData}
+            WHERE "id" = ${matchId}
+        `;
+
+        // If duplicate unacknowledged notifications exist for this same application, mark them cleared too
+        if (matchDoc.applicationId) {
+            await sql`
+                UPDATE matched_imeis SET 
+                "status" = 'cleared',
+                "superAdminCleared" = true,
+                "adminCleared" = true,
+                "acknowledgedBy" = ${ackData}
+                WHERE "applicationId" = ${matchDoc.applicationId} AND "status" != 'cleared'
+            `;
+        }
+
+        // 2. 🚀 ALSO UPDATE ORIGINAL APPLICATION STATUS TO 'PROCESSED'
+        const processedBy = JSON.stringify({
+            uid: currentUser.uid,
+            name: currentUser.name,
+            mobile: currentUser.mobile || "",
+            role: currentUser.role,
+            buckle: currentUser.buckle || "N/A",
+            at: now,
+            note: note || "Automatically processed via IMEI Match"
+        });
+
+        let updatedApp = false;
+        if (matchDoc.applicationId) {
+            const updateRes = await sql`
+                UPDATE applications SET 
+                "status" = 'processed', 
+                "processedBy" = ${processedBy}
+                WHERE "id" = ${matchDoc.applicationId}
+                RETURNING "id"
+            `;
+            if (updateRes.length > 0) updatedApp = true;
+        }
+
+        // Fallback: If applicationId was missing or didn't match, update by IMEI
+        if (!updatedApp && matchDoc.imei) {
             await sql`
                 UPDATE applications SET 
                 "status" = 'processed', 
-                "processedBy" = ${JSON.stringify({
-                    uid: currentUser.uid,
-                    name: currentUser.name,
-                    at: now,
-                    note: note || "Automatically processed via IMEI Match"
-                })}
-                WHERE "id" = ${applicationId}
+                "processedBy" = ${processedBy}
+                WHERE ${matchDoc.imei} = ANY("allImeis")
             `;
         }
     } 
     else if (action === "not_clear") {
-        updateFields.status = "processed";
-        updateFields.acknowledgedBy = null;
-    }
-
-    // Dynamic update
-    const keys = Object.keys(updateFields);
-    if (keys.length > 0) {
-        let updateQuery = sql`UPDATE matched_imeis SET `;
-        keys.forEach((key, index) => {
-            updateQuery = sql`${updateQuery} "${key}" = ${updateFields[key]} ${index < keys.length - 1 ? sql`, ` : sql``}`;
-        });
-        updateQuery = sql`${updateQuery} WHERE "id" = ${matchId}`;
-        await updateQuery;
+        await sql`
+            UPDATE matched_imeis SET 
+            "status" = 'processed',
+            "acknowledgedBy" = null
+            WHERE "id" = ${matchId}
+        `;
     }
 
     return NextResponse.json({ success: true });
