@@ -62,25 +62,25 @@ export async function POST(req: NextRequest) {
             at: now
         });
 
-        // 1. Update matched_imeis record(s)
+        // 1. Update matched_imeis record(s) to 'processed'
         await sql`
             UPDATE matched_imeis SET 
-            "status" = 'cleared',
-            "superAdminCleared" = true,
-            "adminCleared" = true,
-            "acknowledgedBy" = ${ackData}
+            "status" = 'processed',
+            "superAdminCleared" = false,
+            "adminCleared" = false,
+            "acknowledgedBy" = ${ackData},
+            "officerNote" = ${note || ""}
             WHERE "id" = ${matchId}
         `;
 
-        // If duplicate unacknowledged notifications exist for this same application, mark them cleared too
+        // If duplicate unacknowledged notifications exist for this same application, mark them processed too
         if (matchDoc.applicationId) {
             await sql`
                 UPDATE matched_imeis SET 
-                "status" = 'cleared',
-                "superAdminCleared" = true,
-                "adminCleared" = true,
-                "acknowledgedBy" = ${ackData}
-                WHERE "applicationId" = ${matchDoc.applicationId} AND "status" != 'cleared'
+                "status" = 'processed',
+                "acknowledgedBy" = ${ackData},
+                "officerNote" = ${note || ""}
+                WHERE "applicationId" = ${matchDoc.applicationId} AND "status" = 'new'
             `;
         }
 

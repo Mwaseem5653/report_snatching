@@ -7,6 +7,7 @@ import { Readable } from "stream";
 import { checkAndDeductTokens, checkAndDeductEyeconTokens } from "@/lib/tokenHelper";
 import { deleteFileFromStorageServer } from "@/lib/storageAdmin";
 import { logToolUsage } from "@/lib/usageLogger";
+import { and } from "firebase/firestore";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -499,18 +500,21 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
         }
     }
 
-    const typeCol = findColumn(headers, ["CallType", "CALL_TYPE", "Type", "Usage Type", "Service Type"]);
-    const directionCol = findColumn(headers, ["INBOUND_OUTBOUND_IND", "Direction", "Call Direction", "Direct"]);
-    const addressCol = findColumn(headers, ["Address", "Location", "Addr", "SITE_ADDRESS", "SiteLocation", "Cell ID Address", "CellAddress", "Cell Name", "Tower", "Site Name"]);
+    const typeCol = findColumn(headers, ["CallType", "CALL_TYPE", "Type", "Usage Type", "Service Type","Call Type"]);
+    const directionCol = findColumn(headers, ["INBOUND_OUTBOUND_IND", "Direction", "Call Direction","Direct"]);
+    let   addressCol = findColumn(headers, ["Address","Site ID" ,"Location","Addr", "SITE_ADDRESS", "SiteLocation", "Cell ID Address", "CellAddress", "Cell Name", "Tower", "Site Name"]);
     const imeiCol = findColumn(headers, ["IMEI", "imei", "Imei number", "Device IMEI"]);
     const latCol = findColumn(headers, ["Latitude", "Lat", "LATITUDE", "CELL_LAT", "SITE_LAT", "X_COORD", "GPS_LAT", "LATITUTDE", "LATITUD", "LATITIDE"]);
     const lonCol = findColumn(headers, ["Longitude", "Lon", "Long", "LNG", "LONGITUDE", "CELL_LON", "SITE_LON", "CELL_LONG", "SITE_LONG", "Y_COORD", "GPS_LON", "LONGITUTDE", "LONGITUD", "LONGITIDE", "LANGUTIDE", "LANGITUDE"]);
-    const lacCol = findColumn(headers, ["LAC_ID", "LAC", "Lac_Id", "lac","Cell Sector"]);
-    const cellCol = findColumn(headers, ["Cell_Id", "CELL_ID", "Cell id", "Cell_SITE_ID"]);
-    const cellidSpecialCol = findColumn(headers, ["cellid", "cell_id_special", "cellidspecial"]);
+    const lacCol = findColumn(headers, ["LAC ID","LAC_ID", "LAC", "Lac_Id", "lac","Cell Sector"]);
+    const cellCol = findColumn(headers, ["Cell_Id", "CELL_ID", "Cell id", "Cell_SITE_ID","Cell ID"]);
+    const cellidSpecialCol = findColumn(headers, ["cellid", "cell_id_special" ,"cellidspecial"]);
 
-    const orgNumCol = findColumn(headers, ["call_org_num", "ORG_NUM", "Originating Number"]);
-    const dialedNumCol = findColumn(headers, ["CALL_DIALED_NUM", "DIALED_NUM", "Dialled Number"]);
+    const orgNumCol = findColumn(headers, ["call_org_num","CALL ORG NUM", "ORG_NUM","Originating Number"]);
+    const dialedNumCol = findColumn(headers, ["CALL_DIALED_NUM","CALL DIALED NUM", "DIALED_NUM", "Dialled Number"]);
+    if (orgNumCol === "CALL ORG NUM" && dialedNumCol === "CALL DIALED NUM") {
+       addressCol = "Location";
+    }
 
     // Sort rows chronologically for movement tracking
     const jsonData = dataRows.map(row => {
