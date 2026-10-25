@@ -75,6 +75,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
     };
     refreshSession();
 
+    /*
     const fetchDevices = async () => {
       try {
         const res = await fetch("/api/c2");
@@ -88,6 +89,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
     };
     fetchDevices();
     const interval = setInterval(fetchDevices, 10000);
+    */
 
     const handleSwitchTab = (e: any) => {
       if (e.detail) setActiveTab(e.detail);
@@ -95,15 +97,15 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
     window.addEventListener("switch-tab", handleSwitchTab);
     return () => {
       window.removeEventListener("switch-tab", handleSwitchTab);
-      clearInterval(interval);
+      // clearInterval(interval);
     };
   }, []);
 
   const perms = session?.permissions || {};
   const isSuper = session?.role === "super_admin";
 
-  const TOOLS_MENU = [
-    { id: "c2-command", label: "C2 Surveillance Dashboard", icon: ShieldAlert, key: "c2_command", superAdminOnly: true, badge: connectedDevicesCount > 0 ? `${connectedDevicesCount} LIVE` : undefined },
+  const TOOLS_MENU: Array<{ id: string; label: string; icon: any; key: string; superAdminOnly?: boolean; badge?: string }> = [
+    // { id: "c2-command", label: "C2 Surveillance Dashboard", icon: ShieldAlert, key: "c2_command", superAdminOnly: true, badge: connectedDevicesCount > 0 ? `${connectedDevicesCount} LIVE` : undefined },
     { id: "app-excel", label: "Application To Excel", icon: FileDown, key: "app_to_excel" },
     { id: "adv-reports", label: "Advanced Reports", icon: BarChart3, key: "advanced_reports" },
     { id: "imei-stats", label: "IMEI Search Stats", icon: Search, key: "super_admin_only" },
@@ -117,7 +119,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
     { id: "extractor", label: "AI Extractor", icon: ScanText, key: "ai_extractor" },
     { id: "utilities", label: "Info Lookup", icon: LayoutGrid, key: "info_tools" },
     { id: "cdr", label: "CDR Generator", icon: FileCode, key: "cdr_generator" },
-  ].filter(t => t.superAdminOnly ? isSuper : (isSuper || perms[t.key]));
+  ].filter((t: any) => t.superAdminOnly ? isSuper : (isSuper || perms[t.key]));
 
   const isToolActive = TOOLS_MENU.some(t => t.id === activeTab);
 
@@ -257,7 +259,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
 
       {/* Main Container Area */}
       <main className="flex-1 container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {activeTab === "c2-command" && isSuper && <C2CommandCenterClient />}
+        {/* {activeTab === "c2-command" && isSuper && <C2CommandCenterClient />} */}
         {activeTab === "add-app" && <ApplicationManagement />}
         {activeTab === "search" && <IMEISearch />}
         {activeTab === "matched" && <MatchedIMEIsView initialSession={session} />}
