@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const cookieStore = await cookies();
-    const token = (await cookieStore).get("sessionToken")?.value;
+    const token = cookieStore.get("sessionToken")?.value;
 
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

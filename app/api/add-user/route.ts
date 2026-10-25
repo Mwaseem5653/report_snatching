@@ -13,6 +13,12 @@ export async function POST(req: Request) {
     const decoded: any = token ? jwt.verify(token, SECRET) : null;
     const adminEmail = decoded?.email || "System";
 
+    // Role authorization: only super_admin and admin can add users
+    const callerRole = decoded?.role;
+    if (!callerRole || !["super_admin", "admin"].includes(callerRole)) {
+      return NextResponse.json({ success: false, error: "Forbidden: Insufficient role" }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
       email,
@@ -36,6 +42,11 @@ export async function POST(req: Request) {
         { success: false, error: "Missing required fields" },
         { status: 400 }
       );
+    }
+
+    // 1b. Admins cannot create super_admin or admin roles
+    if (callerRole === "admin" && ["super_admin", "admin"].includes(role)) {
+      return NextResponse.json({ success: false, error: "Forbidden: Admins cannot create admin/super_admin roles" }, { status: 403 });
     }
 
     // 2. Create User in Firebase Native Authentication

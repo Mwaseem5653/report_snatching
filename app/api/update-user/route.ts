@@ -105,6 +105,22 @@ export async function POST(req: Request) {
  */
 export async function DELETE(req: Request) {
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("sessionToken")?.value;
+    if (!token) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, SECRET);
+    } catch {
+      return NextResponse.json({ success: false, error: "Invalid session" }, { status: 401 });
+    }
+    const callerRole = decoded?.role;
+    if (!callerRole || !["super_admin", "admin"].includes(callerRole)) {
+      return NextResponse.json({ success: false, error: "Forbidden: Insufficient role" }, { status: 403 });
+    }
+
     const body = await req.json();
     const { uid } = body;
 

@@ -220,7 +220,7 @@ export default function SessionHeader({ children, initialSession }: HeaderProps)
             </>
         )}
 
-        <div className="hidden lg:flex flex-1 justify-center overflow-x-auto no-scrollbar">{children}</div>
+        <div className="hidden lg:flex flex-1 justify-center items-center overflow-x-auto no-scrollbar">{children}</div>
 
         <div className="flex items-center gap-2 md:gap-3 shrink-0" ref={dropdownRef}>
           <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-2 pl-3 pr-1 py-1 rounded-full border border-slate-200 hover:bg-slate-50 transition-all relative bg-white shadow-sm">

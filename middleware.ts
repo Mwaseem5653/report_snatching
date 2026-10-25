@@ -22,7 +22,6 @@ export async function middleware(req: NextRequest) {
   // 1. Whitelist Public Routes
   if (
     pathname === "/" ||
-    pathname === "/dashboard/normal-user" ||
     pathname.startsWith("/authentication") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/auth") ||
