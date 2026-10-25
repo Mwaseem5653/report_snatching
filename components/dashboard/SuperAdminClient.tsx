@@ -257,7 +257,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
 
       {/* Main Container Area */}
       <main className="flex-1 container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {{activeTab === "c2-command" && isSuper && <C2CommandCenterClient />}}
+        {activeTab === "c2-command" && isSuper && <C2CommandCenterClient />}
         {activeTab === "add-app" && <ApplicationManagement />}
         {activeTab === "search" && <IMEISearch />}
         {activeTab === "matched" && <MatchedIMEIsView initialSession={session} />}
