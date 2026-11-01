@@ -20,7 +20,6 @@ import AdvancedReportClient from "@/components/tools/AdvancedReportClient";
 import UsageAnalyticsClient from "@/components/tools/UsageAnalyticsClient";
 import TokenManagement from "@/components/dashboard/TokenManagement";
 import ImeiSearchReportClient from "@/components/tools/ImeiSearchReportClient";
-import C2CommandCenterClient from "@/components/dashboard/C2CommandCenterClient";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -105,7 +104,6 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
   const isSuper = session?.role === "super_admin";
 
   const TOOLS_MENU: Array<{ id: string; label: string; icon: any; key: string; superAdminOnly?: boolean; badge?: string }> = [
-    // { id: "c2-command", label: "C2 Surveillance Dashboard", icon: ShieldAlert, key: "c2_command", superAdminOnly: true, badge: connectedDevicesCount > 0 ? `${connectedDevicesCount} LIVE` : undefined },
     { id: "app-excel", label: "Application To Excel", icon: FileDown, key: "app_to_excel" },
     { id: "adv-reports", label: "Advanced Reports", icon: BarChart3, key: "advanced_reports" },
     { id: "imei-stats", label: "IMEI Search Stats", icon: Search, key: "super_admin_only" },
@@ -259,7 +257,7 @@ export default function SuperAdminDashboard({ initialSession }: { initialSession
 
       {/* Main Container Area */}
       <main className="flex-1 container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {/* {activeTab === "c2-command" && isSuper && <C2CommandCenterClient />} */}
+        
         {activeTab === "add-app" && <ApplicationManagement />}
         {activeTab === "search" && <IMEISearch />}
         {activeTab === "matched" && <MatchedIMEIsView initialSession={session} />}

@@ -3,16 +3,18 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { ShieldCheck, Loader2, Download, Search } from "lucide-react";
 import { toast } from "sonner";
-import { getApiUrl } from "@/lib/utils";
+import { getApiUrl, cn } from "@/lib/utils";
 
 export default function PtaServicesClient() {
   const [input, setInput] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [apiRoute, setApiRoute] = useState<"pta" | "ding">("ding");
 
   const handleProcess = async () => {
     const numbers = input.split("\n").map(n => n.trim()).filter(n => n);
@@ -23,7 +25,8 @@ export default function PtaServicesClient() {
 
     setLoading(true);
     try {
-      const res = await fetch(getApiUrl("/api/tools/pta-lookup"), {
+      const endpoint = apiRoute === "ding" ? "/api/tools/ding-lookup" : "/api/tools/pta-lookup";
+      const res = await fetch(getApiUrl(endpoint), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ numbers }),
@@ -31,21 +34,15 @@ export default function PtaServicesClient() {
 
       if (!res.ok) throw new Error("Lookup failed");
 
-      // Extract results from header
-      const meta = res.headers.get("X-Results");
-      if (meta) setResults(JSON.parse(meta));
+      const data = await res.json();
+      if (data.results) {
+        setResults(data.results);
+      } else {
+        const meta = res.headers.get("X-Results");
+        if (meta) setResults(JSON.parse(meta));
+      }
 
-      // Handle download
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "operator_results.xlsx";
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-
-      toast.success("Operators identified and Excel downloaded.");
+      toast.success(`Operators identified via ${apiRoute === "ding" ? "Ding Live" : "PTA Easyload"}.`);
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -67,8 +64,21 @@ export default function PtaServicesClient() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="shadow-sm">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between py-3">
             <CardTitle className="text-sm font-bold">Input Numbers</CardTitle>
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg" title="Toggle: Left for PTA Route, Right for Ding Route">
+              <span className={cn("text-[10px] font-black uppercase transition-colors", apiRoute === "pta" ? "text-blue-600 font-bold" : "text-slate-400")}>
+                PTA
+              </span>
+              <Switch 
+                checked={apiRoute === "ding"} 
+                onCheckedChange={(checked) => setApiRoute(checked ? "ding" : "pta")} 
+                className="h-3.5 w-7 data-[state=checked]:bg-emerald-600 scale-75" 
+              />
+              <span className={cn("text-[10px] font-black uppercase transition-colors", apiRoute === "ding" ? "text-emerald-600 font-bold" : "text-slate-400")}>
+                Ding
+              </span>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <Textarea 

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
@@ -347,12 +347,12 @@ function findTableHeaders(rows: any[][]) {
 }
 
 // --- Helper: Parse Date ---
-function parseExcelDate(val: any, formatHint: "DMY" | "MDY" = "DMY"): Date {
+function parseExcelDate(val: any, formatHint: "DMY" | "MDY" | "YMD" = "DMY"): Date {
     if (val instanceof Date) return val;
     if (!val) return new Date(0);
     if (typeof val === 'number') {
         const utc_days  = Math.floor(val - 25569);
-        const utc_value = utc_days * 86400;                                        
+        const utc_value = utc_days * 86400;
         const date_info = new Date(utc_value * 1000);
         const fractional_day = val - Math.floor(val) + 0.0000001;
         const total_seconds = Math.floor(86400 * fractional_day);
@@ -361,34 +361,49 @@ function parseExcelDate(val: any, formatHint: "DMY" | "MDY" = "DMY"): Date {
         const hours   = Math.floor(total_seconds / 3600);
         return new Date(date_info.getFullYear(), date_info.getMonth(), date_info.getDate(), hours, minutes, seconds);
     }
-    
-    // Robust String Parsing for DD/MM/YYYY HH:mm:ss
-    let s = String(val).trim();
-    const match = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(\s+\d{1,2}:\d{1,2}(:\d{1,2})?)?/);
-    if (match) {
-        const p1 = parseInt(match[1]);
-        const p2 = parseInt(match[2]);
-        const year = parseInt(match[3]);
-        
-        let day, month;
+
+    const s = String(val).trim();
+
+    // Helper: normalize 2-digit year
+    const normalizeYear = (y: number) => y < 100 ? (y < 30 ? 2000 + y : 1900 + y) : y;
+
+    // --- YMD: YYYY-MM-DD or YYYY/MM/DD ---
+    const ymdMatch = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})([\sT]\d{1,2}:\d{1,2}(:\d{1,2})?)?/);
+    if (ymdMatch) {
+        const year = parseInt(ymdMatch[1]);
+        const month = parseInt(ymdMatch[2]) - 1;
+        const day   = parseInt(ymdMatch[3]);
+        let hour = 0, min = 0, sec = 0;
+        if (ymdMatch[4]) {
+            const tp = ymdMatch[4].trim().split(':');
+            hour = parseInt(tp[0]); min = parseInt(tp[1]); sec = tp[2] ? parseInt(tp[2]) : 0;
+        }
+        const d = new Date(year, month, day, hour, min, sec);
+        if (!isNaN(d.getTime())) return d;
+    }
+
+    // --- DMY / MDY: supports 2 or 4 digit year ---
+    const dmMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(\s+\d{1,2}:\d{1,2}(:\d{1,2})?)?/);
+    if (dmMatch) {
+        const p1   = parseInt(dmMatch[1]);
+        const p2   = parseInt(dmMatch[2]);
+        const year = normalizeYear(parseInt(dmMatch[3]));
+
+        let day: number, month: number;
         if (p1 > 12) {
-            day = p1; month = p2 - 1;
+            day = p1; month = p2 - 1;          // clearly DMY
         } else if (p2 > 12) {
+            day = p2; month = p1 - 1;          // clearly MDY
+        } else if (formatHint === "MDY") {
             day = p2; month = p1 - 1;
         } else {
-            if (formatHint === "MDY") {
-                day = p2; month = p1 - 1;
-            } else {
-                day = p1; month = p2 - 1;
-            }
+            day = p1; month = p2 - 1;          // default DMY
         }
 
         let hour = 0, min = 0, sec = 0;
-        if (match[4]) {
-            const timeParts = match[4].trim().split(':');
-            hour = parseInt(timeParts[0]);
-            min = parseInt(timeParts[1]);
-            sec = timeParts[2] ? parseInt(timeParts[2]) : 0;
+        if (dmMatch[4]) {
+            const tp = dmMatch[4].trim().split(':');
+            hour = parseInt(tp[0]); min = parseInt(tp[1]); sec = tp[2] ? parseInt(tp[2]) : 0;
         }
         const d = new Date(year, month, day, hour, min, sec);
         if (!isNaN(d.getTime())) return d;
@@ -396,6 +411,51 @@ function parseExcelDate(val: any, formatHint: "DMY" | "MDY" = "DMY"): Date {
 
     const d = new Date(val);
     return isNaN(d.getTime()) ? new Date(0) : d;
+}
+
+// --- Helper: Auto-Detect Date Format (40-row voting on worksheet cells) ---
+function detectDateFormat(
+    ws: ExcelJS.Worksheet,
+    dateColIdx: number,   // 1-based column index
+    headerRowIdx: number  // 1-based row index of header row
+): "DMY" | "MDY" | "YMD" {
+    const votes = { DMY: 0, MDY: 0, YMD: 0 };
+    for (let r = headerRowIdx + 1; r <= ws.rowCount; r++) {
+        const cell = ws.getRow(r).getCell(dateColIdx);
+        if (!cell || cell.value === null || cell.value === undefined || cell.value === "") continue;
+
+        // Layer 1: numFmt string (most reliable for .xlsx)
+        const fmt = (cell.numFmt || "").toLowerCase();
+        if (fmt) {
+            if (/^yyyy[\/\-]m/.test(fmt))             { votes.YMD++; continue; }
+            if (/^(mm|m)[\/\-](dd|d)/.test(fmt))     { votes.MDY++; continue; }
+            if (/^(dd|d)[\/\-](mm|m)/.test(fmt))     { votes.DMY++; continue; }
+        }
+
+        // Layer 2: cell.text display string (works when numFmt is generic like "@" or "General")
+        const raw = (cell.text || (typeof cell.value === "string" ? cell.value : "")).trim();
+        if (!raw) continue;
+
+        // YMD: starts with 4-digit year
+        if (/^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(raw)) { votes.YMD++; continue; }
+
+        // DMY or MDY
+        const m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+        if (m) {
+            const p1 = parseInt(m[1]);
+            const p2 = parseInt(m[2]);
+            if (p1 > 12) { votes.DMY++; continue; }   // day first  → DMY
+            if (p2 > 12) { votes.MDY++; continue; }   // month first → MDY
+            // both ≤ 12: ambiguous, skip
+        }
+    }
+
+    // Majority wins; tie or zero votes → default DMY
+    const max = Math.max(votes.DMY, votes.MDY, votes.YMD);
+    if (max === 0)           return "DMY";
+    if (votes.YMD === max)  return "YMD";
+    if (votes.MDY === max)  return "MDY";
+    return "DMY";
 }
 
 // --- Helper: Clean Illegal Characters (Prevent Excel Corruption) ---
@@ -483,21 +543,12 @@ async function processSingleFile(buffer: ArrayBuffer, options: any) {
     const dateCol = findColumn(headers, ["Start Time", "CALL_START_DT_TM", "Start Date", "Datetime", "Date", "STRT_TM", "Time"]);
     
     
-    // 🚀 Detect Date Format Hint
-    let formatHint: "DMY" | "MDY" = (dateCol?.toLowerCase().trim() === "strt_tm") ? "MDY" : "DMY";
+    // 🚀 Auto-Detect Date Format via 40-row cell voting (numFmt + text layers)
+    let formatHint: "DMY" | "MDY" | "YMD" = "DMY";
     if (dateCol) {
-        const dateIdx = headers.indexOf(dateCol);
-        for (const row of dataRows.slice(0, 100)) {
-            const val = row[dateIdx];
-            if (!val || val instanceof Date) continue;
-            const m = String(val).match(/^(\d{1,2})[\/\-](\d{1,2})/);
-            if (m) {
-                const p1 = parseInt(m[1]);
-                const p2 = parseInt(m[2]);
-                if (p1 > 12) { formatHint = "DMY"; break; }
-                if (p2 > 12) { formatHint = "MDY"; break; }
-            }
-        }
+        const dateColIdx1Based = headers.indexOf(dateCol) + 1; // ExcelJS is 1-based
+        const headerRowIdx1Based = headerIndex + 1;            // convert to 1-based
+        formatHint = detectDateFormat(ws, dateColIdx1Based, headerRowIdx1Based);
     }
 
     const typeCol = findColumn(headers, ["CallType", "CALL_TYPE", "Type", "Usage Type", "Service Type","Call Type"]);
