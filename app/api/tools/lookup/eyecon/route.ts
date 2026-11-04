@@ -20,7 +20,7 @@ async function fetchEyeconInfo(number: string, code = "92") {
             method: 'GET',
             headers: { 
                 "x-rapidapi-key": rapidApiKey, 
-                "x-rapidapi-host": "eyecon.p.rapidapi.com",
+                "x-rapidapi-host": "eyecon3.p.rapidapi.com",
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "application/json"
             }
