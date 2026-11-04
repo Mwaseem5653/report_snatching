@@ -141,7 +141,6 @@ export default function CdrFormatClient() {
   const [rawInput, setRawInput] = useState("");
   const [useApiLookup, setUseApiLookup] = useState(false);
   // Ding route commented out - defaulted to "pta"
-  // const [apiRoute, setApiRoute] = useState<"pta" | "ding">("ding");
   const [apiRoute, setApiRoute] = useState<"pta" | "ding">("pta");
   const [loadingLookup, setLoadingLookup] = useState(false);
   const [analyzedNumbers, setAnalyzedNumbers] = useState<{ number: string, operator: string }[]>([]);
@@ -369,8 +368,7 @@ export default function CdrFormatClient() {
 
     // Live API Mode
     // Ding route logic commented out (uncomment to restore Ding lookup):
-    // const endpoint = apiRoute === "ding" ? "/api/tools/ding-lookup" : "/api/tools/pta-lookup";
-    const endpoint = "/api/tools/pta-lookup";
+    const endpoint = apiRoute === "ding" ? "/api/tools/ding-lookup" : "/api/tools/pta-lookup";
     for (let i = 0; i < numbers.length; i++) {
         const currentNum = numbers[i];
         try {
@@ -409,8 +407,7 @@ export default function CdrFormatClient() {
 
         if (i < numbers.length - 1) {
             // Ding route doesn't need Easyload's heavy 1.5s delay
-            // const delay = apiRoute === "ding" ? 200 : 1500;
-            const delay = 1500;
+            const delay = apiRoute === "ding" ? 200 : 1500;
             await new Promise(r => setTimeout(r, delay));
         }
     }
@@ -1031,7 +1028,7 @@ export default function CdrFormatClient() {
                             className="h-3.5 w-7 data-[state=checked]:bg-indigo-600 scale-75 origin-right" 
                         />
                     </div>
-                    {/* --- Ding / PTA Toggle (Commented out to hide Ding. Uncomment when needed) ---
+                    {/* --- Ding / PTA Toggle (Commented out to hide Ding. Uncomment when needed) ---  */}
                     {useApiLookup && (
                         <div className="flex items-center gap-1 bg-white border border-slate-200 px-1.5 py-0.5 rounded-lg" title="Toggle: Left for PTA Route, Right for Ding Route">
                             <span className={cn("text-[8px] font-black uppercase transition-colors", apiRoute === "pta" ? "text-blue-600 font-extrabold" : "text-slate-400")}>
@@ -1047,7 +1044,7 @@ export default function CdrFormatClient() {
                             </span>
                         </div>
                     )}
-                    -------------------------------------------------------------------------------- */}
+                    
                     <button 
                         onClick={() => { setRawInput(""); setAnalyzedNumbers([]); setCombinedOutput(null); setSelectedTemplate(""); }}
                         className="text-slate-300 hover:text-red-500 transition-colors"
@@ -1074,10 +1071,7 @@ export default function CdrFormatClient() {
                     )}
                 >
                     {loadingLookup ? <Loader2 className="animate-spin mr-1.5 h-3.5 w-3.5"/> : <ShieldCheck size={14} className="mr-1.5" />}
-                    {useApiLookup ? "Live Identify (PTA Easyload)" : "Identify Operators"}
-                    {/* Uncomment when Ding is restored:
                     {useApiLookup ? `Live Identify (${apiRoute === "ding" ? "Ding Live" : "PTA Easyload"})` : "Identify Operators"}
-                    */}
                 </Button>
             </CardContent>
         </Card>
