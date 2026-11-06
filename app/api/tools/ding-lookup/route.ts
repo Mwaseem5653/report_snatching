@@ -2,22 +2,50 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
+import https from "https";
 import crypto from "crypto";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type LookupResult = { number: string; operator: string };
 
-// 10 Diverse Browser Profiles and Headers (ported from ding_lookup_worker.py)
+// Cloudflare Anycast IPs for api-v2.www.ding.com (eliminates slow/blocked DNS lookups)
+const CLOUDFLARE_IPS = ["104.18.15.195", "104.18.14.195"];
+
+// Shared keep-alive agent to reuse TCP + TLS connections
+const keepAliveAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 10,
+  maxFreeSockets: 5,
+  keepAliveMsecs: 20000,
+  timeout: 10000,
+});
+
+// Authentic Browser Profiles
 const BROWSER_PROFILES: { headers: Record<string, string> }[] = [
+  {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "Accept": "application/json, text/plain, */*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Origin": "https://www.ding.com",
+      "Referer": "https://www.ding.com/topup",
+      "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Windows"',
+      "sec-fetch-dest": "empty",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-site",
+    },
+  },
   {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Accept": "application/json, text/plain, */*",
       "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": "application/json",
       "Origin": "https://www.ding.com",
       "Referer": "https://www.ding.com/topup",
       "sec-ch-ua": '"Google Chrome";v="120", "Chromium";v="120", "Not?A_Brand";v="24"',
@@ -26,143 +54,47 @@ const BROWSER_PROFILES: { headers: Record<string, string> }[] = [
       "sec-fetch-dest": "empty",
       "sec-fetch-mode": "cors",
       "sec-fetch-site": "same-site",
-    }
+    },
   },
   {
     headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-GB,en;q=0.8",
-      "Content-Type": "application/json",
+      "Accept-Language": "en-US,en;q=0.9",
       "Origin": "https://www.ding.com",
       "Referer": "https://www.ding.com/topup",
-      "sec-ch-ua": '"Google Chrome";v="119", "Chromium";v="119", "Not?A_Brand";v="24"',
+      "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
       "sec-ch-ua-mobile": "?0",
       "sec-ch-ua-platform": '"macOS"',
       "sec-fetch-dest": "empty",
       "sec-fetch-mode": "cors",
       "sec-fetch-site": "same-site",
-    }
+    },
   },
   {
     headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
       "Accept": "application/json, text/plain, */*",
       "Accept-Language": "en-US,en;q=0.5",
-      "Content-Type": "application/json",
       "Origin": "https://www.ding.com",
       "Referer": "https://www.ding.com/topup",
       "sec-fetch-dest": "empty",
       "sec-fetch-mode": "cors",
       "sec-fetch-site": "same-site",
-    }
+    },
   },
   {
     headers: {
-      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
       "Accept": "application/json, text/plain, */*",
       "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": "application/json",
       "Origin": "https://www.ding.com",
       "Referer": "https://www.ding.com/topup",
-      "sec-ch-ua": '"Google Chrome";v="118", "Chromium";v="118", "Not?A_Brand";v="99"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Linux"',
       "sec-fetch-dest": "empty",
       "sec-fetch-mode": "cors",
       "sec-fetch-site": "same-site",
-    }
+    },
   },
-  {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": "application/json",
-      "Origin": "https://www.ding.com",
-      "Referer": "https://www.ding.com/topup",
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-    }
-  },
-  {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": "application/json",
-      "Origin": "https://www.ding.com",
-      "Referer": "https://www.ding.com/topup",
-      "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120", "Microsoft Edge";v="120"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-    }
-  },
-  {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.199 Safari/537.36 OPR/100.0.4815.76",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": "application/json",
-      "Origin": "https://www.ding.com",
-      "Referer": "https://www.ding.com/topup",
-      "sec-ch-ua": '"Not.A/Brand";v="8", "Chromium";v="114", "Opera";v="100"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-    }
-  },
-  {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": "application/json",
-      "Origin": "https://www.ding.com",
-      "Referer": "https://www.ding.com/topup",
-      "sec-ch-ua": '"Google Chrome";v="117", "Chromium";v="117", "Not?A_Brand";v="8"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-    }
-  },
-  {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/119.0",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.5",
-      "Content-Type": "application/json",
-      "Origin": "https://www.ding.com",
-      "Referer": "https://www.ding.com/topup",
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-    }
-  },
-  {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": "application/json",
-      "Origin": "https://www.ding.com",
-      "Referer": "https://www.ding.com/topup",
-      "sec-ch-ua": '"Chromium";v="116", "Not)A;Brand";v="24", "Google Chrome";v="116"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-    }
-  }
 ];
 
 function normalizePakNumber(num: string) {
@@ -176,19 +108,74 @@ function normalizePakNumber(num: string) {
   return { raw, clean };
 }
 
+function singleDingRequest(
+  cleanNum: string,
+  profile: { headers: Record<string, string> }
+): Promise<{ status: number; data: string }> {
+  return new Promise((resolve, reject) => {
+    try {
+      const targetIp = CLOUDFLARE_IPS[Math.floor(Math.random() * CLOUDFLARE_IPS.length)];
+      const payload = JSON.stringify({
+        phoneNumber: cleanNum,
+        selectedCountryIso: "PK",
+        uniqueId: crypto.randomUUID(),
+      });
+
+      const headers: Record<string, string> = {
+        ...profile.headers,
+        "Host": "api-v2.www.ding.com",
+        "Content-Type": "application/json",
+        "Content-Length": String(Buffer.byteLength(payload)),
+      };
+
+      const req = https.request(
+        {
+          host: targetIp,
+          servername: "api-v2.www.ding.com",
+          port: 443,
+          path: "/api/operatorlookup",
+          method: "POST",
+          agent: keepAliveAgent,
+          headers: headers,
+          timeout: 8000,
+        },
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => {
+            resolve({ status: res.statusCode || 0, data });
+          });
+        }
+      );
+
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("Request timeout"));
+      });
+
+      req.on("error", (err) => {
+        reject(err);
+      });
+
+      req.write(payload);
+      req.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
 async function runDingLookup(numbers: string[]): Promise<LookupResult[]> {
-  const url = "https://api-v2.www.ding.com/api/operatorlookup";
   const results: LookupResult[] = [];
-  let profileIdx = 0;
-  let requestCountWithCurrentProfile = 0;
+  let profileIdx = Math.floor(Math.random() * BROWSER_PROFILES.length);
 
   for (let i = 0; i < numbers.length; i++) {
     const { raw, clean } = normalizePakNumber(numbers[i]);
-    const payload = {
-      phoneNumber: clean,
-      selectedCountryIso: "PK",
-      uniqueId: crypto.randomUUID()
-    };
+
+    if (!clean || clean.length < 10) {
+      results.push({ number: raw, operator: "Invalid Number" });
+      continue;
+    }
 
     let success = false;
     let attempts = 0;
@@ -196,62 +183,42 @@ async function runDingLookup(numbers: string[]): Promise<LookupResult[]> {
 
     while (!success && attempts < maxAttempts) {
       attempts++;
-
-      // Rotate profile after every 10 requests (exact same behavior as python worker)
-      if (requestCountWithCurrentProfile >= 10) {
-        profileIdx = (profileIdx + 1) % BROWSER_PROFILES.length;
-        requestCountWithCurrentProfile = 0;
-        await new Promise((r) => setTimeout(r, 300));
-      }
-
       const currentProfile = BROWSER_PROFILES[profileIdx];
 
       try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: currentProfile.headers,
-          body: JSON.stringify(payload),
-          cache: "no-store",
-          signal: AbortSignal.timeout(12000)
-        });
+        const resp = await singleDingRequest(clean, currentProfile);
 
-        requestCountWithCurrentProfile++;
-
-        // If rate limited or blocked, rotate profile and retry
-        if (res.status === 429 || res.status === 403) {
-          console.warn(`Ding API status ${res.status} on attempt ${attempts}, rotating profile...`);
-          profileIdx = (profileIdx + 1) % BROWSER_PROFILES.length;
-          requestCountWithCurrentProfile = 0;
-          await new Promise((r) => setTimeout(r, 500));
-          continue;
-        }
-
-        if (res.ok) {
-          const data = await res.json();
-          const ops = data?.operators || [];
-          const opName = ops.length > 0 ? (ops[0]?.name || "Unknown") : "Not Found";
-          results.push({ number: raw, operator: opName });
+        if (resp.status === 200) {
+          try {
+            const parsed = JSON.parse(resp.data);
+            const ops = parsed?.operators || [];
+            const opName = ops.length > 0 ? ops[0]?.name || "Unknown" : "Not Found";
+            results.push({ number: raw, operator: opName });
+          } catch {
+            results.push({ number: raw, operator: "Parse Error" });
+          }
           success = true;
+        } else if (resp.status === 403 || resp.status === 429) {
+          profileIdx = (profileIdx + 1) % BROWSER_PROFILES.length;
+          await new Promise((r) => setTimeout(r, 600));
+          continue;
         } else {
-          results.push({ number: raw, operator: `HTTP ${res.status}` });
+          results.push({ number: raw, operator: `HTTP ${resp.status}` });
           success = true;
         }
       } catch (err: any) {
-        console.error(`Ding lookup fetch error for ${clean}:`, err?.message || err);
         if (attempts >= maxAttempts) {
           results.push({ number: raw, operator: "API Error" });
           success = true;
         } else {
           profileIdx = (profileIdx + 1) % BROWSER_PROFILES.length;
-          requestCountWithCurrentProfile = 0;
-          await new Promise((r) => setTimeout(r, 500));
+          await new Promise((r) => setTimeout(r, 400));
         }
       }
     }
 
-    // Small polite delay between sequential requests
     if (i < numbers.length - 1) {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 50));
     }
   }
 
@@ -262,8 +229,12 @@ export async function POST(req: NextRequest) {
   try {
     const { numbers } = await req.json();
 
-    if (!numbers || !Array.isArray(numbers)) {
+    if (!numbers || !Array.isArray(numbers) || numbers.length === 0) {
       return NextResponse.json({ error: "Invalid numbers provided" }, { status: 400 });
+    }
+
+    if (numbers.length > 50) {
+      return NextResponse.json({ error: "Only 50 numbers allowed per request." }, { status: 400 });
     }
 
     const cookieStore = await cookies();

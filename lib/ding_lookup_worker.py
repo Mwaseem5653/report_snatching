@@ -1,13 +1,15 @@
 import sys
 import json
 import uuid
-import tls_client
+import random
 import time
+import os
+import tls_client
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
 
-# 10 Diverse Browser Profiles and Headers
+# Authentic browser profiles strictly matching tls_client supported client_identifiers
 BROWSER_PROFILES = [
     {
         "client_identifier": "chrome_120",
@@ -27,15 +29,32 @@ BROWSER_PROFILES = [
         }
     },
     {
-        "client_identifier": "chrome_119",
+        "client_identifier": "chrome_124",
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-GB,en;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
             "Content-Type": "application/json",
             "Origin": "https://www.ding.com",
             "Referer": "https://www.ding.com/topup",
-            "sec-ch-ua": '"Google Chrome";v="119", "Chromium";v="119", "Not?A_Brand";v="24"',
+            "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-site",
+        }
+    },
+    {
+        "client_identifier": "chrome_131",
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/json",
+            "Origin": "https://www.ding.com",
+            "Referer": "https://www.ding.com/topup",
+            "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
             "sec-ch-ua-mobile": "?0",
             "sec-ch-ua-platform": '"macOS"',
             "sec-fetch-dest": "empty",
@@ -58,91 +77,9 @@ BROWSER_PROFILES = [
         }
     },
     {
-        "client_identifier": "chrome_118",
+        "client_identifier": "firefox_120",
         "headers": {
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Content-Type": "application/json",
-            "Origin": "https://www.ding.com",
-            "Referer": "https://www.ding.com/topup",
-            "sec-ch-ua": '"Google Chrome";v="118", "Chromium";v="118", "Not?A_Brand";v="99"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Linux"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-site",
-        }
-    },
-    {
-        "client_identifier": "safari_ios_17_1",
-        "headers": {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Content-Type": "application/json",
-            "Origin": "https://www.ding.com",
-            "Referer": "https://www.ding.com/topup",
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-site",
-        }
-    },
-    {
-        "client_identifier": "edge_120",
-        "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Content-Type": "application/json",
-            "Origin": "https://www.ding.com",
-            "Referer": "https://www.ding.com/topup",
-            "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120", "Microsoft Edge";v="120"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-site",
-        }
-    },
-    {
-        "client_identifier": "opera_100",
-        "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.199 Safari/537.36 OPR/100.0.4815.76",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Content-Type": "application/json",
-            "Origin": "https://www.ding.com",
-            "Referer": "https://www.ding.com/topup",
-            "sec-ch-ua": '"Not.A/Brand";v="8", "Chromium";v="114", "Opera";v="100"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-site",
-        }
-    },
-    {
-        "client_identifier": "chrome_117",
-        "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Content-Type": "application/json",
-            "Origin": "https://www.ding.com",
-            "Referer": "https://www.ding.com/topup",
-            "sec-ch-ua": '"Google Chrome";v="117", "Chromium";v="117", "Not?A_Brand";v="8"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-site",
-        }
-    },
-    {
-        "client_identifier": "firefox_119",
-        "headers": {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/119.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.5",
             "Content-Type": "application/json",
@@ -154,17 +91,28 @@ BROWSER_PROFILES = [
         }
     },
     {
-        "client_identifier": "chrome_116",
+        "client_identifier": "safari_ios_17_0",
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.9",
             "Content-Type": "application/json",
             "Origin": "https://www.ding.com",
             "Referer": "https://www.ding.com/topup",
-            "sec-ch-ua": '"Chromium";v="116", "Not)A;Brand";v="24", "Google Chrome";v="116"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-site",
+        }
+    },
+    {
+        "client_identifier": "safari_ios_18_0",
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/json",
+            "Origin": "https://www.ding.com",
+            "Referer": "https://www.ding.com/topup",
             "sec-fetch-dest": "empty",
             "sec-fetch-mode": "cors",
             "sec-fetch-site": "same-site",
@@ -172,27 +120,50 @@ BROWSER_PROFILES = [
     }
 ]
 
-def lookup_numbers(numbers):
-    profile_idx = 0
-    request_count_with_current_profile = 0
-    
-    current_profile = BROWSER_PROFILES[profile_idx]
-    session = tls_client.Session(client_identifier=current_profile["client_identifier"], random_tls_extension_order=True)
-    headers = current_profile["headers"]
+def create_stealth_session(profile):
+    session = tls_client.Session(
+        client_identifier=profile["client_identifier"],
+        random_tls_extension_order=True
+    )
+    # Support optional proxy if configured in environment
+    proxy = os.getenv("DING_PROXY") or os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+    if proxy:
+        session.proxies = {"http": proxy, "https": proxy}
+    return session
 
+def normalize_pak_number(num):
+    raw = str(num).strip()
+    digits = "".join(filter(str.isdigit, raw))
+    if digits.startswith("0") and len(digits) >= 11:
+        clean = "92" + digits[1:]
+    elif len(digits) == 10 and digits.startswith("3"):
+        clean = "92" + digits
+    elif digits.startswith("92") and len(digits) >= 12:
+        clean = digits
+    else:
+        clean = digits
+    return raw, clean
+
+def lookup_numbers(numbers):
     url = "https://api-v2.www.ding.com/api/operatorlookup"
     results = []
 
-    for num in numbers:
-        raw_num = str(num).strip()
-        clean = "".join(filter(str.isdigit, raw_num))
-        if clean.startswith("0") and len(clean) >= 11:
-            clean = "92" + clean[1:]
-        elif len(clean) == 10 and clean.startswith("3"):
-            clean = "92" + clean
+    profile_idx = random.randint(0, len(BROWSER_PROFILES) - 1)
+    current_profile = BROWSER_PROFILES[profile_idx]
+    session = create_stealth_session(current_profile)
+    headers = current_profile["headers"]
+    request_count = 0
+    max_requests_before_rotation = random.randint(5, 10)
+
+    for i, num in enumerate(numbers):
+        raw_num, clean_num = normalize_pak_number(num)
+
+        if not clean_num or len(clean_num) < 10:
+            results.append({"number": raw_num, "operator": "Invalid Number"})
+            continue
 
         payload = {
-            "phoneNumber": clean,
+            "phoneNumber": clean_num,
             "selectedCountryIso": "PK",
             "uniqueId": str(uuid.uuid4())
         }
@@ -203,69 +174,82 @@ def lookup_numbers(numbers):
 
         while not success and attempts < max_attempts:
             attempts += 1
+
+            # Natural rotation after random interval of requests
+            if request_count >= max_requests_before_rotation:
+                profile_idx = (profile_idx + 1) % len(BROWSER_PROFILES)
+                current_profile = BROWSER_PROFILES[profile_idx]
+                session = create_stealth_session(current_profile)
+                headers = current_profile["headers"]
+                request_count = 0
+                max_requests_before_rotation = random.randint(5, 10)
+                time.sleep(random.uniform(0.3, 0.6))
+
             try:
-                # Rotate if we hit 20 requests
-                if request_count_with_current_profile >= 20:
-                    profile_idx = (profile_idx + 1) % len(BROWSER_PROFILES)
-                    current_profile = BROWSER_PROFILES[profile_idx]
-                    session = tls_client.Session(client_identifier=current_profile["client_identifier"], random_tls_extension_order=True)
-                    headers = current_profile["headers"]
-                    request_count_with_current_profile = 0
-                    time.sleep(0.3)
-
-                resp = session.post(url, headers=headers, json=payload, timeout_seconds=12)
-                request_count_with_current_profile += 1
-
-                # Check for rate limit (429 or forbidden / blocked)
-                if resp.status_code == 429 or resp.status_code == 403:
-                    profile_idx = (profile_idx + 1) % len(BROWSER_PROFILES)
-                    current_profile = BROWSER_PROFILES[profile_idx]
-                    session = tls_client.Session(client_identifier=current_profile["client_identifier"], random_tls_extension_order=True)
-                    headers = current_profile["headers"]
-                    request_count_with_current_profile = 0
-                    time.sleep(0.5)
-                    continue
+                resp = session.post(url, headers=headers, json=payload, timeout_seconds=10)
+                request_count += 1
 
                 if resp.status_code == 200:
-                    data = resp.json()
-                    ops = data.get("operators", [])
-                    if ops and len(ops) > 0:
-                        op_name = ops[0].get("name", "Unknown")
-                        results.append({"number": raw_num, "operator": op_name})
-                    else:
-                        results.append({"number": raw_num, "operator": "Not Found"})
+                    try:
+                        data = resp.json()
+                        ops = data.get("operators", [])
+                        if ops and len(ops) > 0:
+                            op_name = ops[0].get("name", "Unknown")
+                            results.append({"number": raw_num, "operator": op_name})
+                        else:
+                            results.append({"number": raw_num, "operator": "Not Found"})
+                    except Exception:
+                        results.append({"number": raw_num, "operator": "Parse Error"})
                     success = True
+
+                elif resp.status_code in (403, 429):
+                    # Rate limit or Cloudflare block: back off, switch profile & fresh session
+                    time.sleep(random.uniform(1.0, 2.0))
+                    profile_idx = (profile_idx + 1) % len(BROWSER_PROFILES)
+                    current_profile = BROWSER_PROFILES[profile_idx]
+                    session = create_stealth_session(current_profile)
+                    headers = current_profile["headers"]
+                    request_count = 0
+                    continue
+
                 else:
                     results.append({"number": raw_num, "operator": f"HTTP {resp.status_code}"})
                     success = True
+
             except Exception as e:
                 if attempts >= max_attempts:
                     results.append({"number": raw_num, "operator": "API Error"})
                     success = True
                 else:
+                    time.sleep(random.uniform(0.8, 1.5))
                     profile_idx = (profile_idx + 1) % len(BROWSER_PROFILES)
                     current_profile = BROWSER_PROFILES[profile_idx]
-                    session = tls_client.Session(client_identifier=current_profile["client_identifier"], random_tls_extension_order=True)
+                    session = create_stealth_session(current_profile)
                     headers = current_profile["headers"]
-                    request_count_with_current_profile = 0
-                    time.sleep(0.5)
+                    request_count = 0
 
-        # Small polite delay between sequential requests
-        time.sleep(0.2)
+        # Human-like organic jitter between sequential requests
+        if i < len(numbers) - 1:
+            time.sleep(random.uniform(0.18, 0.42))
 
     return results
 
 if __name__ == "__main__":
     try:
+        nums = []
         if len(sys.argv) > 1:
-            arg = sys.argv[1]
+            arg = sys.argv[1].strip()
             try:
                 nums = json.loads(arg)
-            except:
-                nums = sys.argv[1:]
+            except Exception:
+                nums = [x.strip() for x in sys.argv[1:] if x.strip()]
         else:
-            input_data = sys.stdin.read()
-            nums = json.loads(input_data) if input_data.strip() else []
+            input_data = sys.stdin.read().strip()
+            if input_data:
+                try:
+                    nums = json.loads(input_data)
+                except Exception:
+                    nums = [line.strip() for line in input_data.splitlines() if line.strip()]
 
         output = lookup_numbers(nums)
         print(json.dumps(output, ensure_ascii=False))

@@ -6,15 +6,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { ShieldCheck, Loader2, Download, Search } from "lucide-react";
+import { ShieldCheck, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { getApiUrl, cn } from "@/lib/utils";
+
+const MAX_NUMBERS_DING = 50;
+const MAX_NUMBERS_PTA = 100;
 
 export default function PtaServicesClient() {
   const [input, setInput] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [progressText, setProgressText] = useState("");
   const [apiRoute, setApiRoute] = useState<"pta" | "ding">("ding");
+
+  const parsedCount = input.split("\n").map(n => n.trim()).filter(n => n).length;
+  const maxAllowed = apiRoute === "ding" ? MAX_NUMBERS_DING : MAX_NUMBERS_PTA;
+  const isOverLimit = parsedCount > maxAllowed;
 
   const handleProcess = async () => {
     const numbers = input.split("\n").map(n => n.trim()).filter(n => n);
@@ -23,30 +31,64 @@ export default function PtaServicesClient() {
       return;
     }
 
+    if (numbers.length > maxAllowed) {
+      toast.error(`Only ${maxAllowed} numbers allowed at once. You entered ${numbers.length}. Please reduce and try again.`);
+      return;
+    }
+
     setLoading(true);
+    setResults([]);
+    setProgressText(`0 / ${numbers.length}`);
+
     try {
-      const endpoint = apiRoute === "ding" ? "/api/tools/ding-lookup" : "/api/tools/pta-lookup";
-      const res = await fetch(getApiUrl(endpoint), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ numbers }),
-      });
-
-      if (!res.ok) throw new Error("Lookup failed");
-
-      const data = await res.json();
-      if (data.results) {
-        setResults(data.results);
+      if (apiRoute === "ding") {
+        // Live streaming: each number shows in UI as soon as it resolves
+        for (let i = 0; i < numbers.length; i++) {
+          const num = numbers[i];
+          setProgressText(`${i + 1} / ${numbers.length}`);
+          try {
+            const res = await fetch(getApiUrl("/api/tools/ding-lookup"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ numbers: [num] }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.results && data.results.length > 0) {
+                setResults((prev) => [...prev, data.results[0]]);
+              } else {
+                setResults((prev) => [...prev, { number: num, operator: "Not Found" }]);
+              }
+            } else {
+              setResults((prev) => [...prev, { number: num, operator: `HTTP ${res.status}` }]);
+            }
+          } catch {
+            setResults((prev) => [...prev, { number: num, operator: "Error" }]);
+          }
+        }
+        toast.success(`All ${numbers.length} numbers identified via Ding Live.`);
       } else {
-        const meta = res.headers.get("X-Results");
-        if (meta) setResults(JSON.parse(meta));
+        // PTA Easyload batch route
+        const res = await fetch(getApiUrl("/api/tools/pta-lookup"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ numbers }),
+        });
+        if (!res.ok) throw new Error("Lookup failed");
+        const data = await res.json();
+        if (data.results) {
+          setResults(data.results);
+        } else {
+          const meta = res.headers.get("X-Results");
+          if (meta) setResults(JSON.parse(meta));
+        }
+        toast.success("Operators identified via PTA Easyload.");
       }
-
-      toast.success(`Operators identified via ${apiRoute === "ding" ? "Ding Live" : "PTA Easyload"}.`);
     } catch (error: any) {
       toast.error(error.message);
     } finally {
       setLoading(false);
+      setProgressText("");
     }
   };
 
@@ -80,19 +122,36 @@ export default function PtaServicesClient() {
               </span>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             <Textarea 
-              placeholder="Enter numbers (one per line)...\n03001234567\n03451234567" 
+              placeholder={`Enter numbers (one per line)...\n03001234567\n03451234567`}
               className="min-h-[200px] font-mono text-sm"
               value={input}
               onChange={(e) => setInput(e.target.value)}
             />
+            {/* Live counter */}
+            {parsedCount > 0 && (
+              <p className={cn("text-xs font-semibold", isOverLimit ? "text-red-500" : "text-slate-400")}>
+                {parsedCount} / {maxAllowed} numbers
+                {isOverLimit && ` — ⚠️ Limit exceeded! Remove ${parsedCount - maxAllowed} number(s).`}
+              </p>
+            )}
             <Button 
               onClick={handleProcess} 
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 h-11 font-bold"
+              disabled={loading || isOverLimit}
+              className="w-full bg-blue-600 hover:bg-blue-700 h-11 font-bold disabled:opacity-60"
             >
-              {loading ? <><Loader2 className="mr-2 animate-spin" /> Processing...</> : <><Search size={18} className="mr-2"/> Identify Operators</>}</Button>
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 animate-spin" />
+                  {progressText ? `Processing (${progressText})...` : "Processing..."}
+                </>
+              ) : (
+                <>
+                  <Search size={18} className="mr-2"/> Identify Operators
+                </>
+              )}
+            </Button>
           </CardContent>
         </Card>
 
@@ -122,7 +181,8 @@ export default function PtaServicesClient() {
               <div className="p-12 text-center text-slate-400 text-sm">
                 Results will appear here.
               </div>
-            )}</CardContent>
+            )}
+          </CardContent>
         </Card>
       </div>
     </div>
