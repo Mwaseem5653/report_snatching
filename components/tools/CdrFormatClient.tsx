@@ -388,10 +388,10 @@ export default function CdrFormatClient() {
                 break;
             }
 
-            if (res.ok && data.success && data.results) {
+            if (res.ok && data.success && data.results && data.results.length > 0) {
                 const result = {
                     ...data.results[0],
-                    number: formatTo92(data.results[0].number)
+                    number: formatTo92(data.results[0].number || currentNum)
                 };
                 setAnalyzedNumbers(prev => [...prev, result]);
             } else {

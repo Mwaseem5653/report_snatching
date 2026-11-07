@@ -24,56 +24,11 @@ const keepAliveAgent = new https.Agent({
   timeout: 10000,
 });
 
-// Authentic Browser Profiles
+// Authentic Browser Profiles (Firefox profiles without sec-ch-ua headers to avoid Cloudflare TLS fingerprinting blocks)
 const BROWSER_PROFILES: { headers: Record<string, string> }[] = [
   {
     headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Origin": "https://www.ding.com",
-      "Referer": "https://www.ding.com/topup",
-      "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-    },
-  },
-  {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Origin": "https://www.ding.com",
-      "Referer": "https://www.ding.com/topup",
-      "sec-ch-ua": '"Google Chrome";v="120", "Chromium";v="120", "Not?A_Brand";v="24"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-    },
-  },
-  {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Origin": "https://www.ding.com",
-      "Referer": "https://www.ding.com/topup",
-      "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"macOS"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-    },
-  },
-  {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0",
       "Accept": "application/json, text/plain, */*",
       "Accept-Language": "en-US,en;q=0.5",
       "Origin": "https://www.ding.com",
@@ -85,9 +40,45 @@ const BROWSER_PROFILES: { headers: Record<string, string> }[] = [
   },
   {
     headers: {
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
       "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Language": "en-US,en;q=0.5",
+      "Origin": "https://www.ding.com",
+      "Referer": "https://www.ding.com/topup",
+      "sec-fetch-dest": "empty",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-site",
+    },
+  },
+  {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:134.0) Gecko/20100101 Firefox/134.0",
+      "Accept": "application/json, text/plain, */*",
+      "Accept-Language": "en-US,en;q=0.5",
+      "Origin": "https://www.ding.com",
+      "Referer": "https://www.ding.com/topup",
+      "sec-fetch-dest": "empty",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-site",
+    },
+  },
+  {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0",
+      "Accept": "application/json, text/plain, */*",
+      "Accept-Language": "en-US,en;q=0.5",
+      "Origin": "https://www.ding.com",
+      "Referer": "https://www.ding.com/topup",
+      "sec-fetch-dest": "empty",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-site",
+    },
+  },
+  {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
+      "Accept": "application/json, text/plain, */*",
+      "Accept-Language": "en-US,en;q=0.5",
       "Origin": "https://www.ding.com",
       "Referer": "https://www.ding.com/topup",
       "sec-fetch-dest": "empty",
@@ -100,7 +91,9 @@ const BROWSER_PROFILES: { headers: Record<string, string> }[] = [
 function normalizePakNumber(num: string) {
   const raw = String(num).trim();
   let clean = raw.replace(/\D/g, "");
-  if (clean.startsWith("0") && clean.length >= 11) {
+  if (clean.startsWith("0092")) {
+    clean = clean.slice(2);
+  } else if (clean.startsWith("0") && clean.length >= 11) {
     clean = "92" + clean.slice(1);
   } else if (clean.length === 10 && clean.startsWith("3")) {
     clean = "92" + clean;
@@ -215,6 +208,10 @@ async function runDingLookup(numbers: string[]): Promise<LookupResult[]> {
           await new Promise((r) => setTimeout(r, 400));
         }
       }
+    }
+
+    if (!success) {
+      results.push({ number: raw, operator: "Not Found" });
     }
 
     if (i < numbers.length - 1) {
