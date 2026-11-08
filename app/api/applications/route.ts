@@ -1,9 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { adminDb } from "@/firebaseAdmin";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
+
+// ✅ Helper: officer ke enrolled ps_users ke PS names Firestore se fetch karo
+async function getOfficerEnrolledPs(officerUid: string): Promise<string[]> {
+    try {
+        const snap = await adminDb.collection("users")
+            .where("createdByUid", "==", officerUid)
+            .where("role", "in", ["ps_user", "market_user"])
+            .get();
+
+        const psNames: string[] = [];
+        snap.docs.forEach((doc: any) => {
+            const data = doc.data();
+            if (data.ps) psNames.push(String(data.ps).trim().toLowerCase());
+        });
+        return [...new Set(psNames)]; // deduplicate
+    } catch (err) {
+        console.error("getOfficerEnrolledPs error:", err);
+        return [];
+    }
+}
+
+// ✅ Helper: admin ke enrolled PS/Market users ke districts fetch karo
+async function getAdminEnrolledDistricts(adminUid: string, adminDistrict: any): Promise<string[]> {
+    // Admin apne district ki applications dekhta hai - district list return karo
+    if (Array.isArray(adminDistrict)) {
+        return adminDistrict.map((d: any) => String(d).trim().toLowerCase()).filter(Boolean);
+    } else if (adminDistrict) {
+        return [String(adminDistrict).trim().toLowerCase()];
+    }
+    return [];
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,7 +47,8 @@ export async function GET(req: NextRequest) {
     let decoded: any;
     try { decoded = jwt.verify(token, SECRET); } catch (err) { return NextResponse.json({ error: "Invalid session" }, { status: 401 }); }
 
-    const { role, district: requesterDistrict, ps: requesterPs } = decoded;
+    const { role, district: requesterDistrict, ps: requesterPs, uid: requesterUid } = decoded;
+    const hasAdvancedAccess = decoded.permissions?.advanced_reports === true;
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const requestedDistrict = searchParams.get("district");
@@ -30,7 +63,7 @@ export async function GET(req: NextRequest) {
     }
 
     let period = searchParams.get("period");
-    if (!period) period = "none";
+    if (!period) period = "today";
     
     if (period === "none") {
         return NextResponse.json({ success: true, applications: [] });
@@ -43,34 +76,78 @@ export async function GET(req: NextRequest) {
 
     if (fromDate && toDate) {
         query = sql`${query} AND "createdAt" >= ${fromDate}::timestamp AND "createdAt" <= ${toDate}::timestamp + interval '23 hours 59 minutes 59 seconds'`;
+    } else if (period && period !== "all" && period !== "custom" && !search) {
+        if (period === "today") {
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            query = sql`${query} AND "createdAt" >= ${oneDayAgo}::timestamp`;
+        } else if (period === "last_week" || period === "week" || period === "7days") {
+            const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+            query = sql`${query} AND "createdAt" >= ${weekAgo}::timestamp`;
+        } else if (period === "15days") {
+            const days15Ago = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
+            query = sql`${query} AND "createdAt" >= ${days15Ago}::timestamp`;
+        } else if (period === "1month") {
+            const monthAgo = new Date();
+            monthAgo.setMonth(monthAgo.getMonth() - 1);
+            query = sql`${query} AND "createdAt" >= ${monthAgo.toISOString()}::timestamp`;
+        } else if (period === "3months") {
+            const months3Ago = new Date();
+            months3Ago.setMonth(months3Ago.getMonth() - 3);
+            query = sql`${query} AND "createdAt" >= ${months3Ago.toISOString()}::timestamp`;
+        } else if (period === "6h") {
+            const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+            query = sql`${query} AND "createdAt" >= ${sixHoursAgo}::timestamp`;
+        } else if (period === "12h") {
+            const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+            query = sql`${query} AND "createdAt" >= ${twelveHoursAgo}::timestamp`;
+        }
     }
 
-    const hasAdvancedAccess = decoded.permissions?.advanced_reports === true;
+    if (role === "officer") {
+        // ✅ Officer: Apne district ki tamam applications
+        if (!requesterDistrict) return NextResponse.json({ success: true, applications: [] });
 
-    if ((role === "admin" || role === "officer") && !hasAdvancedAccess) {
-        if (Array.isArray(requesterDistrict)) {
-            if (requestedDistrict && requestedDistrict !== "all") {
-                if (requesterDistrict.includes(requestedDistrict)) {
-                    query = sql`${query} AND "district" = ${requestedDistrict}`;
-                } else {
-                    return NextResponse.json({ error: "Access denied" }, { status: 403 });
-                }
+        const officerDistrict = String(requesterDistrict).trim().toLowerCase();
+
+        // Optional sub-filter: agar PS bhi select kiya ho
+        const requestedPs = searchParams.get("ps")?.trim().toLowerCase();
+        if (requestedPs && requestedPs !== "all") {
+            query = sql`${query} AND LOWER(TRIM("district")) = ${officerDistrict} AND LOWER(TRIM("ps")) = ${requestedPs}`;
+        } else {
+            query = sql`${query} AND LOWER(TRIM("district")) = ${officerDistrict}`;
+        }
+
+    } else if (role === "admin") {
+        // ✅ Admin: Sirf apne district ki applications
+        const distList = await getAdminEnrolledDistricts(requesterUid, requesterDistrict);
+
+        if (distList.length === 0) {
+            return NextResponse.json({ success: true, applications: [] });
+        }
+
+        if (requestedDistrict && requestedDistrict !== "all") {
+            const reqLower = requestedDistrict.trim().toLowerCase();
+            if (distList.includes(reqLower)) {
+                query = sql`${query} AND LOWER(TRIM("district")) = ${reqLower}`;
             } else {
-                if (requesterDistrict.length > 0) query = sql`${query} AND "district" = ANY(${requesterDistrict})`;
-                else return NextResponse.json({ success: true, applications: [] });
+                return NextResponse.json({ error: "Access denied to this district" }, { status: 403 });
             }
-        } else if (requesterDistrict) {
-            query = sql`${query} AND "district" = ${requesterDistrict}`;
+        } else {
+            query = sql`${query} AND LOWER(TRIM("district")) = ANY(${distList})`;
+        }
+
+    } else if (role === "super_admin" || hasAdvancedAccess) {
+        if (requestedDistrict && requestedDistrict !== "all") {
+            const reqLower = requestedDistrict.trim().toLowerCase();
+            query = sql`${query} AND LOWER(TRIM("district")) = ${reqLower}`;
+        }
+    } else if (role === "ps_user") {
+        if (requesterPs) {
+            const cleanPs = requesterPs.trim().toLowerCase();
+            query = sql`${query} AND LOWER(TRIM("ps")) = ${cleanPs}`;
         } else {
             return NextResponse.json({ success: true, applications: [] });
         }
-    } else if (role === "super_admin" || hasAdvancedAccess) {
-        if (requestedDistrict && requestedDistrict !== "all") {
-            query = sql`${query} AND "district" = ${requestedDistrict}`;
-        }
-    } else if (role === "ps_user") {
-        if (requesterPs) query = sql`${query} AND "ps" = ${requesterPs}`;
-        else return NextResponse.json({ success: true, applications: [] });
     }
 
     if (status && status !== "none" && status !== "all") {
@@ -94,6 +171,11 @@ export async function GET(req: NextRequest) {
         if (period === "today") {
             const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
             return appDate >= oneDayAgo;
+        }
+
+        if (period === "last_week" || period === "week" || period === "7days") {
+            const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            return appDate >= weekAgo;
         }
 
         if (period === "6h") {

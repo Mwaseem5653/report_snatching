@@ -247,8 +247,8 @@ export default function UserManagement() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Districts</SelectItem>
-                            {currentUser.city && locationData[currentUser.city] && Object.keys(locationData[currentUser.city].districts).map(d => (
-                                <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
+                            {Object.keys(locationData[(currentUser?.city || "karachi").toLowerCase()]?.districts || {}).map(d => (
+                                <SelectItem key={d} value={d} className="capitalize">{d.replace(/_/g, " ")}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>

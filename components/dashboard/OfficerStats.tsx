@@ -50,7 +50,7 @@ export default function OfficerStats({ uid }: OfficerStatsProps) {
   useEffect(() => {
     async function fetchStats() {
       try {
-        const res = await fetch(getApiUrl("/api/applications"));
+        const res = await fetch(getApiUrl("/api/applications?period=all&status=all"));
         const data = await res.json();
         if (data.success) {
           const myApps = data.applications.filter((app: any) => app.processedBy?.uid === uid);

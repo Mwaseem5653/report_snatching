@@ -24,7 +24,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Invalid session" }, { status: 401 });
     }
 
-    const { role: requesterRole, district: requesterDistrict } = decoded;
+    const { role: requesterRole, district: requesterDistrict, uid: requesterUid } = decoded;
 
     // 2. Parse Query Params
     const { searchParams } = new URL(req.url);
@@ -42,30 +42,27 @@ export async function GET(req: Request) {
       if (requestedDistrict) queryRef = queryRef.where("district", "==", requestedDistrict);
     } 
     else if (requesterRole === "admin") {
-      // Admin: Restricted to their district and specific roles (Officer, PS & Market)
+      // Admin: Sirf apne ENROLLED users dekhega (createdByUid match)
       const allowedRoles = ["officer", "ps_user", "market_user"];
       
-      // Enforce Role Hierarchy
       if (requestedRole) {
         if (!allowedRoles.includes(requestedRole)) {
           return NextResponse.json({ error: "Access denied to this role" }, { status: 403 });
         }
         queryRef = queryRef.where("role", "==", requestedRole);
+      } else {
+        queryRef = queryRef.where("role", "in", allowedRoles);
       }
 
-      // Enforce District Ownership
-      if (Array.isArray(requesterDistrict)) {
-        if (requesterDistrict.length > 0) {
-            queryRef = queryRef.where("district", "in", requesterDistrict);
-        }
-      } else if (requesterDistrict) {
-        queryRef = queryRef.where("district", "==", requesterDistrict);
+      // ✅ Admin sirf apne created users dekhega
+      if (requesterUid) {
+        queryRef = queryRef.where("createdByUid", "==", requesterUid);
       } else {
         return NextResponse.json({ users: [] });
       }
     } 
     else if (requesterRole === "officer") {
-      // Officer: Restricted to their district and specific roles
+      // Officer: Only sees users THEY created (createdByUid match)
       const allowedRoles = ["ps_user", "market_user"];
       
       if (requestedRole) {
@@ -73,10 +70,14 @@ export async function GET(req: Request) {
           return NextResponse.json({ error: "Access denied to this role" }, { status: 403 });
         }
         queryRef = queryRef.where("role", "==", requestedRole);
+      } else {
+        // Default: show only ps_user and market_user
+        queryRef = queryRef.where("role", "in", allowedRoles);
       }
 
-      if (requesterDistrict) {
-        queryRef = queryRef.where("district", "==", requesterDistrict);
+      // ✅ Officer sirf apne enrolled/created users dekhega
+      if (requesterUid) {
+        queryRef = queryRef.where("createdByUid", "==", requesterUid);
       } else {
         return NextResponse.json({ users: [] });
       }

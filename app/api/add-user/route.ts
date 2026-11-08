@@ -13,9 +13,11 @@ export async function POST(req: Request) {
     const decoded: any = token ? jwt.verify(token, SECRET) : null;
     const adminEmail = decoded?.email || "System";
 
-    // Role authorization: only super_admin and admin can add users
+    // Role authorization: only super_admin, admin and officer can add users
     const callerRole = decoded?.role;
-    if (!callerRole || !["super_admin", "admin"].includes(callerRole)) {
+    const callerUid = decoded?.uid;
+
+    if (!callerRole || !["super_admin", "admin", "officer"].includes(callerRole)) {
       return NextResponse.json({ success: false, error: "Forbidden: Insufficient role" }, { status: 403 });
     }
 
@@ -44,9 +46,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1b. Admins cannot create super_admin or admin roles
+    // 1b. Role hierarchy enforcement
     if (callerRole === "admin" && ["super_admin", "admin"].includes(role)) {
       return NextResponse.json({ success: false, error: "Forbidden: Admins cannot create admin/super_admin roles" }, { status: 403 });
+    }
+    if (callerRole === "officer" && !["ps_user", "market_user"].includes(role)) {
+      return NextResponse.json({ success: false, error: "Forbidden: Officers can only create ps_user or market_user" }, { status: 403 });
     }
 
     // 2. Create User in Firebase Native Authentication
@@ -90,6 +95,9 @@ export async function POST(req: Request) {
       rank: rank || null,
       buckle: buckle || null,
       enrolledBy: enrolledBy || null,
+      createdByUid: callerUid || null,        // ✅ Who created this user
+      createdByRole: callerRole || null,     // ✅ What role created this user
+      createdByName: decoded?.name || null,  // ✅ Creator's display name
       tokens: 0,
       eyeconTokens: 0,
       tokensExpiry: null,

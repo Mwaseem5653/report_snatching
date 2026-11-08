@@ -77,9 +77,7 @@ export default function AddUserForm({
           setSessionDistrict(data.district);
           setSessionPermissions(data.permissions || {}); // 🚀 Store delegator's perms
 
-          if (data.role === "admin" || data.role === "officer") {
-              setCity(data.city);
-          }
+          setCity(data.city || "karachi");
           if (data.role === "officer") {
               setDistrict(data.district);
           }
@@ -127,8 +125,8 @@ export default function AddUserForm({
       password: formData.get("password"),
       buckle: formData.get("buckle"),
       role,
-      city,
-      district: role === "admin" ? selectedDistricts : district,
+      city: city || "karachi",
+      district: district || (selectedDistricts.length > 0 ? selectedDistricts[0] : null),
       ps, 
       permissions, // 🚀 Send detailed permissions
       tokens: 0,
@@ -335,27 +333,7 @@ export default function AddUserForm({
                   )}
                 </div>
 
-                {role === "admin" && city && !isDistrictRestricted && (
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                    <Label className="text-xs font-bold text-slate-500 uppercase">Select Assigned Districts</Label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {Object.keys(locationData[city]?.districts || {}).map((d) => (
-                        <div key={d} className="flex items-center space-x-3 p-2 bg-white rounded-lg border border-slate-100 shadow-sm">
-                          <Checkbox
-                            id={d}
-                            checked={selectedDistricts.includes(d)}
-                            onCheckedChange={() => toggleDistrict(d)}
-                          />
-                          <label htmlFor={d} className="text-xs font-medium capitalize cursor-pointer text-slate-900">
-                            {d}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {(role === "officer" || role === "ps_user" || role === "market_user") && city && (
+                {(role === "admin" || role === "officer" || role === "ps_user" || role === "market_user") && (
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2 text-xs font-bold uppercase text-slate-500">District {isDistrictRestricted && <LockIcon size={12} className="text-slate-400" />}</Label>
                     {isDistrictRestricted ? (
@@ -363,56 +341,57 @@ export default function AddUserForm({
                             {district || "Assigned District"}
                         </div>
                     ) : (
-                        <Select onValueChange={setDistrict} value={district || ""}>
+                        <Select onValueChange={(val) => { setDistrict(val); setSelectedDistricts([val]); setPs(null); }} value={district || ""}>
                         <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900">
                             <SelectValue placeholder="Select District" />
                         </SelectTrigger>
                         <SelectContent>
-                            {Object.keys(locationData[city]?.districts || {})
+                            {Object.keys(locationData[(city || "karachi").toLowerCase()]?.districts || {})
                                 .filter((d) => {
                                     if (sessionRole === "admin" && sessionDistrict) {
+                                        const cleanD = d.toLowerCase().trim();
                                         if (Array.isArray(sessionDistrict)) {
-                                            return sessionDistrict.includes(d);
+                                            return sessionDistrict.map((x: any) => String(x).toLowerCase().trim()).includes(cleanD);
                                         }
-                                        return sessionDistrict === d;
+                                        return String(sessionDistrict).toLowerCase().trim() === cleanD;
                                     }
                                     return true; 
                                 })
                                 .map((d) => (
-                                <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
-                            ))}
+                                    <SelectItem key={d} value={d} className="capitalize">{d.replace(/_/g, " ")}</SelectItem>
+                                ))}
                         </SelectContent>
                         </Select>
                     )}
                   </div>
                 )}
 
-                {role === "ps_user" && city && district && (
+                {role === "ps_user" && district && (
                   <div className="space-y-2 animate-in slide-in-from-left-2 duration-200">
                     <Label className="flex items-center gap-2 text-xs font-bold uppercase text-slate-500"><Building2 size={14}/> Police Station</Label>
-                    <Select onValueChange={setPs}>
+                    <Select onValueChange={setPs} value={ps || ""}>
                       <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900">
                         <SelectValue placeholder="Select PS" />
                       </SelectTrigger>
                       <SelectContent>
-                        {locationData[city]?.districts[district].ps?.map((ps: string) => (
-                          <SelectItem key={ps} value={ps}>{ps}</SelectItem>
+                        {locationData[(city || "karachi").toLowerCase()]?.districts[district]?.ps?.map((psItem: string) => (
+                          <SelectItem key={psItem} value={psItem}>{psItem}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 )}
 
-                {role === "market_user" && city && district && (
+                {role === "market_user" && district && (
                   <div className="space-y-2 animate-in slide-in-from-left-2 duration-200">
                     <Label className="flex items-center gap-2 text-xs font-bold uppercase text-slate-500"><Store size={14}/> Market Assignment</Label>
-                    <Select onValueChange={setPs}>
+                    <Select onValueChange={setPs} value={ps || ""}>
                       <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900">
                         <SelectValue placeholder="Select Market" />
                       </SelectTrigger>
                       <SelectContent>
-                        {locationData[city]?.districts[district].markets?.map((Market: string) => (
-                          <SelectItem key={Market} value={Market}>{Market}</SelectItem>
+                        {locationData[(city || "karachi").toLowerCase()]?.districts[district]?.markets?.map((marketItem: string) => (
+                          <SelectItem key={marketItem} value={marketItem}>{marketItem}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

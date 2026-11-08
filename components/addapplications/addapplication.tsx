@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { updateApplication, deleteApplication } from "@/lib/applicationApi";
 import { appCache } from "@/lib/applicationCache";
-import { Search, Plus, Filter, RotateCcw, FileText, ChevronRight, CheckCircle2, ClipboardList, History, X, Smartphone, MapPin, User, ShieldCheck, Activity, Trash2, AlertTriangle, Loader2 } from "lucide-react";
+import { Search, Plus, Filter, RotateCcw, FileText, ChevronRight, CheckCircle2, ClipboardList, History, X, Smartphone, MapPin, User, ShieldCheck, Activity, Trash2, AlertTriangle, Loader2, Shield } from "lucide-react";
 import { cn, getApiUrl } from "@/lib/utils";
 import { locationData } from "@/components/location/location";
 
@@ -41,8 +41,8 @@ function DetailRow({ label, value, icon: Icon }: { label: string; value: any; ic
 export default function ApplicationManagement({ officerUid }: { officerUid?: string }) {
   const [applications, setApplications] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>(officerUid ? "processed" : "pending");
-  const [filterPeriod, setFilterPeriod] = useState<string>("none");
+  const [filterStatus, setFilterStatus] = useState<string>(officerUid ? "all" : "pending");
+  const [filterPeriod, setFilterPeriod] = useState<string>("today");
   const [filterPs, setFilterPs] = useState<string>("all");
   const [filterSource, setFilterSource] = useState<string>("all");
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -71,7 +71,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
           const lastFilters = appCache.getLastFilters(`admin_${data.uid}`);
           if (lastFilters) {
               if (lastFilters.status) setFilterStatus(lastFilters.status);
-              if (lastFilters.period) setFilterPeriod(lastFilters.period);
+              if (lastFilters.period && lastFilters.period !== "none") setFilterPeriod(lastFilters.period);
               if (lastFilters.ps) setFilterPs(lastFilters.ps);
               if (lastFilters.search) setSearchQuery(lastFilters.search);
           }
@@ -166,7 +166,7 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
   const handleClear = () => {
     setSearchQuery("");
     setFilterStatus(officerUid ? "all" : "pending");
-    setFilterPeriod("none");
+    setFilterPeriod("today");
     setFilterPs("all");
     setFilterSource("all");
   };
@@ -278,11 +278,11 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
                           <SelectValue placeholder="Period" />
                       </SelectTrigger>
                       <SelectContent>
-                          <SelectItem value="none">None Set</SelectItem>
-                          <SelectItem value="6h">Last 6 Hours</SelectItem>
-                          <SelectItem value="12h">Last 12 Hours</SelectItem>
-                          <SelectItem value="all">All</SelectItem>
-                          
+                          <SelectItem value="today">Today</SelectItem>
+                          <SelectItem value="last_week">Last Week</SelectItem>
+                          <SelectItem value="1month">1 Month</SelectItem>
+                          <SelectItem value="3months">3 Months</SelectItem>
+                          <SelectItem value="all">All Time</SelectItem>
                       </SelectContent>
                   </Select>
 
@@ -622,13 +622,22 @@ export default function ApplicationManagement({ officerUid }: { officerUid?: str
 
       {showAddForm && (
         <Dialog open={true} onOpenChange={() => setShowAddForm(false)}>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto rounded-[2rem] p-0 border-0 shadow-2xl fixed !top-[5vh] left-1/2 -translate-x-1/2 !translate-y-0 flex flex-col">
-            <button onClick={() => setShowAddForm(false)} className="absolute top-6 right-6 z-50 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"><X size={20} /></button>
-            <div className="sticky top-0 bg-[#0a2c4e] p-6 z-10 text-white shadow-xl shrink-0">
-              <DialogTitle className="text-xl font-bold uppercase tracking-tight flex items-center gap-3"><Plus /> New Application</DialogTitle>
+          <DialogContent className="fixed inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 w-screen max-w-none h-screen h-[100dvh] max-h-[100dvh] rounded-none p-0 border-0 shadow-none z-50 flex flex-col bg-slate-50 gap-0 overflow-hidden [&>button:last-child]:hidden">
+            <div className="sticky top-0 bg-[#0a2c4e] px-4 sm:px-6 py-3.5 sm:py-4 z-50 text-white shadow-md shrink-0 flex items-center justify-between">
+              <DialogTitle className="text-base sm:text-lg md:text-xl font-black uppercase tracking-tight flex items-center gap-2 sm:gap-3 truncate">
+                <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 shrink-0" /> 
+                <span className="truncate">New Application Entry</span>
+              </DialogTitle>
+              <button 
+                onClick={() => setShowAddForm(false)} 
+                className="p-1.5 sm:p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all flex items-center gap-1.5 text-xs font-bold shrink-0"
+              >
+                <X size={18} />
+                <span className="hidden sm:inline">Close</span>
+              </button>
             </div>
             <div className="p-0 bg-slate-50 flex-1 overflow-y-auto">
-                <AddApplicationForm currentUser={currentUser} />
+              <AddApplicationForm currentUser={currentUser} />
             </div>
           </DialogContent>
         </Dialog>

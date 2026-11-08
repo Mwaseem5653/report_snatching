@@ -19,13 +19,13 @@ import {
 import AddApplicationForm from "../applicationform/applicationform";
 import { getApplications } from "@/lib/applicationApi";
 import { appCache } from "@/lib/applicationCache";
-import { FileText, Search, Plus, RotateCcw, ChevronRight, Clock, MapPin, Calendar, User, X, Smartphone, Loader2 } from "lucide-react";
+import { FileText, Search, Plus, RotateCcw, ChevronRight, Clock, MapPin, Calendar, User, X, Smartphone, Loader2, Shield } from "lucide-react";
 import { cn, getApiUrl } from "@/lib/utils";
 
 export default function Psusersapplication() {
   const [applications, setApplications] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterPeriod, setFilterPeriod] = useState<string>("none");
+  const [filterPeriod, setFilterPeriod] = useState<string>("today");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedApp, setSelectedApp] = useState<any>(null);
@@ -53,7 +53,7 @@ export default function Psusersapplication() {
           // 🚀 Restore last filters from cache BEFORE marking as initialized
           const lastFilters = appCache.getLastFilters(`ps_${data.uid}`);
           if (lastFilters) {
-              if (lastFilters.period) setFilterPeriod(lastFilters.period);
+              if (lastFilters.period && lastFilters.period !== "none") setFilterPeriod(lastFilters.period);
               if (lastFilters.search) setSearchQuery(lastFilters.search);
           }
         }
@@ -125,7 +125,7 @@ export default function Psusersapplication() {
 
   function clearFilters() {
     setSearchQuery("");
-    setFilterPeriod("none");
+    setFilterPeriod("today");
   }
 
   const formatAppDate = (dateVal: any) => {
@@ -171,8 +171,9 @@ export default function Psusersapplication() {
                         <SelectValue placeholder="Period" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="none">None Set</SelectItem>
-                        <SelectItem value="6h">Last 6 Hours</SelectItem>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="last_week">Last Week</SelectItem>
+                        <SelectItem value="15days">15 Days</SelectItem>
                     </SelectContent>
                 </Select>
                 <Button onClick={() => fetchApplications(true)} className="flex-1 sm:flex-none bg-blue-600 text-white rounded-xl h-10 px-4 font-semibold text-xs" disabled={loading}>{loading ? "..." : "Refresh"}</Button>
@@ -422,13 +423,22 @@ export default function Psusersapplication() {
       {/* 🔹 ADD APPLICATION POPUP */}
       {showAddForm && (
         <Dialog open={true} onOpenChange={() => setShowAddForm(false)}>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto rounded-[2rem] p-0 border-0 shadow-2xl fixed !top-[5vh] left-1/2 -translate-x-1/2 !translate-y-0 flex flex-col">
-            <button onClick={() => setShowAddForm(false)} className="absolute top-6 right-6 z-50 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"><X size={20} /></button>
-            <div className="sticky top-0 bg-[#0a2c4e] p-6 z-10 text-white shadow-xl shrink-0">
-              <DialogTitle className="text-xl font-bold uppercase tracking-tight flex items-center gap-3"><Plus /> New Station Entry</DialogTitle>
+          <DialogContent className="fixed inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 w-screen max-w-none h-screen h-[100dvh] max-h-[100dvh] rounded-none p-0 border-0 shadow-none z-50 flex flex-col bg-slate-50 gap-0 overflow-hidden [&>button:last-child]:hidden">
+            <div className="sticky top-0 bg-[#0a2c4e] px-4 sm:px-6 py-3.5 sm:py-4 z-50 text-white shadow-md shrink-0 flex items-center justify-between">
+              <DialogTitle className="text-base sm:text-lg md:text-xl font-black uppercase tracking-tight flex items-center gap-2 sm:gap-3 truncate">
+                <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 shrink-0" /> 
+                <span className="truncate">New Station Entry</span>
+              </DialogTitle>
+              <button 
+                onClick={() => setShowAddForm(false)} 
+                className="p-1.5 sm:p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all flex items-center gap-1.5 text-xs font-bold shrink-0"
+              >
+                <X size={18} />
+                <span className="hidden sm:inline">Close</span>
+              </button>
             </div>
             <div className="p-0 bg-slate-50 flex-1 overflow-y-auto">
-                <AddApplicationForm currentUser={currentUser} />
+              <AddApplicationForm currentUser={currentUser} />
             </div>
           </DialogContent>
         </Dialog>
