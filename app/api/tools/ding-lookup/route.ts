@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
 import https from "https";
 import crypto from "crypto";
+import { HttpsProxyAgent } from "https-proxy-agent";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -12,19 +13,30 @@ export const maxDuration = 60;
 
 type LookupResult = { number: string; operator: string };
 
-// Cloudflare Anycast IPs for api-v2.www.ding.com (eliminates slow/blocked DNS lookups)
-const CLOUDFLARE_IPS = ["104.18.15.195", "104.18.14.195"];
-
-// Shared keep-alive agent to reuse TCP + TLS connections
-const keepAliveAgent = new https.Agent({
+// Direct Webshare rotating proxy with Keep-Alive connection pooling for max speed
+const DING_PROXY_URL = "http://ntrpjalu-rotate:3tcccxvn3wlz@p.webshare.io:80";
+const proxyAgent = new HttpsProxyAgent(DING_PROXY_URL, {
   keepAlive: true,
-  maxSockets: 10,
-  maxFreeSockets: 5,
-  keepAliveMsecs: 20000,
-  timeout: 10000,
+  maxSockets: 30,
+  maxFreeSockets: 15,
+  keepAliveMsecs: 30000,
+  timeout: 8000,
 });
 
-// Authentic Browser Profiles (Firefox profiles without sec-ch-ua headers to avoid Cloudflare TLS fingerprinting blocks)
+// Firefox-matched TLS ciphers to prevent Cloudflare bot fingerprint block
+const FIREFOX_CIPHERS = [
+  "TLS_AES_128_GCM_SHA256",
+  "TLS_CHACHA20_POLY1305_SHA256",
+  "TLS_AES_256_GCM_SHA384",
+  "ECDHE-ECDSA-AES128-GCM-SHA256",
+  "ECDHE-RSA-AES128-GCM-SHA256",
+  "ECDHE-ECDSA-CHACHA20-POLY1305",
+  "ECDHE-RSA-CHACHA20-POLY1305",
+  "ECDHE-ECDSA-AES256-GCM-SHA384",
+  "ECDHE-RSA-AES256-GCM-SHA384",
+].join(":");
+
+// Authentic Browser Profiles
 const BROWSER_PROFILES: { headers: Record<string, string> }[] = [
   {
     headers: {
@@ -101,13 +113,18 @@ function normalizePakNumber(num: string) {
   return { raw, clean };
 }
 
+function formatOperatorName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.toLowerCase() === "mobilink") return "Jazz";
+  return trimmed;
+}
+
 function singleDingRequest(
   cleanNum: string,
   profile: { headers: Record<string, string> }
 ): Promise<{ status: number; data: string }> {
   return new Promise((resolve, reject) => {
     try {
-      const targetIp = CLOUDFLARE_IPS[Math.floor(Math.random() * CLOUDFLARE_IPS.length)];
       const payload = JSON.stringify({
         phoneNumber: cleanNum,
         selectedCountryIso: "PK",
@@ -123,12 +140,16 @@ function singleDingRequest(
 
       const req = https.request(
         {
-          host: targetIp,
+          host: "api-v2.www.ding.com",
           servername: "api-v2.www.ding.com",
           port: 443,
           path: "/api/operatorlookup",
           method: "POST",
-          agent: keepAliveAgent,
+          agent: proxyAgent,
+          ciphers: FIREFOX_CIPHERS,
+          honorCipherOrder: true,
+          minVersion: "TLSv1.2",
+          maxVersion: "TLSv1.3",
           headers: headers,
           timeout: 8000,
         },
@@ -158,64 +179,73 @@ function singleDingRequest(
   });
 }
 
-async function runDingLookup(numbers: string[]): Promise<LookupResult[]> {
-  const results: LookupResult[] = [];
-  let profileIdx = Math.floor(Math.random() * BROWSER_PROFILES.length);
+async function lookupSingleNumber(
+  rawNum: string,
+  profileIdx: number
+): Promise<LookupResult> {
+  const { raw, clean } = normalizePakNumber(rawNum);
 
-  for (let i = 0; i < numbers.length; i++) {
-    const { raw, clean } = normalizePakNumber(numbers[i]);
+  if (!clean || clean.length < 10) {
+    return { number: raw, operator: "Invalid Number" };
+  }
 
-    if (!clean || clean.length < 10) {
-      results.push({ number: raw, operator: "Invalid Number" });
-      continue;
-    }
+  let attempts = 0;
+  const maxAttempts = 4;
+  let pIdx = profileIdx;
 
-    let success = false;
-    let attempts = 0;
-    const maxAttempts = 3;
+  while (attempts < maxAttempts) {
+    attempts++;
+    const currentProfile = BROWSER_PROFILES[pIdx];
 
-    while (!success && attempts < maxAttempts) {
-      attempts++;
-      const currentProfile = BROWSER_PROFILES[profileIdx];
+    try {
+      const resp = await singleDingRequest(clean, currentProfile);
 
-      try {
-        const resp = await singleDingRequest(clean, currentProfile);
-
-        if (resp.status === 200) {
-          try {
-            const parsed = JSON.parse(resp.data);
-            const ops = parsed?.operators || [];
-            const opName = ops.length > 0 ? ops[0]?.name || "Unknown" : "Not Found";
-            results.push({ number: raw, operator: opName });
-          } catch {
-            results.push({ number: raw, operator: "Parse Error" });
-          }
-          success = true;
-        } else if (resp.status === 403 || resp.status === 429) {
-          profileIdx = (profileIdx + 1) % BROWSER_PROFILES.length;
-          await new Promise((r) => setTimeout(r, 600));
-          continue;
-        } else {
-          results.push({ number: raw, operator: `HTTP ${resp.status}` });
-          success = true;
+      if (resp.status === 200) {
+        try {
+          const parsed = JSON.parse(resp.data);
+          const ops = parsed?.operators || [];
+          const rawOpName = ops.length > 0 ? ops[0]?.name || "Unknown" : "Not Found";
+          return { number: raw, operator: formatOperatorName(rawOpName) };
+        } catch {
+          return { number: raw, operator: "Parse Error" };
         }
-      } catch (err: any) {
+      } else if (resp.status === 403 || resp.status === 429) {
         if (attempts >= maxAttempts) {
-          results.push({ number: raw, operator: "API Error" });
-          success = true;
-        } else {
-          profileIdx = (profileIdx + 1) % BROWSER_PROFILES.length;
-          await new Promise((r) => setTimeout(r, 400));
+          return { number: raw, operator: "Not Found" };
         }
+        pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
+        // Fast 50ms jitter so rotating proxy picks next clean IP immediately
+        await new Promise((r) => setTimeout(r, 50));
+      } else {
+        return { number: raw, operator: `HTTP ${resp.status}` };
       }
-    }
-
-    if (!success) {
-      results.push({ number: raw, operator: "Not Found" });
-    }
-
-    if (i < numbers.length - 1) {
+    } catch (err: any) {
+      if (attempts >= maxAttempts) {
+        return { number: raw, operator: "API Error" };
+      }
+      pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
       await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
+  return { number: raw, operator: "Not Found" };
+}
+
+async function runDingLookup(numbers: string[]): Promise<LookupResult[]> {
+  const results: LookupResult[] = new Array(numbers.length);
+  const CONCURRENCY = 3; // Process 3 numbers in parallel chunks for maximum speed
+  let currentProfileIdx = Math.floor(Math.random() * BROWSER_PROFILES.length);
+
+  for (let i = 0; i < numbers.length; i += CONCURRENCY) {
+    const chunk = numbers.slice(i, i + CONCURRENCY);
+    const promises = chunk.map((num, idx) => {
+      const pIdx = (currentProfileIdx + idx) % BROWSER_PROFILES.length;
+      return lookupSingleNumber(num, pIdx);
+    });
+
+    const chunkResults = await Promise.all(promises);
+    for (let j = 0; j < chunkResults.length; j++) {
+      results[i + j] = chunkResults[j];
     }
   }
 
