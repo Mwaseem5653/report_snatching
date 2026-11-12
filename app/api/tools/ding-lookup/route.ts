@@ -190,7 +190,7 @@ async function lookupSingleNumber(
   }
 
   let attempts = 0;
-  const maxAttempts = 4;
+  const maxAttempts = 6; // Allow up to 6 attempts across rotating proxy IPs
   let pIdx = profileIdx;
 
   while (attempts < maxAttempts) {
@@ -204,27 +204,61 @@ async function lookupSingleNumber(
         try {
           const parsed = JSON.parse(resp.data);
           const ops = parsed?.operators || [];
-          const rawOpName = ops.length > 0 ? ops[0]?.name || "Unknown" : "Not Found";
-          return { number: raw, operator: formatOperatorName(rawOpName) };
+          if (ops.length > 0 && ops[0]?.name) {
+            return { number: raw, operator: formatOperatorName(ops[0].name) };
+          }
+          // If Ding returns 200 with empty operators, do not return 'Not Found' immediately!
+          // Rotate profile and retry with fresh uniqueId
+          if (attempts < maxAttempts) {
+            pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
+            await new Promise((r) => setTimeout(r, 80));
+            continue;
+          }
         } catch {
-          return { number: raw, operator: "Parse Error" };
+          if (attempts < maxAttempts) {
+            pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
+            await new Promise((r) => setTimeout(r, 80));
+            continue;
+          }
         }
       } else if (resp.status === 403 || resp.status === 429) {
         if (attempts >= maxAttempts) {
-          return { number: raw, operator: "Not Found" };
+          break;
         }
         pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
-        // Fast 50ms jitter so rotating proxy picks next clean IP immediately
-        await new Promise((r) => setTimeout(r, 50));
+        // Fast 60ms delay to rotate to clean Webshare IP
+        await new Promise((r) => setTimeout(r, 60));
       } else {
-        return { number: raw, operator: `HTTP ${resp.status}` };
+        if (attempts >= maxAttempts) {
+          break;
+        }
+        pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
+        await new Promise((r) => setTimeout(r, 60));
       }
     } catch (err: any) {
       if (attempts >= maxAttempts) {
-        return { number: raw, operator: "API Error" };
+        break;
       }
       pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 60));
+    }
+  }
+
+  // Second-Chance Automatic Retry Pass for any lingering "Not Found":
+  for (let sc = 1; sc <= 2; sc++) {
+    try {
+      await new Promise((r) => setTimeout(r, 120));
+      pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
+      const resp = await singleDingRequest(clean, BROWSER_PROFILES[pIdx]);
+      if (resp.status === 200) {
+        const parsed = JSON.parse(resp.data);
+        const ops = parsed?.operators || [];
+        if (ops.length > 0 && ops[0]?.name) {
+          return { number: raw, operator: formatOperatorName(ops[0].name) };
+        }
+      }
+    } catch {
+      // Continue to next pass
     }
   }
 
