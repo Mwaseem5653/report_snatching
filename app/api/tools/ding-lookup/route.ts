@@ -3,8 +3,9 @@ import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
 import https from "https";
+import tls from "tls";
+import net from "net";
 import crypto from "crypto";
-import { HttpsProxyAgent } from "https-proxy-agent";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
@@ -13,30 +14,144 @@ export const maxDuration = 60;
 
 type LookupResult = { number: string; operator: string };
 
-// Direct Webshare rotating proxy with Keep-Alive connection pooling for max speed
-const DING_PROXY_URL = "http://ntrpjalu-rotate:3tcccxvn3wlz@p.webshare.io:80";
-const proxyAgent = new HttpsProxyAgent(DING_PROXY_URL, {
-  keepAlive: true,
-  maxSockets: 30,
-  maxFreeSockets: 15,
-  keepAliveMsecs: 30000,
-  timeout: 8000,
+// ─── Direct Proxy Pool (Embedded directly in route) ──────────────────────────
+interface ProxyConfig {
+  host: string;
+  port: number;
+  authHeader?: string;
+}
+
+const RAW_PROXIES = [
+  "84.247.60.125:6095:ntrpjalu:3tcccxvn3wlz",
+  "64.137.96.74:6641:ntrpjalu:3tcccxvn3wlz",
+  "198.23.243.226:6361:ntrpjalu:3tcccxvn3wlz",
+  "38.154.185.97:6370:ntrpjalu:3tcccxvn3wlz",
+  "191.96.254.138:6185:ntrpjalu:3tcccxvn3wlz",
+  "198.46.161.42:5092:ntrpjalu:3tcccxvn3wlz",
+];
+
+const PROXY_POOL: ProxyConfig[] = RAW_PROXIES.map((entry) => {
+  const parts = entry.split(":");
+  const host = parts[0];
+  const port = parseInt(parts[1], 10);
+  const authHeader =
+    parts[2] && parts[3]
+      ? "Basic " + Buffer.from(`${parts[2]}:${parts[3]}`).toString("base64")
+      : undefined;
+  return { host, port, authHeader };
 });
 
-// Firefox-matched TLS ciphers to prevent Cloudflare bot fingerprint block
-const FIREFOX_CIPHERS = [
-  "TLS_AES_128_GCM_SHA256",
-  "TLS_CHACHA20_POLY1305_SHA256",
-  "TLS_AES_256_GCM_SHA384",
-  "ECDHE-ECDSA-AES128-GCM-SHA256",
-  "ECDHE-RSA-AES128-GCM-SHA256",
-  "ECDHE-ECDSA-CHACHA20-POLY1305",
-  "ECDHE-RSA-CHACHA20-POLY1305",
-  "ECDHE-ECDSA-AES256-GCM-SHA384",
-  "ECDHE-RSA-AES256-GCM-SHA384",
-].join(":");
+let globalProxyIdx = 0;
 
-// Authentic Browser Profiles
+function getNextProxy(offset = 0): ProxyConfig {
+  const idx = (globalProxyIdx + offset) % PROXY_POOL.length;
+  globalProxyIdx = (globalProxyIdx + 1) % PROXY_POOL.length;
+  return PROXY_POOL[idx];
+}
+
+function singleDingRequest(
+  cleanNum: string,
+  profile: { headers: Record<string, string> },
+  proxy: ProxyConfig
+): Promise<{ status: number; data: string }> {
+  return new Promise((resolve, reject) => {
+    let resolved = false;
+
+    const socket = net.connect(proxy.port, proxy.host, () => {
+      let connectReq =
+        `CONNECT api-v2.www.ding.com:443 HTTP/1.1\r\n` +
+        `Host: api-v2.www.ding.com:443\r\n`;
+
+      if (proxy.authHeader) {
+        connectReq += `Proxy-Authorization: ${proxy.authHeader}\r\n`;
+      }
+      connectReq += `Proxy-Connection: keep-alive\r\n\r\n`;
+
+      socket.write(connectReq);
+
+      socket.once("data", (d) => {
+        if (!d.toString().includes("200")) {
+          socket.destroy();
+          if (!resolved) {
+            resolved = true;
+            reject(new Error("Proxy CONNECT failed: " + d.toString().split("\r\n")[0]));
+          }
+          return;
+        }
+
+        const tlsSocket = tls.connect(
+          {
+            socket,
+            servername: "api-v2.www.ding.com",
+            rejectUnauthorized: false,
+          },
+          () => {
+            const payload = JSON.stringify({
+              phoneNumber: cleanNum,
+              selectedCountryIso: "PK",
+              uniqueId: crypto.randomUUID(),
+            });
+
+            const reqText = [
+              "POST /api/operatorlookup HTTP/1.1",
+              "Host: api-v2.www.ding.com",
+              `User-Agent: ${profile.headers["User-Agent"] || "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0"}`,
+              `Accept: ${profile.headers["Accept"] || "application/json, text/plain, */*"}`,
+              `Accept-Language: ${profile.headers["Accept-Language"] || "en-US,en;q=0.5"}`,
+              "Origin: https://www.ding.com",
+              "Referer: https://www.ding.com/topup",
+              "Content-Type: application/json",
+              `Content-Length: ${Buffer.byteLength(payload)}`,
+              "Connection: close",
+              "",
+              payload,
+            ].join("\r\n");
+
+            tlsSocket.write(reqText);
+          }
+        );
+
+        let resp = "";
+        tlsSocket.on("data", (chunk) => (resp += chunk));
+        tlsSocket.on("end", () => {
+          if (!resolved) {
+            resolved = true;
+            const firstLine = resp.split("\r\n")[0] || "";
+            const statusMatch = firstLine.match(/HTTP\/\S+\s+(\d+)/);
+            const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+            const body = resp.split("\r\n\r\n").slice(1).join("\r\n\r\n");
+            resolve({ status, data: body });
+          }
+        });
+
+        tlsSocket.on("error", (err) => {
+          socket.destroy();
+          if (!resolved) {
+            resolved = true;
+            reject(err);
+          }
+        });
+      });
+    });
+
+    socket.setTimeout(8000, () => {
+      socket.destroy();
+      if (!resolved) {
+        resolved = true;
+        reject(new Error("Proxy timeout"));
+      }
+    });
+
+    socket.on("error", (err) => {
+      if (!resolved) {
+        resolved = true;
+        reject(err);
+      }
+    });
+  });
+}
+
+// Authentic Firefox Browser Profiles
 const BROWSER_PROFILES: { headers: Record<string, string> }[] = [
   {
     headers: {
@@ -119,64 +234,13 @@ function formatOperatorName(name: string): string {
   return trimmed;
 }
 
-function singleDingRequest(
-  cleanNum: string,
-  profile: { headers: Record<string, string> }
-): Promise<{ status: number; data: string }> {
-  return new Promise((resolve, reject) => {
-    try {
-      const payload = JSON.stringify({
-        phoneNumber: cleanNum,
-        selectedCountryIso: "PK",
-        uniqueId: crypto.randomUUID(),
-      });
-
-      const headers: Record<string, string> = {
-        ...profile.headers,
-        "Host": "api-v2.www.ding.com",
-        "Content-Type": "application/json",
-        "Content-Length": String(Buffer.byteLength(payload)),
-      };
-
-      const req = https.request(
-        {
-          host: "api-v2.www.ding.com",
-          servername: "api-v2.www.ding.com",
-          port: 443,
-          path: "/api/operatorlookup",
-          method: "POST",
-          agent: proxyAgent,
-          ciphers: FIREFOX_CIPHERS,
-          honorCipherOrder: true,
-          minVersion: "TLSv1.2",
-          maxVersion: "TLSv1.3",
-          headers: headers,
-          timeout: 8000,
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", () => {
-            resolve({ status: res.statusCode || 0, data });
-          });
-        }
-      );
-
-      req.on("timeout", () => {
-        req.destroy();
-        reject(new Error("Request timeout"));
-      });
-
-      req.on("error", (err) => {
-        reject(err);
-      });
-
-      req.write(payload);
-      req.end();
-    } catch (err) {
-      reject(err);
-    }
-  });
+function extractJsonString(raw: string): string {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    return raw.slice(start, end + 1);
+  }
+  return raw;
 }
 
 async function lookupSingleNumber(
@@ -189,76 +253,42 @@ async function lookupSingleNumber(
     return { number: raw, operator: "Invalid Number" };
   }
 
-  let attempts = 0;
-  const maxAttempts = 6; // Allow up to 6 attempts across rotating proxy IPs
   let pIdx = profileIdx;
+  const maxAttempts = Math.max(10, PROXY_POOL.length * 2);
 
-  while (attempts < maxAttempts) {
-    attempts++;
-    const currentProfile = BROWSER_PROFILES[pIdx];
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const proxy = getNextProxy(attempt);
 
     try {
-      const resp = await singleDingRequest(clean, currentProfile);
+      const resp = await singleDingRequest(clean, BROWSER_PROFILES[pIdx], proxy);
 
       if (resp.status === 200) {
         try {
-          const parsed = JSON.parse(resp.data);
+          const jsonStr = extractJsonString(resp.data);
+          const parsed = JSON.parse(jsonStr);
           const ops = parsed?.operators || [];
           if (ops.length > 0 && ops[0]?.name) {
             return { number: raw, operator: formatOperatorName(ops[0].name) };
           }
-          // If Ding returns 200 with empty operators, do not return 'Not Found' immediately!
-          // Rotate profile and retry with fresh uniqueId
-          if (attempts < maxAttempts) {
-            pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
-            await new Promise((r) => setTimeout(r, 80));
-            continue;
-          }
         } catch {
-          if (attempts < maxAttempts) {
-            pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
-            await new Promise((r) => setTimeout(r, 80));
-            continue;
-          }
+          // JSON parse retry
         }
-      } else if (resp.status === 403 || resp.status === 429) {
-        if (attempts >= maxAttempts) {
-          break;
-        }
-        pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
-        // Fast 60ms delay to rotate to clean Webshare IP
-        await new Promise((r) => setTimeout(r, 60));
-      } else {
-        if (attempts >= maxAttempts) {
-          break;
-        }
-        pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
-        await new Promise((r) => setTimeout(r, 60));
       }
-    } catch (err: any) {
-      if (attempts >= maxAttempts) {
-        break;
-      }
-      pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
-      await new Promise((r) => setTimeout(r, 60));
-    }
-  }
 
-  // Second-Chance Automatic Retry Pass for any lingering "Not Found":
-  for (let sc = 1; sc <= 2; sc++) {
-    try {
-      await new Promise((r) => setTimeout(r, 120));
+      // Rotate browser profile
       pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
-      const resp = await singleDingRequest(clean, BROWSER_PROFILES[pIdx]);
-      if (resp.status === 200) {
-        const parsed = JSON.parse(resp.data);
-        const ops = parsed?.operators || [];
-        if (ops.length > 0 && ops[0]?.name) {
-          return { number: raw, operator: formatOperatorName(ops[0].name) };
-        }
+
+      // Small backoff on 429/403: 100ms, 200ms, 300ms...
+      if (attempt < maxAttempts - 1) {
+        const delay = Math.min(100 * (attempt + 1), 1500);
+        await new Promise((r) => setTimeout(r, delay));
       }
     } catch {
-      // Continue to next pass
+      // Proxy connection / network failure — rotate immediately to next proxy
+      pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
     }
   }
 
@@ -267,7 +297,8 @@ async function lookupSingleNumber(
 
 async function runDingLookup(numbers: string[]): Promise<LookupResult[]> {
   const results: LookupResult[] = new Array(numbers.length);
-  const CONCURRENCY = 3; // Process 3 numbers in parallel chunks for maximum speed
+  // 3 concurrent requests — fast but doesn't hammer Cloudflare
+  const CONCURRENCY = 3;
   let currentProfileIdx = Math.floor(Math.random() * BROWSER_PROFILES.length);
 
   for (let i = 0; i < numbers.length; i += CONCURRENCY) {
@@ -280,6 +311,14 @@ async function runDingLookup(numbers: string[]): Promise<LookupResult[]> {
     const chunkResults = await Promise.all(promises);
     for (let j = 0; j < chunkResults.length; j++) {
       results[i + j] = chunkResults[j];
+    }
+
+    // Rotate profile index for next chunk
+    currentProfileIdx = (currentProfileIdx + CONCURRENCY) % BROWSER_PROFILES.length;
+
+    // Small gap between chunks to avoid bursting
+    if (i + CONCURRENCY < numbers.length) {
+      await new Promise((r) => setTimeout(r, 100));
     }
   }
 
