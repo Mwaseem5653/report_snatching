@@ -140,8 +140,8 @@ export interface CombinedCdrOutput {
 export default function CdrFormatClient() {
   const [rawInput, setRawInput] = useState("");
   const [useApiLookup, setUseApiLookup] = useState(false);
-  // Ding route commented out - defaulted to "pta"
-  const [apiRoute, setApiRoute] = useState<"pta" | "ding">("pta");
+  // Defaulted to "ding" live lookup
+  const [apiRoute, setApiRoute] = useState<"pta" | "ding">("ding");
   const [loadingLookup, setLoadingLookup] = useState(false);
   const [analyzedNumbers, setAnalyzedNumbers] = useState<{ number: string, operator: string }[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
