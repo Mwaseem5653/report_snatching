@@ -38,12 +38,12 @@ export async function POST(req: NextRequest) {
     // Check 5-minute break / cooldown (300,000 ms)
     const lastRun = userCooldowns.get(decoded.uid) || 0;
     const now = Date.now();
-    const cooldownTime = 5 * 60 * 1000;
+    const cooldownTime = 5 * 60 * 500;
     if (now - lastRun < cooldownTime) {
       const remainingSecs = Math.ceil((cooldownTime - (now - lastRun)) / 1000);
       const remainingMins = Math.ceil(remainingSecs / 60);
       return NextResponse.json({ 
-        error: `Rate limit / Break active. Please wait ${remainingMins} minute(s) (5 min break after checking 20 numbers).` 
+        error: `Rate limit / Break active. Please wait ${remainingMins} Minutes` 
       }, { status: 429 });
     }
 

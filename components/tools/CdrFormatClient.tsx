@@ -28,9 +28,7 @@ import TokenExpiredModal from "@/components/ui/token-expired-modal";
 import { cn, getApiUrl } from "@/lib/utils";
 import { 
   generateFilledPerformaDocx, 
-  generateFilledPerformaPdf,
   downloadDocxBlob, 
-  downloadPdfBlob,
   shareOrAttachPerformaDocx, 
   formatDateDDMMYYYY 
 } from "@/lib/docx-performa";
@@ -157,7 +155,6 @@ export default function CdrFormatClient() {
   const [copied, setCopied] = useState(false);
   const [generatingDocx, setGeneratingDocx] = useState(false);
   const [selectedPerforma, setSelectedPerforma] = useState<{ p1: boolean; p2: boolean }>({ p1: true, p2: true });
-  const [generatingPdf, setGeneratingPdf] = useState(false);
   
   // 20-Set Query List Options (CDR, LOC, OWN, IMEI)
   const [formatViewMode, setFormatViewMode] = useState<"20set" | "operators">("20set");
@@ -1077,23 +1074,6 @@ export default function CdrFormatClient() {
     } finally { setGeneratingDocx(false); }
   };
 
-  const handleDownloadPdf = async () => {
-    const nums = getActiveNumbersToFill();
-    if (nums.length === 0) { toast.error("Please enter/process numbers first."); return; }
-    try {
-      setGeneratingPdf(true);
-      toast.loading("Generating PDF Performa...", { id: "pdf-gen" });
-      const pdfBlob = await generateFilledPerformaPdf(nums, { referenceDate: new Date() });
-      const fileName = `Technical_Assistance_Performa_${formatDateDDMMYYYY(new Date())}.pdf`;
-      downloadPdfBlob(pdfBlob, fileName);
-      toast.dismiss("pdf-gen");
-      toast.success("PDF Performa downloaded!");
-    } catch (err: any) {
-      toast.dismiss("pdf-gen");
-      toast.error("PDF failed: " + (err?.message || "Unknown error"));
-    } finally { setGeneratingPdf(false); }
-  };
-
   const handleEmail = async () => {
     if (!combinedOutput?.text) {
       toast.error("No output content to email.");
@@ -1744,8 +1724,8 @@ export default function CdrFormatClient() {
 
       {/* 🔹 BOTTOM SECTION: SINGLE COMBINED PREVIEW DOCUMENT (CDR ON TOP + IMEI (IF 15 DIGITS) + IDP DIRECTLY BELOW) */}
       <Card className="border-slate-200 rounded-2xl overflow-hidden shadow-xl flex flex-col bg-white min-h-[600px]">
-          <div className="bg-white border-b border-slate-100 py-2.5 px-4 shrink-0 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
+          <div className="bg-white border-b border-slate-100 py-3 px-4 shrink-0 flex flex-col md:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 shrink-0">
                   <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
                       <Eye size={16} />
                   </div>
@@ -1753,36 +1733,36 @@ export default function CdrFormatClient() {
                       <CardTitle className="text-xs font-black text-slate-800 uppercase tracking-tight leading-none">Unified Document Output</CardTitle>
                       <p className="text-[9px] font-bold text-slate-400 mt-0.5">
                         {combinedOutput 
-                          ? `${combinedOutput.cdrCount} CDR Format(s) + ${combinedOutput.idpCount} IDP Format(s) in One Master Document`
+                          ? `${combinedOutput.cdrCount} CDR Format(s) + ${combinedOutput.idpCount} IDP Format(s)`
                           : "Awaiting generation"}
                       </p>
                   </div>
               </div>
 
-              {/* Action Buttons: Tab View, Copy All, Send Email */}
+              {/* Action Buttons: Centered */}
               {combinedOutput && (
-                  <div className="flex items-center gap-2">
-                      <div className="flex bg-slate-200/50 p-0.5 rounded-xl text-[9px] font-black uppercase">
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
+                      <div className="flex bg-slate-100 p-0.5 rounded-xl text-[9px] font-black uppercase border border-slate-200/60">
                           <button
                             onClick={() => setActiveViewTab("rendered")}
-                            className={`px-2 py-1 rounded-lg transition-all ${
-                              activeViewTab === "rendered" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500"
+                            className={`px-2.5 py-1 rounded-lg transition-all ${
+                              activeViewTab === "rendered" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500 hover:text-slate-700"
                             }`}
                           >
                             Document
                           </button>
                           <button
                             onClick={() => setActiveViewTab("text")}
-                            className={`px-2 py-1 rounded-lg transition-all ${
-                              activeViewTab === "text" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500"
+                            className={`px-2.5 py-1 rounded-lg transition-all ${
+                              activeViewTab === "text" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500 hover:text-slate-700"
                             }`}
                           >
                             Plain Text
                           </button>
                           <button
                             onClick={() => setActiveViewTab("html")}
-                            className={`px-2 py-1 rounded-lg transition-all ${
-                              activeViewTab === "html" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500"
+                            className={`px-2.5 py-1 rounded-lg transition-all ${
+                              activeViewTab === "html" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500 hover:text-slate-700"
                             }`}
                           >
                             HTML
@@ -1796,7 +1776,7 @@ export default function CdrFormatClient() {
                         className="h-8 rounded-xl text-[10px] font-black uppercase border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 hover:text-emerald-700 transition-all gap-1.5 px-3 bg-white"
                       >
                         {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} className="text-slate-500" />}
-                        {copied ? "Copied All" : "Copy All"}
+                        {copied ? "Copied" : "Copy"}
                       </Button>
 
                       <Button
@@ -1807,79 +1787,33 @@ export default function CdrFormatClient() {
                         title="Download .txt file"
                       >
                         <FileText size={12} className="text-emerald-600" />
-                        Download TXT
+                        TXT
                       </Button>
 
-                      {/* Performa Toggle + Download Buttons */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[9px] font-black uppercase text-slate-400">Performa:</span>
-
-                        {/* P-1 Toggle */}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedPerforma(prev => ({ ...prev, p1: !prev.p1 }))}
-                          className={`h-6 px-2.5 rounded-full text-[9px] font-black uppercase transition-all border ${
-                            selectedPerforma.p1
-                              ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                              : "bg-white text-slate-400 border-slate-200 hover:border-blue-300 hover:text-blue-400"
-                          }`}
-                          title="Toggle Performa 1"
-                        >
-                          P-1
-                        </button>
-
-                        {/* P-2 Toggle */}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedPerforma(prev => ({ ...prev, p2: !prev.p2 }))}
-                          className={`h-6 px-2.5 rounded-full text-[9px] font-black uppercase transition-all border ${
-                            selectedPerforma.p2
-                              ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                              : "bg-white text-slate-400 border-slate-200 hover:border-indigo-300 hover:text-indigo-400"
-                          }`}
-                          title="Toggle Performa 2"
-                        >
-                          P-2
-                        </button>
-
-                        {selectedPerforma.p1 && (
-                          <Button
-                            onClick={() => handleDownloadDocxWithType(1)}
-                            disabled={generatingDocx}
-                            variant="outline"
-                            size="sm"
-                            className="h-8 rounded-xl text-[10px] font-black uppercase border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all gap-1.5 px-3"
-                            title="Download Performa 1 Word (.docx)"
-                          >
-                            {generatingDocx ? <Loader2 size={12} className="animate-spin text-blue-600" /> : <FileDown size={12} className="text-blue-600" />}
-                            P-1 Word
-                          </Button>
-                        )}
-
-                        {selectedPerforma.p2 && (
-                          <Button
-                            onClick={() => handleDownloadDocxWithType(2)}
-                            disabled={generatingDocx}
-                            variant="outline"
-                            size="sm"
-                            className="h-8 rounded-xl text-[10px] font-black uppercase border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-400 transition-all gap-1.5 px-3"
-                            title="Download Performa 2 Word (.docx)"
-                          >
-                            {generatingDocx ? <Loader2 size={12} className="animate-spin text-indigo-600" /> : <FileDown size={12} className="text-indigo-600" />}
-                            P-2 Word
-                          </Button>
-                        )}
-
+                      {/* Compact Performa Buttons: Icon + P-1 / P-2 */}
+                      <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
                         <Button
-                          onClick={handleDownloadPdf}
-                          disabled={generatingPdf}
-                          variant="outline"
+                          onClick={() => handleDownloadDocxWithType(1)}
+                          disabled={generatingDocx}
+                          variant="ghost"
                           size="sm"
-                          className="h-8 rounded-xl text-[10px] font-black uppercase border-rose-200 bg-rose-50/50 text-rose-700 hover:bg-rose-100 hover:border-rose-400 transition-all gap-1.5 px-3"
-                          title="Download PDF Performa"
+                          className="h-7 px-2.5 rounded-lg text-[10px] font-black uppercase text-blue-700 hover:bg-white hover:shadow-xs transition-all gap-1"
+                          title="Download Performa 1 Word (.docx)"
                         >
-                          {generatingPdf ? <Loader2 size={12} className="animate-spin text-rose-600" /> : <FileDown size={12} className="text-rose-600" />}
-                          PDF
+                          {generatingDocx ? <Loader2 size={11} className="animate-spin text-blue-600" /> : <FileDown size={11} className="text-blue-600" />}
+                          P-1
+                        </Button>
+                        <div className="w-px h-3.5 bg-slate-300" />
+                        <Button
+                          onClick={() => handleDownloadDocxWithType(2)}
+                          disabled={generatingDocx}
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2.5 rounded-lg text-[10px] font-black uppercase text-indigo-700 hover:bg-white hover:shadow-xs transition-all gap-1"
+                          title="Download Performa 2 Word (.docx)"
+                        >
+                          {generatingDocx ? <Loader2 size={11} className="animate-spin text-indigo-600" /> : <FileDown size={11} className="text-indigo-600" />}
+                          P-2
                         </Button>
                       </div>
 
@@ -1895,7 +1829,7 @@ export default function CdrFormatClient() {
                         ) : (
                           <Mail size={12} className="text-slate-500 hover:text-indigo-600" />
                         )}
-                        Send via Email
+                        Email
                       </Button>
                   </div>
               )}
