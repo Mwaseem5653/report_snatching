@@ -229,25 +229,6 @@ function singleDingRequest(
   });
 }
 
-function getPrefixFallback(clean: string): string {
-  const num = clean.startsWith("92") ? clean.slice(2) : clean.startsWith("0") ? clean.slice(1) : clean;
-  const prefix = num.slice(0, 3);
-  const map: Record<string, string> = {
-    "300": "Jazz", "301": "Jazz", "302": "Jazz", "303": "Jazz", "304": "Jazz",
-    "305": "Jazz", "306": "Jazz", "307": "Jazz", "308": "Jazz", "309": "Jazz",
-    "310": "Zong", "311": "Zong", "312": "Zong", "313": "Zong", "314": "Zong",
-    "315": "Zong", "316": "Zong", "317": "Zong", "318": "Zong", "319": "Zong",
-    "320": "Jazz / Warid", "321": "Jazz / Warid", "322": "Jazz / Warid", "323": "Jazz / Warid", "324": "Jazz / Warid",
-    "325": "Jazz / Warid", "326": "Jazz / Warid", "327": "Jazz / Warid", "328": "Jazz / Warid", "329": "Jazz / Warid",
-    "330": "Ufone", "331": "Ufone", "332": "Ufone", "333": "Ufone", "334": "Ufone",
-    "335": "Ufone", "336": "Ufone", "337": "Ufone", "338": "Ufone", "339": "Ufone",
-    "340": "Telenor", "341": "Telenor", "342": "Telenor", "343": "Telenor", "344": "Telenor",
-    "345": "Telenor", "346": "Telenor", "347": "Telenor", "348": "Telenor", "349": "Telenor",
-    "355": "SCO", "370": "Zong", "371": "Zong",
-  };
-  return map[prefix] || "Not Found";
-}
-
 // ─── Single number lookup with retry ────────────────────────────────────────
 async function lookupSingleNumber(
   rawNum: string,
@@ -259,8 +240,7 @@ async function lookupSingleNumber(
     return { number: raw, operator: "Invalid Number" };
   }
 
-  // Max 3 attempts with fast 4.5s timeout to stay strictly within Vercel's limits
-  const maxAttempts = 3;
+  const maxAttempts = 4;
   let pIdx = profileIdx;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -276,7 +256,7 @@ async function lookupSingleNumber(
           const ops = parsed?.operators || [];
           if (ops.length > 0 && ops[0]?.name) {
             const op = formatOperatorName(ops[0].name);
-            console.log(`[Ding] ✅ ${clean} → ${op}`);
+            console.log(`[Ding] ✅ Live API: ${clean} → ${op}`);
             return { number: raw, operator: op };
           }
           console.warn(`[Ding] 200 but no operators: ${body.slice(0, 300)}`);
@@ -298,9 +278,8 @@ async function lookupSingleNumber(
     await new Promise((r) => setTimeout(r, 200));
   }
 
-  const fallback = getPrefixFallback(clean);
-  console.warn(`[Ding] All attempts finished for ${clean}, fallback: ${fallback}`);
-  return { number: raw, operator: fallback };
+  console.error(`[Ding] ❌ All attempts failed for ${clean}`);
+  return { number: raw, operator: "Not Found" };
 }
 
 // ─── Main Export ─────────────────────────────────────────────────────────────
