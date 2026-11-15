@@ -28,7 +28,9 @@ import TokenExpiredModal from "@/components/ui/token-expired-modal";
 import { cn, getApiUrl } from "@/lib/utils";
 import { 
   generateFilledPerformaDocx, 
+  generateFilledPerformaPdf,
   downloadDocxBlob, 
+  downloadPdfBlob,
   shareOrAttachPerformaDocx, 
   formatDateDDMMYYYY 
 } from "@/lib/docx-performa";
@@ -154,6 +156,8 @@ export default function CdrFormatClient() {
   const [activeViewTab, setActiveViewTab] = useState<"rendered" | "text" | "html">("rendered");
   const [copied, setCopied] = useState(false);
   const [generatingDocx, setGeneratingDocx] = useState(false);
+  const [selectedPerforma, setSelectedPerforma] = useState<{ p1: boolean; p2: boolean }>({ p1: true, p2: false });
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   
   // 20-Set Query List Options (CDR, LOC, OWN, IMEI)
   const [formatViewMode, setFormatViewMode] = useState<"20set" | "operators">("20set");
@@ -1056,6 +1060,40 @@ export default function CdrFormatClient() {
     }
   };
 
+  const handleDownloadDocxWithType = async (performaType: 1 | 2) => {
+    const nums = getActiveNumbersToFill();
+    if (nums.length === 0) { toast.error("Please enter/process numbers first."); return; }
+    try {
+      setGeneratingDocx(true);
+      toast.loading(`Generating Performa ${performaType} Word Document...`, { id: "docx-gen" });
+      const docxBlob = await generateFilledPerformaDocx(nums, { referenceDate: new Date(), performaType });
+      const fileName = `Technical_Assistance_Performa${performaType}_${formatDateDDMMYYYY(new Date())}.docx`;
+      downloadDocxBlob(docxBlob, fileName);
+      toast.dismiss("docx-gen");
+      toast.success(`Performa ${performaType} Word (.docx) downloaded!`);
+    } catch (err: any) {
+      toast.dismiss("docx-gen");
+      toast.error("Failed: " + (err?.message || "Unknown error"));
+    } finally { setGeneratingDocx(false); }
+  };
+
+  const handleDownloadPdf = async () => {
+    const nums = getActiveNumbersToFill();
+    if (nums.length === 0) { toast.error("Please enter/process numbers first."); return; }
+    try {
+      setGeneratingPdf(true);
+      toast.loading("Generating PDF Performa...", { id: "pdf-gen" });
+      const pdfBlob = await generateFilledPerformaPdf(nums, { referenceDate: new Date() });
+      const fileName = `Technical_Assistance_Performa_${formatDateDDMMYYYY(new Date())}.pdf`;
+      downloadPdfBlob(pdfBlob, fileName);
+      toast.dismiss("pdf-gen");
+      toast.success("PDF Performa downloaded!");
+    } catch (err: any) {
+      toast.dismiss("pdf-gen");
+      toast.error("PDF failed: " + (err?.message || "Unknown error"));
+    } finally { setGeneratingPdf(false); }
+  };
+
   const handleEmail = async () => {
     if (!combinedOutput?.text) {
       toast.error("No output content to email.");
@@ -1772,21 +1810,68 @@ export default function CdrFormatClient() {
                         Download TXT
                       </Button>
 
-                      <Button
-                        onClick={handleDownloadDocx}
-                        disabled={generatingDocx}
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-xl text-[10px] font-black uppercase border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all gap-1.5 px-3"
-                        title="Download filled Word Performa (.docx) with current date"
-                      >
-                        {generatingDocx ? (
-                          <Loader2 size={12} className="animate-spin text-blue-600" />
-                        ) : (
-                          <FileDown size={12} className="text-blue-600" />
+                      {/* Performa Selection Checkboxes + Download Buttons */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[9px] font-black uppercase text-slate-400">Performa:</span>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedPerforma.p1}
+                            onChange={(e) => setSelectedPerforma(prev => ({ ...prev, p1: e.target.checked }))}
+                            className="w-3 h-3 rounded accent-blue-600"
+                          />
+                          <span className="text-[9px] font-bold text-slate-600">P-1</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedPerforma.p2}
+                            onChange={(e) => setSelectedPerforma(prev => ({ ...prev, p2: e.target.checked }))}
+                            className="w-3 h-3 rounded accent-blue-600"
+                          />
+                          <span className="text-[9px] font-bold text-slate-600">P-2</span>
+                        </label>
+
+                        {selectedPerforma.p1 && (
+                          <Button
+                            onClick={() => handleDownloadDocxWithType(1)}
+                            disabled={generatingDocx}
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-xl text-[10px] font-black uppercase border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 hover:border-blue-400 transition-all gap-1.5 px-3"
+                            title="Download Performa 1 Word (.docx)"
+                          >
+                            {generatingDocx ? <Loader2 size={12} className="animate-spin text-blue-600" /> : <FileDown size={12} className="text-blue-600" />}
+                            P-1 Word
+                          </Button>
                         )}
-                        Word (.docx)
-                      </Button>
+
+                        {selectedPerforma.p2 && (
+                          <Button
+                            onClick={() => handleDownloadDocxWithType(2)}
+                            disabled={generatingDocx}
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-xl text-[10px] font-black uppercase border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-400 transition-all gap-1.5 px-3"
+                            title="Download Performa 2 Word (.docx)"
+                          >
+                            {generatingDocx ? <Loader2 size={12} className="animate-spin text-indigo-600" /> : <FileDown size={12} className="text-indigo-600" />}
+                            P-2 Word
+                          </Button>
+                        )}
+
+                        <Button
+                          onClick={handleDownloadPdf}
+                          disabled={generatingPdf}
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-xl text-[10px] font-black uppercase border-rose-200 bg-rose-50/50 text-rose-700 hover:bg-rose-100 hover:border-rose-400 transition-all gap-1.5 px-3"
+                          title="Download PDF Performa"
+                        >
+                          {generatingPdf ? <Loader2 size={12} className="animate-spin text-rose-600" /> : <FileDown size={12} className="text-rose-600" />}
+                          PDF
+                        </Button>
+                      </div>
 
                       <Button
                         onClick={handleEmail}

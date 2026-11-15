@@ -435,7 +435,6 @@ export default function ExcelDataMerger({ onExportNumbersToGenerator }: ExcelDat
         const headerText = `[RECORD #${idx + 1}] ${formattedNum ? formattedNum + " " : ""}${name ? "- " + name : ""}`;
 
         const fieldLines: string[] = [];
-        fieldLines.push(`Source File : ${r._sourceFile}`);
         currentHeaders.forEach(h => {
           const val = r[h];
           if (val) {

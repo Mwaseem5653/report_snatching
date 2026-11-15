@@ -6,6 +6,8 @@ import { Capacitor } from "@capacitor/core";
 export interface GeneratePerformaOptions {
   referenceDate?: Date;
   periodDays?: number;
+  templatePath?: string;
+  performaType?: 1 | 2;
 }
 
 /**
@@ -55,10 +57,17 @@ export async function generateFilledPerformaDocx(
   const refDate = options.referenceDate || new Date();
   const currentDateStr = formatDateDDMMYYYY(refDate);
 
-  // 1. Fetch template from /imei PERFORMA.docx
-  const res = await fetch("/imei PERFORMA.docx");
+  // 1. Fetch template according to performa type
+  const defaultPath = options.performaType === 2 ? "/performa2.docx" : "/performa1.docx";
+  const targetPath = options.templatePath || defaultPath;
+  let res = await fetch(targetPath);
   if (!res.ok) {
-    throw new Error("Could not load template file /imei PERFORMA.docx");
+    // Fallback to original names with spaces
+    const fallbackPath = options.performaType === 2 ? "/imei PERFORMA copy.docx" : "/imei PERFORMA.docx";
+    res = await fetch(fallbackPath);
+  }
+  if (!res.ok) {
+    throw new Error(`Could not load template file ${targetPath}`);
   }
   const arrayBuffer = await res.arrayBuffer();
 
@@ -145,6 +154,160 @@ export function downloadDocxBlob(blob: Blob, filename: string = "Performa_Docume
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+/**
+ * Trigger download of PDF Blob in browser
+ */
+export function downloadPdfBlob(blob: Blob, filename: string = "Performa_Document.pdf") {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+/**
+ * Generates an official PDF version of the Performa using jsPDF and jspdf-autotable
+ */
+export async function generateFilledPerformaPdf(
+  numbers: string[],
+  options: GeneratePerformaOptions = {}
+): Promise<Blob> {
+  const refDate = options.referenceDate || new Date();
+  const currentDateStr = formatDateDDMMYYYY(refDate);
+
+  const { jsPDF } = await import("jspdf");
+  const autoTableModule = await import("jspdf-autotable");
+  const autoTable = (autoTableModule as any).default || autoTableModule;
+
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  // Header Title
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("TECHNICAL ASSISTANCE REQUEST FORM FOR THE PROVISION DATA", pageWidth / 2, 14, { align: "center" });
+
+  doc.setFontSize(8.5);
+  doc.text("(SSP KORANGI (DIC BRANCH) E-MAIL I.D: - diclandhi1@gmail.com)", pageWidth / 2, 19, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text("Request No: ....................", 14, 25);
+  doc.text("SP Landhi District Korangi, Karachi", pageWidth - 14, 25, { align: "right" });
+
+  // Table 1: Case Reference / FIR Info
+  autoTable(doc, {
+    startY: 28,
+    margin: { left: 14, right: 14 },
+    theme: "grid",
+    head: [["FIR NO", "U/S", "DATED"]],
+    body: [["CASE REF: CASE NO 1523/2024 PS KORANGI CASE", "", currentDateStr]],
+    styles: { font: "helvetica", fontSize: 8, cellPadding: 2, textColor: [0, 0, 0] },
+    headStyles: { fillColor: [240, 240, 240], fontStyle: "bold", textColor: [0, 0, 0] },
+    columnStyles: {
+      0: { cellWidth: 100 },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 47, halign: "center", fontStyle: "bold" },
+    },
+  });
+
+  // Requirements Heading
+  const afterTbl1 = (doc as any).lastAutoTable.finalY + 4;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("REQUIREMENTS", pageWidth / 2, afterTbl1, { align: "center" });
+
+  // Format Numbers: 3 per line
+  const formattedNums = numbers.map(formatNumberWith92).filter(Boolean);
+  const lines: string[] = [];
+  for (let i = 0; i < formattedNums.length; i += 3) {
+    lines.push(formattedNums.slice(i, i + 3).join(", "));
+  }
+  const numbersText = lines.length > 0 ? lines.join("\n") : "-";
+
+  // Table 2: Requirements Table
+  autoTable(doc, {
+    startY: afterTbl1 + 2,
+    margin: { left: 14, right: 14 },
+    theme: "grid",
+    head: [["S.No", "Cell Phone Number / IMEI Number", "Required Information", "Period of Information\n(Dates)"]],
+    body: [[
+      "01",
+      numbersText,
+      "CDR, Registration Details, IMEI Search,\nNADRA record, Cell Location",
+      "FROM 30-11-2025\nTO DATE",
+    ]],
+    styles: { font: "helvetica", fontSize: 7.5, cellPadding: 2.5, textColor: [0, 0, 0], valign: "middle" },
+    headStyles: { fillColor: [240, 240, 240], fontStyle: "bold", textColor: [0, 0, 0], halign: "center" },
+    columnStyles: {
+      0: { cellWidth: 12, halign: "center", fontStyle: "bold" },
+      1: { cellWidth: 85, fontStyle: "bold" },
+      2: { cellWidth: 50, halign: "center" },
+      3: { cellWidth: 35, halign: "center" },
+    },
+  });
+
+  // Undertaking Section
+  const afterTbl2 = (doc as any).lastAutoTable.finalY + 4;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.text("UNDERTAKING", 14, afterTbl2);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  const undertakingText = "As a in charge, i am fully aware regarding the sanctity, security and integrity of the requisitioned Cellular Data and would never manipulate misuse and exploit any sort of Cellular Data for the vested interests. Further, I will remain caution & responsible for the safe handling Cellular Data and would not produce the same in any Court of Law as part of Prosecution Proceeding etc. Further, will be remain bound down myself & staff (PS) to obey all the direction and SOP, (If) issued by the worthy DIGP office & IB SPHQ.";
+  const splitUndertaking = doc.splitTextToSize(undertakingText, pageWidth - 28);
+  doc.text(splitUndertaking, 14, afterTbl2 + 4);
+
+  // Enclosed Documents Checklist
+  const afterUndertaking = afterTbl2 + 4 + (splitUndertaking.length * 3.2) + 2;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.text("Following documents must be enclosed with this Performa.", 14, afterUndertaking);
+
+  autoTable(doc, {
+    startY: afterUndertaking + 2,
+    margin: { left: 14, right: 14 },
+    theme: "grid",
+    head: [["Attached Document", "Status"]],
+    body: [
+      ["1- S.S.P Letter &", "Yes (    )  No (    )"],
+      ["2- Copy of FIR & UNDERTAKING", "Yes (    )  No (    )"],
+      ["3- Current Progress Report / Status of the Case", "Yes (    )  No (    )"],
+    ],
+    styles: { font: "helvetica", fontSize: 7, cellPadding: 1.5, textColor: [0, 0, 0] },
+    headStyles: { fillColor: [240, 240, 240], fontStyle: "bold", textColor: [0, 0, 0] },
+    columnStyles: {
+      0: { cellWidth: 130 },
+      1: { cellWidth: 52, halign: "center" },
+    },
+  });
+
+  // Office Use Box
+  const afterChecklist = (doc as any).lastAutoTable.finalY + 3;
+  autoTable(doc, {
+    startY: afterChecklist,
+    margin: { left: 14, right: 14 },
+    theme: "grid",
+    head: [["FOR OFFICE ONLY USED."]],
+    body: [
+      ["Name of Incharge: _______________       Signature / Stamp: _______________       Remarks: _______________"],
+    ],
+    styles: { font: "helvetica", fontSize: 7.5, cellPadding: 3, textColor: [0, 0, 0] },
+    headStyles: { fillColor: [230, 230, 230], fontStyle: "bold", textColor: [0, 0, 0], halign: "center" },
+  });
+
+  return doc.output("blob");
 }
 
 /**
