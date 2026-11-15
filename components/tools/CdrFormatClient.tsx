@@ -156,7 +156,7 @@ export default function CdrFormatClient() {
   const [activeViewTab, setActiveViewTab] = useState<"rendered" | "text" | "html">("rendered");
   const [copied, setCopied] = useState(false);
   const [generatingDocx, setGeneratingDocx] = useState(false);
-  const [selectedPerforma, setSelectedPerforma] = useState<{ p1: boolean; p2: boolean }>({ p1: true, p2: false });
+  const [selectedPerforma, setSelectedPerforma] = useState<{ p1: boolean; p2: boolean }>({ p1: true, p2: true });
   const [generatingPdf, setGeneratingPdf] = useState(false);
   
   // 20-Set Query List Options (CDR, LOC, OWN, IMEI)
@@ -1810,27 +1810,37 @@ export default function CdrFormatClient() {
                         Download TXT
                       </Button>
 
-                      {/* Performa Selection Checkboxes + Download Buttons */}
+                      {/* Performa Toggle + Download Buttons */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[9px] font-black uppercase text-slate-400">Performa:</span>
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedPerforma.p1}
-                            onChange={(e) => setSelectedPerforma(prev => ({ ...prev, p1: e.target.checked }))}
-                            className="w-3 h-3 rounded accent-blue-600"
-                          />
-                          <span className="text-[9px] font-bold text-slate-600">P-1</span>
-                        </label>
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedPerforma.p2}
-                            onChange={(e) => setSelectedPerforma(prev => ({ ...prev, p2: e.target.checked }))}
-                            className="w-3 h-3 rounded accent-blue-600"
-                          />
-                          <span className="text-[9px] font-bold text-slate-600">P-2</span>
-                        </label>
+
+                        {/* P-1 Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPerforma(prev => ({ ...prev, p1: !prev.p1 }))}
+                          className={`h-6 px-2.5 rounded-full text-[9px] font-black uppercase transition-all border ${
+                            selectedPerforma.p1
+                              ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                              : "bg-white text-slate-400 border-slate-200 hover:border-blue-300 hover:text-blue-400"
+                          }`}
+                          title="Toggle Performa 1"
+                        >
+                          P-1
+                        </button>
+
+                        {/* P-2 Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPerforma(prev => ({ ...prev, p2: !prev.p2 }))}
+                          className={`h-6 px-2.5 rounded-full text-[9px] font-black uppercase transition-all border ${
+                            selectedPerforma.p2
+                              ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                              : "bg-white text-slate-400 border-slate-200 hover:border-indigo-300 hover:text-indigo-400"
+                          }`}
+                          title="Toggle Performa 2"
+                        >
+                          P-2
+                        </button>
 
                         {selectedPerforma.p1 && (
                           <Button

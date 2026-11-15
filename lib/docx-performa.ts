@@ -172,8 +172,8 @@ export function downloadPdfBlob(blob: Blob, filename: string = "Performa_Documen
 
 /**
  * Generates PDF by converting the actual filled DOCX template to PDF
- * (DOCX → HTML via mammoth → html2canvas → jsPDF)
- * This ensures the PDF looks exactly like the Word performa template.
+ * (DOCX → HTML via mammoth → isolated iframe → html2canvas → jsPDF)
+ * Uses iframe so global Tailwind/app CSS does NOT bleed in — clean Word-like output.
  */
 export async function generateFilledPerformaPdf(
   numbers: string[],
@@ -186,72 +186,103 @@ export async function generateFilledPerformaPdf(
   const mammoth = await import("mammoth");
   const arrayBuffer = await docxBlob.arrayBuffer();
   const mammothResult = await mammoth.convertToHtml({ arrayBuffer });
-  const html = mammothResult.value;
+  const rawHtml = mammothResult.value;
 
-  // Step 3: Render HTML in a hidden off-screen div
-  const container = document.createElement("div");
-  container.style.cssText = [
-    "position:fixed",
-    "top:-9999px",
-    "left:-9999px",
-    "width:794px",           // A4 at 96dpi ≈ 794px
-    "padding:40px 50px",
-    "background:#ffffff",
-    "font-family:Arial,sans-serif",
-    "font-size:12px",
-    "line-height:1.5",
-    "color:#000000",
-    "box-sizing:border-box",
-  ].join(";");
+  // Step 3: Render in a fully isolated iframe (no global CSS leaks)
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText =
+    "position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px;border:none;visibility:hidden;";
+  document.body.appendChild(iframe);
 
-  // Basic table styling so mammoth tables look like Word tables
-  container.innerHTML = `
-    <style>
-      table { border-collapse: collapse; width: 100%; margin: 8px 0; }
-      td, th { border: 1px solid #000; padding: 4px 6px; font-size: 11px; }
-      th { background: #e8e8e8; font-weight: bold; }
-      p { margin: 4px 0; }
-      strong { font-weight: bold; }
-    </style>
-    ${html}
-  `;
-  document.body.appendChild(container);
+  const iframeDoc = iframe.contentDocument!;
+  iframeDoc.open();
+  iframeDoc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Times New Roman", Times, serif;
+      font-size: 12pt;
+      line-height: 1.4;
+      color: #000;
+      background: #fff;
+      width: 794px;
+      padding: 50px 60px;
+    }
+    p { margin: 4px 0; }
+    strong, b { font-weight: bold; }
+    em, i { font-style: italic; }
+    u { text-decoration: underline; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 6px 0;
+    }
+    td, th {
+      border: 1px solid #000;
+      padding: 4px 6px;
+      font-size: 11pt;
+      vertical-align: middle;
+    }
+    th {
+      background: #d9d9d9;
+      font-weight: bold;
+      text-align: center;
+    }
+    h1, h2, h3, h4 { font-weight: bold; margin: 6px 0; }
+    ul, ol { padding-left: 20px; margin: 4px 0; }
+    li { margin: 2px 0; }
+  </style></head><body>${rawHtml}</body></html>`);
+  iframeDoc.close();
 
-  // Wait one frame for layout
+  // Wait for iframe to fully render
+  await new Promise<void>((resolve) => {
+    if (iframeDoc.readyState === "complete") { resolve(); return; }
+    iframe.onload = () => resolve();
+    setTimeout(resolve, 800); // fallback
+  });
+  // Extra frame for fonts/images
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-  // Step 4: Capture to canvas via html2canvas
+  // Step 4: Capture iframe body via html2canvas
   const html2canvas = (await import("html2canvas")).default;
-  const canvas = await html2canvas(container, {
-    scale: 2,           // 2x for sharper text
+  const canvas = await html2canvas(iframeDoc.body, {
+    scale: 2,
     useCORS: true,
     backgroundColor: "#ffffff",
     logging: false,
+    windowWidth: 794,
   });
 
-  // Cleanup hidden div
-  document.body.removeChild(container);
+  // Cleanup iframe
+  document.body.removeChild(iframe);
 
-  // Step 5: Add canvas image to jsPDF page(s)
+  // Step 5: Slice canvas across A4 jsPDF pages
   const { jsPDF } = await import("jspdf");
-  const imgData = canvas.toDataURL("image/jpeg", 0.95);
-
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const pageW = pdf.internal.pageSize.getWidth();
-  const pageH = pdf.internal.pageSize.getHeight();
+  const pageW = pdf.internal.pageSize.getWidth();   // 210mm
+  const pageH = pdf.internal.pageSize.getHeight();  // 297mm
 
-  const imgW = pageW;
-  const imgH = (canvas.height * pageW) / canvas.width;
+  // Convert canvas pixels to mm
+  const pxPerMm = canvas.width / pageW;             // pixels per mm
+  const pageHeightPx = pageH * pxPerMm;             // how many px = one page
 
-  let yOffset = 0;
-  let remaining = imgH;
+  const totalPages = Math.ceil(canvas.height / pageHeightPx);
 
-  // If content spans multiple pages, slice the image across pages
-  while (remaining > 0) {
-    pdf.addImage(imgData, "JPEG", 0, -yOffset, imgW, imgH);
-    remaining -= pageH;
-    yOffset += pageH;
-    if (remaining > 0) pdf.addPage();
+  for (let page = 0; page < totalPages; page++) {
+    if (page > 0) pdf.addPage();
+
+    // Slice the canvas for this page
+    const srcY = Math.round(page * pageHeightPx);
+    const srcH = Math.min(pageHeightPx, canvas.height - srcY);
+
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = Math.round(srcH);
+    const ctx = pageCanvas.getContext("2d")!;
+    ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, Math.round(srcH));
+
+    const imgData = pageCanvas.toDataURL("image/jpeg", 0.95);
+    const imgH = (pageCanvas.height / pxPerMm);
+    pdf.addImage(imgData, "JPEG", 0, 0, pageW, imgH);
   }
 
   return pdf.output("blob");
