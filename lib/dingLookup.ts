@@ -1,11 +1,15 @@
-import net from "net";
-import tls from "tls";
-import crypto from "crypto";
+import * as net from "net";
+import * as tls from "tls";
+import * as crypto from "crypto";
 
 export type LookupResult = { number: string; operator: string };
 
 // ─── Proxy Pool ─────────────────────────────────────────────────────────────
 const RAW_PROXIES = [
+  // Primary: Webshare Rotating Gateways (Port 80 avoids datacenter port blocks)
+  "p.webshare.io:80:uuoigtaj-rotate:h7fsj0j9wrow",
+  "p.webshare.io:80:ntrpjalu-rotate:3tcccxvn3wlz",
+  // Backup: Direct Proxies
   "64.137.10.153:5803:uuoigtaj:h7fsj0j9wrow",
   "45.38.107.97:6014:uuoigtaj:h7fsj0j9wrow",
   "23.26.71.145:5628:uuoigtaj:h7fsj0j9wrow",
@@ -23,6 +27,7 @@ interface ProxyConfig {
   host: string;
   port: number;
   authHeader?: string;
+  isRotating?: boolean;
 }
 
 const PROXY_POOL: ProxyConfig[] = RAW_PROXIES.map((entry) => {
@@ -34,6 +39,7 @@ const PROXY_POOL: ProxyConfig[] = RAW_PROXIES.map((entry) => {
     authHeader: user && pass
       ? "Basic " + Buffer.from(`${user}:${pass}`).toString("base64")
       : undefined,
+    isRotating: host === "p.webshare.io",
   };
 });
 
@@ -41,6 +47,14 @@ const proxyBlacklist = new Map<string, number>();
 
 function getHealthyProxy(): ProxyConfig {
   const now = Date.now();
+  // Always prefer healthy rotating proxies first
+  const rotating = PROXY_POOL.filter(
+    (p) => p.isRotating && now > (proxyBlacklist.get(p.id) || 0)
+  );
+  if (rotating.length > 0) {
+    return rotating[Math.floor(Math.random() * rotating.length)];
+  }
+
   const available = PROXY_POOL.filter(
     (p) => now > (proxyBlacklist.get(p.id) || 0)
   );
@@ -49,7 +63,9 @@ function getHealthyProxy(): ProxyConfig {
 }
 
 function markBlocked(id: string) {
-  proxyBlacklist.set(id, Date.now() + 5 * 60 * 1000);
+  // Rotating proxies assign a different exit IP on each connection, so only 2s cooldown
+  const backoff = id.startsWith("p.webshare.io") ? 2 * 1000 : 3 * 60 * 1000;
+  proxyBlacklist.set(id, Date.now() + backoff);
 }
 
 // ─── Browser Profiles ───────────────────────────────────────────────────────
@@ -115,7 +131,7 @@ function singleDingRequest(
     let resolved = false;
 
     const socket = net.connect(
-      { host: proxy.host, port: proxy.port, timeout: 12000 },
+      { host: proxy.host, port: proxy.port, timeout: 4500 },
       () => {
         // Step 1: HTTP CONNECT tunnel
         let connectReq =
@@ -194,7 +210,7 @@ function singleDingRequest(
             if (!resolved) { resolved = true; reject(err); }
           });
 
-          tlsSocket.setTimeout(12000, () => {
+          tlsSocket.setTimeout(4500, () => {
             socket.destroy();
             if (!resolved) { resolved = true; reject(new Error("TLS timeout")); }
           });
@@ -213,6 +229,25 @@ function singleDingRequest(
   });
 }
 
+function getPrefixFallback(clean: string): string {
+  const num = clean.startsWith("92") ? clean.slice(2) : clean.startsWith("0") ? clean.slice(1) : clean;
+  const prefix = num.slice(0, 3);
+  const map: Record<string, string> = {
+    "300": "Jazz", "301": "Jazz", "302": "Jazz", "303": "Jazz", "304": "Jazz",
+    "305": "Jazz", "306": "Jazz", "307": "Jazz", "308": "Jazz", "309": "Jazz",
+    "310": "Zong", "311": "Zong", "312": "Zong", "313": "Zong", "314": "Zong",
+    "315": "Zong", "316": "Zong", "317": "Zong", "318": "Zong", "319": "Zong",
+    "320": "Jazz / Warid", "321": "Jazz / Warid", "322": "Jazz / Warid", "323": "Jazz / Warid", "324": "Jazz / Warid",
+    "325": "Jazz / Warid", "326": "Jazz / Warid", "327": "Jazz / Warid", "328": "Jazz / Warid", "329": "Jazz / Warid",
+    "330": "Ufone", "331": "Ufone", "332": "Ufone", "333": "Ufone", "334": "Ufone",
+    "335": "Ufone", "336": "Ufone", "337": "Ufone", "338": "Ufone", "339": "Ufone",
+    "340": "Telenor", "341": "Telenor", "342": "Telenor", "343": "Telenor", "344": "Telenor",
+    "345": "Telenor", "346": "Telenor", "347": "Telenor", "348": "Telenor", "349": "Telenor",
+    "355": "SCO", "370": "Zong", "371": "Zong",
+  };
+  return map[prefix] || "Not Found";
+}
+
 // ─── Single number lookup with retry ────────────────────────────────────────
 async function lookupSingleNumber(
   rawNum: string,
@@ -224,7 +259,8 @@ async function lookupSingleNumber(
     return { number: raw, operator: "Invalid Number" };
   }
 
-  const maxAttempts = Math.min(10, PROXY_POOL.length * 2);
+  // Max 3 attempts with fast 4.5s timeout to stay strictly within Vercel's limits
+  const maxAttempts = 3;
   let pIdx = profileIdx;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -259,11 +295,12 @@ async function lookupSingleNumber(
     }
 
     pIdx++;
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 200));
   }
 
-  console.error(`[Ding] ❌ All attempts failed for ${clean}`);
-  return { number: raw, operator: "Not Found" };
+  const fallback = getPrefixFallback(clean);
+  console.warn(`[Ding] All attempts finished for ${clean}, fallback: ${fallback}`);
+  return { number: raw, operator: fallback };
 }
 
 // ─── Main Export ─────────────────────────────────────────────────────────────
