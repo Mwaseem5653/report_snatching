@@ -45,27 +45,26 @@ const PROXY_POOL: ProxyConfig[] = RAW_PROXIES.map((entry) => {
 
 const proxyBlacklist = new Map<string, number>();
 
+let proxyIndex = 0;
+
 function getHealthyProxy(): ProxyConfig {
   const now = Date.now();
-  // Always prefer healthy rotating proxies first
-  const rotating = PROXY_POOL.filter(
-    (p) => p.isRotating && now > (proxyBlacklist.get(p.id) || 0)
-  );
-  if (rotating.length > 0) {
-    return rotating[Math.floor(Math.random() * rotating.length)];
-  }
-
   const available = PROXY_POOL.filter(
     (p) => now > (proxyBlacklist.get(p.id) || 0)
   );
-  const pool = available.length > 0 ? available : PROXY_POOL;
-  return pool[Math.floor(Math.random() * pool.length)];
+
+  // Prefer clean direct proxies first
+  const direct = available.filter((p) => !p.isRotating);
+  const pool = direct.length > 0 ? direct : (available.length > 0 ? available : PROXY_POOL);
+
+  // Round-robin distribution so proxies are evenly distributed without hitting the same IP repeatedly
+  proxyIndex = (proxyIndex + 1) % pool.length;
+  return pool[proxyIndex];
 }
 
 function markBlocked(id: string) {
-  // Rotating proxies assign a different exit IP on each connection, so only 2s cooldown
-  const backoff = id.startsWith("p.webshare.io") ? 2 * 1000 : 3 * 60 * 1000;
-  proxyBlacklist.set(id, Date.now() + backoff);
+  // 3 minutes blacklist so failed proxies are skipped on retries
+  proxyBlacklist.set(id, Date.now() + 3 * 60 * 1000);
 }
 
 // ─── Browser Profiles ───────────────────────────────────────────────────────
