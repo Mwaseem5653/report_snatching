@@ -171,143 +171,90 @@ export function downloadPdfBlob(blob: Blob, filename: string = "Performa_Documen
 }
 
 /**
- * Generates an official PDF version of the Performa using jsPDF and jspdf-autotable
+ * Generates PDF by converting the actual filled DOCX template to PDF
+ * (DOCX → HTML via mammoth → html2canvas → jsPDF)
+ * This ensures the PDF looks exactly like the Word performa template.
  */
 export async function generateFilledPerformaPdf(
   numbers: string[],
   options: GeneratePerformaOptions = {}
 ): Promise<Blob> {
-  const refDate = options.referenceDate || new Date();
-  const currentDateStr = formatDateDDMMYYYY(refDate);
+  // Step 1: Generate the filled DOCX blob (same as Word download)
+  const docxBlob = await generateFilledPerformaDocx(numbers, options);
 
+  // Step 2: Convert DOCX → HTML using mammoth
+  const mammoth = await import("mammoth");
+  const arrayBuffer = await docxBlob.arrayBuffer();
+  const mammothResult = await mammoth.convertToHtml({ arrayBuffer });
+  const html = mammothResult.value;
+
+  // Step 3: Render HTML in a hidden off-screen div
+  const container = document.createElement("div");
+  container.style.cssText = [
+    "position:fixed",
+    "top:-9999px",
+    "left:-9999px",
+    "width:794px",           // A4 at 96dpi ≈ 794px
+    "padding:40px 50px",
+    "background:#ffffff",
+    "font-family:Arial,sans-serif",
+    "font-size:12px",
+    "line-height:1.5",
+    "color:#000000",
+    "box-sizing:border-box",
+  ].join(";");
+
+  // Basic table styling so mammoth tables look like Word tables
+  container.innerHTML = `
+    <style>
+      table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+      td, th { border: 1px solid #000; padding: 4px 6px; font-size: 11px; }
+      th { background: #e8e8e8; font-weight: bold; }
+      p { margin: 4px 0; }
+      strong { font-weight: bold; }
+    </style>
+    ${html}
+  `;
+  document.body.appendChild(container);
+
+  // Wait one frame for layout
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  // Step 4: Capture to canvas via html2canvas
+  const html2canvas = (await import("html2canvas")).default;
+  const canvas = await html2canvas(container, {
+    scale: 2,           // 2x for sharper text
+    useCORS: true,
+    backgroundColor: "#ffffff",
+    logging: false,
+  });
+
+  // Cleanup hidden div
+  document.body.removeChild(container);
+
+  // Step 5: Add canvas image to jsPDF page(s)
   const { jsPDF } = await import("jspdf");
-  const autoTableModule = await import("jspdf-autotable");
-  const autoTable = (autoTableModule as any).default || autoTableModule;
+  const imgData = canvas.toDataURL("image/jpeg", 0.95);
 
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
-  });
+  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
 
-  const pageWidth = doc.internal.pageSize.getWidth();
+  const imgW = pageW;
+  const imgH = (canvas.height * pageW) / canvas.width;
 
-  // Header Title
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("TECHNICAL ASSISTANCE REQUEST FORM FOR THE PROVISION DATA", pageWidth / 2, 14, { align: "center" });
+  let yOffset = 0;
+  let remaining = imgH;
 
-  doc.setFontSize(8.5);
-  doc.text("(SSP KORANGI (DIC BRANCH) E-MAIL I.D: - diclandhi1@gmail.com)", pageWidth / 2, 19, { align: "center" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text("Request No: ....................", 14, 25);
-  doc.text("SP Landhi District Korangi, Karachi", pageWidth - 14, 25, { align: "right" });
-
-  // Table 1: Case Reference / FIR Info
-  autoTable(doc, {
-    startY: 28,
-    margin: { left: 14, right: 14 },
-    theme: "grid",
-    head: [["FIR NO", "U/S", "DATED"]],
-    body: [["CASE REF: CASE NO 1523/2024 PS KORANGI CASE", "", currentDateStr]],
-    styles: { font: "helvetica", fontSize: 8, cellPadding: 2, textColor: [0, 0, 0] },
-    headStyles: { fillColor: [240, 240, 240], fontStyle: "bold", textColor: [0, 0, 0] },
-    columnStyles: {
-      0: { cellWidth: 100 },
-      1: { cellWidth: 35 },
-      2: { cellWidth: 47, halign: "center", fontStyle: "bold" },
-    },
-  });
-
-  // Requirements Heading
-  const afterTbl1 = (doc as any).lastAutoTable.finalY + 4;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text("REQUIREMENTS", pageWidth / 2, afterTbl1, { align: "center" });
-
-  // Format Numbers: 3 per line
-  const formattedNums = numbers.map(formatNumberWith92).filter(Boolean);
-  const lines: string[] = [];
-  for (let i = 0; i < formattedNums.length; i += 3) {
-    lines.push(formattedNums.slice(i, i + 3).join(", "));
+  // If content spans multiple pages, slice the image across pages
+  while (remaining > 0) {
+    pdf.addImage(imgData, "JPEG", 0, -yOffset, imgW, imgH);
+    remaining -= pageH;
+    yOffset += pageH;
+    if (remaining > 0) pdf.addPage();
   }
-  const numbersText = lines.length > 0 ? lines.join("\n") : "-";
 
-  // Table 2: Requirements Table
-  autoTable(doc, {
-    startY: afterTbl1 + 2,
-    margin: { left: 14, right: 14 },
-    theme: "grid",
-    head: [["S.No", "Cell Phone Number / IMEI Number", "Required Information", "Period of Information\n(Dates)"]],
-    body: [[
-      "01",
-      numbersText,
-      "CDR, Registration Details, IMEI Search,\nNADRA record, Cell Location",
-      "FROM 30-11-2025\nTO DATE",
-    ]],
-    styles: { font: "helvetica", fontSize: 7.5, cellPadding: 2.5, textColor: [0, 0, 0], valign: "middle" },
-    headStyles: { fillColor: [240, 240, 240], fontStyle: "bold", textColor: [0, 0, 0], halign: "center" },
-    columnStyles: {
-      0: { cellWidth: 12, halign: "center", fontStyle: "bold" },
-      1: { cellWidth: 85, fontStyle: "bold" },
-      2: { cellWidth: 50, halign: "center" },
-      3: { cellWidth: 35, halign: "center" },
-    },
-  });
-
-  // Undertaking Section
-  const afterTbl2 = (doc as any).lastAutoTable.finalY + 4;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("UNDERTAKING", 14, afterTbl2);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  const undertakingText = "As a in charge, i am fully aware regarding the sanctity, security and integrity of the requisitioned Cellular Data and would never manipulate misuse and exploit any sort of Cellular Data for the vested interests. Further, I will remain caution & responsible for the safe handling Cellular Data and would not produce the same in any Court of Law as part of Prosecution Proceeding etc. Further, will be remain bound down myself & staff (PS) to obey all the direction and SOP, (If) issued by the worthy DIGP office & IB SPHQ.";
-  const splitUndertaking = doc.splitTextToSize(undertakingText, pageWidth - 28);
-  doc.text(splitUndertaking, 14, afterTbl2 + 4);
-
-  // Enclosed Documents Checklist
-  const afterUndertaking = afterTbl2 + 4 + (splitUndertaking.length * 3.2) + 2;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.text("Following documents must be enclosed with this Performa.", 14, afterUndertaking);
-
-  autoTable(doc, {
-    startY: afterUndertaking + 2,
-    margin: { left: 14, right: 14 },
-    theme: "grid",
-    head: [["Attached Document", "Status"]],
-    body: [
-      ["1- S.S.P Letter &", "Yes (    )  No (    )"],
-      ["2- Copy of FIR & UNDERTAKING", "Yes (    )  No (    )"],
-      ["3- Current Progress Report / Status of the Case", "Yes (    )  No (    )"],
-    ],
-    styles: { font: "helvetica", fontSize: 7, cellPadding: 1.5, textColor: [0, 0, 0] },
-    headStyles: { fillColor: [240, 240, 240], fontStyle: "bold", textColor: [0, 0, 0] },
-    columnStyles: {
-      0: { cellWidth: 130 },
-      1: { cellWidth: 52, halign: "center" },
-    },
-  });
-
-  // Office Use Box
-  const afterChecklist = (doc as any).lastAutoTable.finalY + 3;
-  autoTable(doc, {
-    startY: afterChecklist,
-    margin: { left: 14, right: 14 },
-    theme: "grid",
-    head: [["FOR OFFICE ONLY USED."]],
-    body: [
-      ["Name of Incharge: _______________       Signature / Stamp: _______________       Remarks: _______________"],
-    ],
-    styles: { font: "helvetica", fontSize: 7.5, cellPadding: 3, textColor: [0, 0, 0] },
-    headStyles: { fillColor: [230, 230, 230], fontStyle: "bold", textColor: [0, 0, 0], halign: "center" },
-  });
-
-  return doc.output("blob");
+  return pdf.output("blob");
 }
 
 /**
