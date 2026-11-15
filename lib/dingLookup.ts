@@ -1,9 +1,10 @@
+import net from "net";
+import tls from "tls";
 import crypto from "crypto";
-import { HttpsProxyAgent } from "https-proxy-agent";
 
 export type LookupResult = { number: string; operator: string };
 
-// ─── Proxy Pool ────────────────────────────────────────────────────────────
+// ─── Proxy Pool ─────────────────────────────────────────────────────────────
 const RAW_PROXIES = [
   "64.137.10.153:5803:uuoigtaj:h7fsj0j9wrow",
   "45.38.107.97:6014:uuoigtaj:h7fsj0j9wrow",
@@ -17,166 +18,202 @@ const RAW_PROXIES = [
   "198.23.243.226:6361:ntrpjalu:3tcccxvn3wlz",
 ];
 
-// Build proxy URLs: http://user:pass@host:port
-const PROXY_URLS: string[] = RAW_PROXIES.map((entry) => {
-  const parts = entry.split(":");
-  const host = parts[0];
-  const port = parts[1];
-  const user = parts[2];
-  const pass = parts[3];
-  if (user && pass) {
-    return `http://${user}:${pass}@${host}:${port}`;
-  }
-  return `http://${host}:${port}`;
+interface ProxyConfig {
+  id: string;
+  host: string;
+  port: number;
+  authHeader?: string;
+}
+
+const PROXY_POOL: ProxyConfig[] = RAW_PROXIES.map((entry) => {
+  const [host, port, user, pass] = entry.split(":");
+  return {
+    id: `${host}:${port}`,
+    host,
+    port: parseInt(port, 10),
+    authHeader: user && pass
+      ? "Basic " + Buffer.from(`${user}:${pass}`).toString("base64")
+      : undefined,
+  };
 });
 
-// Blacklist: proxy URL → unblock timestamp
 const proxyBlacklist = new Map<string, number>();
 
-function getHealthyProxy(): string {
+function getHealthyProxy(): ProxyConfig {
   const now = Date.now();
-  const available = PROXY_URLS.filter((p) => {
-    const blockedUntil = proxyBlacklist.get(p) || 0;
-    return now > blockedUntil;
-  });
-  const pool = available.length > 0 ? available : PROXY_URLS;
+  const available = PROXY_POOL.filter(
+    (p) => now > (proxyBlacklist.get(p.id) || 0)
+  );
+  const pool = available.length > 0 ? available : PROXY_POOL;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-function markBlocked(proxyUrl: string) {
-  // 5 minute cooldown
-  proxyBlacklist.set(proxyUrl, Date.now() + 5 * 60 * 1000);
+function markBlocked(id: string) {
+  proxyBlacklist.set(id, Date.now() + 5 * 60 * 1000);
 }
 
-// ─── Browser Profiles ──────────────────────────────────────────────────────
-const BROWSER_PROFILES = [
-  {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.5",
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-site",
-  },
-  {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-site",
-  },
-  {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:134.0) Gecko/20100101 Firefox/134.0",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.5",
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-site",
-  },
-  {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.5",
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-site",
-  },
-  {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.5",
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-site",
-  },
+// ─── Browser Profiles ───────────────────────────────────────────────────────
+const BROWSER_PROFILES: { headers: Record<string, string> }[] = [
+  { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0", "Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.5" } },
+  { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0", "Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.9" } },
+  { headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:134.0) Gecko/20100101 Firefox/134.0", "Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.5" } },
+  { headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0", "Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.5" } },
+  { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0", "Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.5" } },
 ];
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
+// ─── Decode HTTP/1.1 chunked transfer encoding ──────────────────────────────
+function decodeChunked(raw: string): string {
+  if (!/^[0-9a-fA-F]+\r\n/.test(raw.trim())) return raw;
+  let result = "";
+  let pos = 0;
+  while (pos < raw.length) {
+    const lineEnd = raw.indexOf("\r\n", pos);
+    if (lineEnd === -1) break;
+    const chunkSize = parseInt(raw.slice(pos, lineEnd).split(";")[0].trim(), 16);
+    if (isNaN(chunkSize) || chunkSize === 0) break;
+    pos = lineEnd + 2;
+    result += raw.slice(pos, pos + chunkSize);
+    pos += chunkSize + 2;
+  }
+  return result || raw;
+}
+
+function extractJson(raw: string): string {
+  const decoded = decodeChunked(raw);
+  const s = decoded.indexOf("{");
+  const e = decoded.lastIndexOf("}");
+  if (s !== -1 && e > s) return decoded.slice(s, e + 1);
+  const s2 = raw.indexOf("{");
+  const e2 = raw.lastIndexOf("}");
+  if (s2 !== -1 && e2 > s2) return raw.slice(s2, e2 + 1);
+  return raw;
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 function normalizePakNumber(num: string) {
   const raw = String(num).trim();
   let clean = raw.replace(/\D/g, "");
-  if (clean.startsWith("0092")) {
-    clean = clean.slice(2);
-  } else if (clean.startsWith("0") && clean.length >= 11) {
-    clean = "92" + clean.slice(1);
-  } else if (clean.length === 10 && clean.startsWith("3")) {
-    clean = "92" + clean;
-  }
+  if (clean.startsWith("0092")) clean = clean.slice(2);
+  else if (clean.startsWith("0") && clean.length >= 11) clean = "92" + clean.slice(1);
+  else if (clean.length === 10 && clean.startsWith("3")) clean = "92" + clean;
   return { raw, clean };
 }
 
 function formatOperatorName(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.toLowerCase() === "mobilink") return "Jazz";
-  return trimmed;
+  const t = name.trim();
+  return t.toLowerCase() === "mobilink" ? "Jazz" : t;
 }
 
-// ─── Single Ding Request via fetch + HttpsProxyAgent ──────────────────────
-async function singleDingFetch(
+// ─── Raw TCP → TLS tunnel (NO ALPN = no Cloudflare 403) ────────────────────
+// IMPORTANT: Do NOT set ALPNProtocols — Cloudflare blocks if ALPN is present
+function singleDingRequest(
   cleanNum: string,
-  profile: Record<string, string>,
-  proxyUrl: string
-): Promise<{ status: number; operators: string[] }> {
-  const agent = new HttpsProxyAgent(proxyUrl);
+  profile: { headers: Record<string, string> },
+  proxy: ProxyConfig
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    let resolved = false;
 
-  const payload = JSON.stringify({
-    phoneNumber: cleanNum,
-    selectedCountryIso: "PK",
-    uniqueId: crypto.randomUUID(),
-  });
+    const socket = net.connect(
+      { host: proxy.host, port: proxy.port, timeout: 12000 },
+      () => {
+        // Step 1: HTTP CONNECT tunnel
+        let connectReq =
+          `CONNECT api-v2.www.ding.com:443 HTTP/1.1\r\n` +
+          `Host: api-v2.www.ding.com:443\r\n`;
+        if (proxy.authHeader) {
+          connectReq += `Proxy-Authorization: ${proxy.authHeader}\r\n`;
+        }
+        connectReq += `Proxy-Connection: keep-alive\r\n\r\n`;
+        socket.write(connectReq);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12000);
+        socket.once("data", (d) => {
+          const connectResp = d.toString();
+          if (!connectResp.includes("200")) {
+            socket.destroy();
+            if (!resolved) {
+              resolved = true;
+              reject(new Error("Proxy CONNECT failed: " + connectResp.split("\r\n")[0]));
+            }
+            return;
+          }
 
-  try {
-    const res = await fetch("https://api-v2.www.ding.com/api/operatorlookup", {
-      method: "POST",
-      // @ts-ignore — Node fetch accepts agent
-      agent,
-      signal: controller.signal,
-      headers: {
-        ...profile,
-        "Origin": "https://www.ding.com",
-        "Referer": "https://www.ding.com/topup",
-        "Content-Type": "application/json",
-        "Accept-Encoding": "identity",
-      },
-      body: payload,
+          // Step 2: TLS — NO ALPNProtocols (critical: avoids Cloudflare 403)
+          const tlsSocket = tls.connect(
+            {
+              socket,
+              servername: "api-v2.www.ding.com",
+              rejectUnauthorized: false,
+              // ⚠️ Do NOT add ALPNProtocols here — causes CF 403
+            },
+            () => {
+              // Step 3: HTTP/1.1 POST
+              const payload = JSON.stringify({
+                phoneNumber: cleanNum,
+                selectedCountryIso: "PK",
+                uniqueId: crypto.randomUUID(),
+              });
+
+              const req = [
+                "POST /api/operatorlookup HTTP/1.1",
+                "Host: api-v2.www.ding.com",
+                `User-Agent: ${profile.headers["User-Agent"] || "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0"}`,
+                `Accept: ${profile.headers["Accept"] || "application/json, text/plain, */*"}`,
+                `Accept-Language: ${profile.headers["Accept-Language"] || "en-US,en;q=0.5"}`,
+                "Accept-Encoding: identity",
+                "Origin: https://www.ding.com",
+                "Referer: https://www.ding.com/topup",
+                "Content-Type: application/json",
+                `Content-Length: ${Buffer.byteLength(payload)}`,
+                "Connection: close",
+                "",
+                payload,
+              ].join("\r\n");
+
+              tlsSocket.write(req);
+            }
+          );
+
+          const chunks: Buffer[] = [];
+          tlsSocket.on("data", (c) => chunks.push(c));
+          tlsSocket.on("end", () => {
+            if (!resolved) {
+              resolved = true;
+              const raw = Buffer.concat(chunks).toString("utf8");
+              const firstLine = raw.split("\r\n")[0] || "";
+              const statusMatch = firstLine.match(/HTTP\/\S+\s+(\d+)/);
+              const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+              const body = raw.split("\r\n\r\n").slice(1).join("\r\n\r\n");
+              console.log(`[Ding] proxy=${proxy.id} status=${status} bodyLen=${body.length}`);
+              resolve({ status, body });
+            }
+          });
+
+          tlsSocket.on("error", (err) => {
+            socket.destroy();
+            if (!resolved) { resolved = true; reject(err); }
+          });
+
+          tlsSocket.setTimeout(12000, () => {
+            socket.destroy();
+            if (!resolved) { resolved = true; reject(new Error("TLS timeout")); }
+          });
+        });
+      }
+    );
+
+    socket.on("timeout", () => {
+      socket.destroy();
+      if (!resolved) { resolved = true; reject(new Error("TCP timeout")); }
     });
 
-    clearTimeout(timer);
-
-    const text = await res.text();
-
-    if (res.status === 403 || res.status === 429) {
-      return { status: res.status, operators: [] };
-    }
-
-    if (res.status === 200) {
-      try {
-        // Find JSON object in response (may have extra chars)
-        const start = text.indexOf("{");
-        const end = text.lastIndexOf("}");
-        const jsonStr = start !== -1 && end > start ? text.slice(start, end + 1) : text;
-        const parsed = JSON.parse(jsonStr);
-        const ops: string[] = (parsed?.operators || [])
-          .filter((o: any) => o?.name)
-          .map((o: any) => formatOperatorName(o.name));
-        return { status: 200, operators: ops };
-      } catch {
-        return { status: 200, operators: [] };
-      }
-    }
-
-    return { status: res.status, operators: [] };
-  } catch (err: any) {
-    clearTimeout(timer);
-    throw err;
-  }
+    socket.on("error", (err) => {
+      if (!resolved) { resolved = true; reject(err); }
+    });
+  });
 }
 
-// ─── Lookup single number with retry across proxies ───────────────────────
+// ─── Single number lookup with retry ────────────────────────────────────────
 async function lookupSingleNumber(
   rawNum: string,
   profileIdx: number
@@ -187,34 +224,49 @@ async function lookupSingleNumber(
     return { number: raw, operator: "Invalid Number" };
   }
 
-  const maxAttempts = Math.min(10, PROXY_URLS.length * 2);
+  const maxAttempts = Math.min(10, PROXY_POOL.length * 2);
   let pIdx = profileIdx;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const proxyUrl = getHealthyProxy();
+    const proxy = getHealthyProxy();
     const profile = BROWSER_PROFILES[pIdx % BROWSER_PROFILES.length];
 
     try {
-      const result = await singleDingFetch(clean, profile, proxyUrl);
+      const { status, body } = await singleDingRequest(clean, profile, proxy);
 
-      if (result.status === 200 && result.operators.length > 0) {
-        return { number: raw, operator: result.operators[0] };
+      if (status === 200) {
+        try {
+          const parsed = JSON.parse(extractJson(body));
+          const ops = parsed?.operators || [];
+          if (ops.length > 0 && ops[0]?.name) {
+            const op = formatOperatorName(ops[0].name);
+            console.log(`[Ding] ✅ ${clean} → ${op}`);
+            return { number: raw, operator: op };
+          }
+          console.warn(`[Ding] 200 but no operators: ${body.slice(0, 300)}`);
+        } catch {
+          console.warn(`[Ding] JSON parse fail: ${body.slice(0, 300)}`);
+        }
+      } else if (status === 403 || status === 429) {
+        console.warn(`[Ding] Proxy blocked (${status}): ${proxy.id}`);
+        markBlocked(proxy.id);
+      } else {
+        console.warn(`[Ding] Unexpected status ${status} for ${clean}`);
       }
-
-      if (result.status === 403 || result.status === 429) {
-        markBlocked(proxyUrl);
-      }
-    } catch {
-      markBlocked(proxyUrl);
+    } catch (err: any) {
+      console.error(`[Ding] Error attempt ${attempt + 1} proxy=${proxy.id}: ${err.message}`);
+      markBlocked(proxy.id);
     }
 
     pIdx++;
+    await new Promise((r) => setTimeout(r, 300));
   }
 
+  console.error(`[Ding] ❌ All attempts failed for ${clean}`);
   return { number: raw, operator: "Not Found" };
 }
 
-// ─── Main Export ───────────────────────────────────────────────────────────
+// ─── Main Export ─────────────────────────────────────────────────────────────
 export async function runDingLookup(numbers: string[]): Promise<LookupResult[]> {
   const results: LookupResult[] = new Array(numbers.length);
   const CONCURRENCY = 3;
@@ -222,21 +274,13 @@ export async function runDingLookup(numbers: string[]): Promise<LookupResult[]> 
 
   for (let i = 0; i < numbers.length; i += CONCURRENCY) {
     const chunk = numbers.slice(i, i + CONCURRENCY);
-    const promises = chunk.map((num, idx) => {
-      const pIdx = (currentProfileIdx + idx) % BROWSER_PROFILES.length;
-      return lookupSingleNumber(num, pIdx);
-    });
-
+    const promises = chunk.map((num, idx) =>
+      lookupSingleNumber(num, (currentProfileIdx + idx) % BROWSER_PROFILES.length)
+    );
     const chunkResults = await Promise.all(promises);
-    for (let j = 0; j < chunkResults.length; j++) {
-      results[i + j] = chunkResults[j];
-    }
-
+    for (let j = 0; j < chunkResults.length; j++) results[i + j] = chunkResults[j];
     currentProfileIdx = (currentProfileIdx + CONCURRENCY) % BROWSER_PROFILES.length;
-
-    if (i + CONCURRENCY < numbers.length) {
-      await new Promise((r) => setTimeout(r, 100));
-    }
+    if (i + CONCURRENCY < numbers.length) await new Promise((r) => setTimeout(r, 100));
   }
 
   return results;
