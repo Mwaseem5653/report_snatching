@@ -67,7 +67,7 @@ function singleDingRequest(
   return new Promise((resolve, reject) => {
     let resolved = false;
 
-    const socket = net.connect({ host: proxy.host, port: proxy.port, timeout: 5000 }, () => {
+    const socket = net.connect({ host: proxy.host, port: proxy.port, timeout: 10000 }, () => {
       let connectReq =
         `CONNECT api-v2.www.ding.com:443 HTTP/1.1\r\n` +
         `Host: api-v2.www.ding.com:443\r\n`;
@@ -109,6 +109,7 @@ function singleDingRequest(
               `User-Agent: ${profile.headers["User-Agent"] || "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0"}`,
               `Accept: ${profile.headers["Accept"] || "application/json, text/plain, */*"}`,
               `Accept-Language: ${profile.headers["Accept-Language"] || "en-US,en;q=0.5"}`,
+              "Accept-Encoding: identity",
               "Origin: https://www.ding.com",
               "Referer: https://www.ding.com/topup",
               "Content-Type: application/json",
@@ -140,6 +141,14 @@ function singleDingRequest(
           if (!resolved) {
             resolved = true;
             reject(err);
+          }
+        });
+
+        tlsSocket.setTimeout(10000, () => {
+          socket.destroy();
+          if (!resolved) {
+            resolved = true;
+            reject(new Error("TLS socket timeout"));
           }
         });
       });
@@ -244,11 +253,39 @@ function formatOperatorName(name: string): string {
   return trimmed;
 }
 
+// Decode HTTP/1.1 chunked transfer encoding
+function decodeChunked(raw: string): string {
+  // If not chunked, return as-is
+  if (!/^[0-9a-fA-F]+\r\n/.test(raw.trim())) return raw;
+
+  let result = "";
+  let pos = 0;
+  while (pos < raw.length) {
+    const lineEnd = raw.indexOf("\r\n", pos);
+    if (lineEnd === -1) break;
+    const sizeLine = raw.slice(pos, lineEnd).split(";")[0].trim(); // strip chunk extensions
+    const chunkSize = parseInt(sizeLine, 16);
+    if (isNaN(chunkSize) || chunkSize === 0) break;
+    pos = lineEnd + 2;
+    result += raw.slice(pos, pos + chunkSize);
+    pos += chunkSize + 2; // skip trailing \r\n
+  }
+  return result || raw;
+}
+
 function extractJsonString(raw: string): string {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
+  // Try to decode chunked first
+  const decoded = decodeChunked(raw);
+  const start = decoded.indexOf("{");
+  const end = decoded.lastIndexOf("}");
   if (start !== -1 && end !== -1 && end > start) {
-    return raw.slice(start, end + 1);
+    return decoded.slice(start, end + 1);
+  }
+  // Fallback: try raw
+  const start2 = raw.indexOf("{");
+  const end2 = raw.lastIndexOf("}");
+  if (start2 !== -1 && end2 !== -1 && end2 > start2) {
+    return raw.slice(start2, end2 + 1);
   }
   return raw;
 }
