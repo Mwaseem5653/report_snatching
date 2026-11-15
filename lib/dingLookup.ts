@@ -5,24 +5,27 @@ import crypto from "crypto";
 
 export type LookupResult = { number: string; operator: string };
 
-// ─── Direct Proxy Pool ────────────────────────────────────────────────
+// ─── Direct Proxy Pool (Clean Verified Proxies Only) ─────────────────
 interface ProxyConfig {
+  id: string;
   host: string;
   port: number;
   authHeader?: string;
 }
 
+// Only proxies verified responding 200 OK without Cloudflare blocks
+// Last verified: 2026-11-15 — ALPNProtocols must NOT be set (causes 403)
 const RAW_PROXIES = [
   "64.137.10.153:5803:uuoigtaj:h7fsj0j9wrow",
   "45.38.107.97:6014:uuoigtaj:h7fsj0j9wrow",
-  "104.164.49.38:7693:uuoigtaj:h7fsj0j9wrow",
   "23.26.71.145:5628:uuoigtaj:h7fsj0j9wrow",
-  "84.247.60.125:6095:uuoigtaj:h7fsj0j9wrow",
   "191.96.254.138:6185:uuoigtaj:h7fsj0j9wrow",
-  "198.46.161.42:5092:uuoigtaj:h7fsj0j9wrow",
-  "64.137.96.74:6641:uuoigtaj:h7fsj0j9wrow",
   "198.23.243.226:6361:uuoigtaj:h7fsj0j9wrow",
-  "38.154.185.97:6370:uuoigtaj:h7fsj0j9wrow",
+  "64.137.10.153:5803:ntrpjalu:3tcccxvn3wlz",
+  "45.38.107.97:6014:ntrpjalu:3tcccxvn3wlz",
+  "23.26.71.145:5628:ntrpjalu:3tcccxvn3wlz",
+  "191.96.254.138:6185:ntrpjalu:3tcccxvn3wlz",
+  "198.23.243.226:6361:ntrpjalu:3tcccxvn3wlz",
 ];
 
 const PROXY_POOL: ProxyConfig[] = RAW_PROXIES.map((entry) => {
@@ -33,15 +36,27 @@ const PROXY_POOL: ProxyConfig[] = RAW_PROXIES.map((entry) => {
     parts[2] && parts[3]
       ? "Basic " + Buffer.from(`${parts[2]}:${parts[3]}`).toString("base64")
       : undefined;
-  return { host, port, authHeader };
+  return { id: `${host}:${port}`, host, port, authHeader };
 });
 
-let globalProxyIdx = 0;
+// Dynamic blacklisting for proxies that get temporarily rate-limited / blocked by Cloudflare (5 min cooldown)
+const proxyBlacklist = new Map<string, number>();
 
-function getNextProxy(): ProxyConfig {
-  const proxy = PROXY_POOL[globalProxyIdx % PROXY_POOL.length];
-  globalProxyIdx = (globalProxyIdx + 1) % PROXY_POOL.length;
+function getNextHealthyProxy(): ProxyConfig {
+  const now = Date.now();
+  const available = PROXY_POOL.filter(p => {
+    const blockedUntil = proxyBlacklist.get(p.id) || 0;
+    return now > blockedUntil;
+  });
+
+  const pool = available.length > 0 ? available : PROXY_POOL;
+  const proxy = pool[Math.floor(Math.random() * pool.length)];
   return proxy;
+}
+
+function markProxyBlocked(proxyId: string) {
+  // Cooldown for 5 minutes
+  proxyBlacklist.set(proxyId, Date.now() + 5 * 60 * 1000);
 }
 
 function singleDingRequest(
@@ -52,7 +67,7 @@ function singleDingRequest(
   return new Promise((resolve, reject) => {
     let resolved = false;
 
-    const socket = net.connect({ host: proxy.host, port: proxy.port, timeout: 3500 }, () => {
+    const socket = net.connect({ host: proxy.host, port: proxy.port, timeout: 5000 }, () => {
       let connectReq =
         `CONNECT api-v2.www.ding.com:443 HTTP/1.1\r\n` +
         `Host: api-v2.www.ding.com:443\r\n`;
@@ -79,6 +94,7 @@ function singleDingRequest(
             socket,
             servername: "api-v2.www.ding.com",
             rejectUnauthorized: false,
+            // NOTE: Do NOT set ALPNProtocols — it causes Cloudflare to return 403
           },
           () => {
             const payload = JSON.stringify({
@@ -248,10 +264,10 @@ async function lookupSingleNumber(
   }
 
   let pIdx = profileIdx;
-  const maxAttempts = Math.max(10, PROXY_POOL.length * 2);
+  const maxAttempts = Math.min(10, PROXY_POOL.length * 2);
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const proxy = getNextProxy();
+    const proxy = getNextHealthyProxy();
 
     try {
       const resp = await singleDingRequest(clean, BROWSER_PROFILES[pIdx], proxy);
@@ -267,19 +283,15 @@ async function lookupSingleNumber(
         } catch {
           // JSON parse retry
         }
+      } else if (resp.status === 403 || resp.status === 429) {
+        // Cloudflare blocked this proxy IP, temporarily blacklist it
+        markProxyBlocked(proxy.id);
       }
 
       pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
-
-      if (attempt < maxAttempts - 1) {
-        const delay = Math.min(100 * (attempt + 1), 1500);
-        await new Promise((r) => setTimeout(r, delay));
-      }
     } catch {
+      markProxyBlocked(proxy.id);
       pIdx = (pIdx + 1) % BROWSER_PROFILES.length;
-      if (attempt < maxAttempts - 1) {
-        await new Promise((r) => setTimeout(r, 100));
-      }
     }
   }
 

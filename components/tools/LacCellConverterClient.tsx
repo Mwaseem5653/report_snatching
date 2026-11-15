@@ -57,8 +57,9 @@ export default function LacCellConverterClient() {
   };
 
   const reverseCalculate = (output: string) => {
-    const clean = output.trim().replace(/^0x/i, "");
-    if (clean.length === 8) {
+    if (!output) return null;
+    const clean = output.trim().replace(/^0x/i, "").replace(/[\s\-_:,]/g, "").toUpperCase();
+    if (clean.length === 8 && /^[0-9A-F]{8}$/.test(clean)) {
       const hexLac = clean.substring(0, 4);
       const hexCell = clean.substring(4, 8);
       return {
@@ -72,6 +73,21 @@ export default function LacCellConverterClient() {
   const updateRow = (index: number, field: keyof RowData, value: string) => {
     const newRows = [...rows];
     newRows[index][field] = value;
+
+    if (field === 'output') {
+      const reversed = reverseCalculate(value);
+      if (reversed) {
+        newRows[index].lac = reversed.lac;
+        newRows[index].cell = reversed.cell;
+      }
+    } else {
+      const currentLac = field === 'lac' ? value : newRows[index].lac;
+      const currentCell = field === 'cell' ? value : newRows[index].cell;
+      if (currentLac && currentCell) {
+        newRows[index].output = calculateOutput(currentLac, currentCell);
+      }
+    }
+
     setRows(newRows);
   };
 
@@ -169,12 +185,26 @@ export default function LacCellConverterClient() {
       const columns = rowText.split(/\t/);
       
       if (field === 'output') {
-          newRows[targetIndex].output = columns[0].trim();
+        const val = columns[0].trim();
+        newRows[targetIndex].output = val;
+        const reversed = reverseCalculate(val);
+        if (reversed) {
+          newRows[targetIndex].lac = reversed.lac;
+          newRows[targetIndex].cell = reversed.cell;
+        }
       } else if (columns.length >= 2) {
-        newRows[targetIndex].lac = columns[0].trim();
-        newRows[targetIndex].cell = columns[1].trim();
+        const lac = columns[0].trim();
+        const cell = columns[1].trim();
+        newRows[targetIndex].lac = lac;
+        newRows[targetIndex].cell = cell;
+        newRows[targetIndex].output = calculateOutput(lac, cell);
       } else {
         newRows[targetIndex][field] = columns[0].trim();
+        const lac = newRows[targetIndex].lac;
+        const cell = newRows[targetIndex].cell;
+        if (lac && cell) {
+          newRows[targetIndex].output = calculateOutput(lac, cell);
+        }
       }
     });
 
@@ -191,6 +221,9 @@ export default function LacCellConverterClient() {
     const newRows = [...rows];
     for (let i = index + 1; i < newRows.length; i++) {
       newRows[i].lac = valueToFill;
+      if (newRows[i].cell) {
+        newRows[i].output = calculateOutput(valueToFill, newRows[i].cell);
+      }
     }
     setRows(newRows);
     toast.success("LAC ID applied to all rows below");

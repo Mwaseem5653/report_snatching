@@ -19,8 +19,9 @@ import {
   Play, Eye, Search, 
   ShieldCheck, Loader2, Zap, LayoutGrid, 
   Trash2, Database, Smartphone, Calendar,
-  Copy, Mail, Check, FileText, FileDown
+  Copy, Mail, Check, FileText, FileDown, FileSpreadsheet
 } from "lucide-react";
+import ExcelDataMerger from "@/components/tools/ExcelDataMerger";
 import { toast } from "sonner";
 import AlertModal from "@/components/ui/alert-modal";
 import TokenExpiredModal from "@/components/ui/token-expired-modal";
@@ -139,7 +140,9 @@ export interface CombinedCdrOutput {
 
 export default function CdrFormatClient() {
   const [rawInput, setRawInput] = useState("");
-  const [useApiLookup, setUseApiLookup] = useState(false);
+  const [activeToolMode, setActiveToolMode] = useState<"cdr" | "merger">("cdr");
+  const [liveApi, setLiveApi] = useState<"none" | "ding" | "checksim">("none");
+  const useApiLookup = liveApi !== "none";
   // Defaulted to "ding" live lookup
   const [apiRoute, setApiRoute] = useState<"pta" | "ding">("ding");
   const [loadingLookup, setLoadingLookup] = useState(false);
@@ -151,6 +154,15 @@ export default function CdrFormatClient() {
   const [activeViewTab, setActiveViewTab] = useState<"rendered" | "text" | "html">("rendered");
   const [copied, setCopied] = useState(false);
   const [generatingDocx, setGeneratingDocx] = useState(false);
+  
+  // 20-Set Query List Options (CDR, LOC, OWN, IMEI)
+  const [formatViewMode, setFormatViewMode] = useState<"20set" | "operators">("20set");
+  const [batch20Options, setBatch20Options] = useState({
+    cdr: true,
+    loc: true,
+    own: true,
+    imei: true,
+  });
   
   // CDR Checkboxes per operator
   const [selectedCdr, setSelectedCdr] = useState<Record<string, boolean>>({
@@ -321,7 +333,7 @@ export default function CdrFormatClient() {
       return;
     }
 
-    const requiredTokens = numbers.length * (useApiLookup ? 20 : 10);
+    const requiredTokens = numbers.length * 10;
     setLoadingLookup(true);
     setIsProcessing(true);
     setProgress(0);
@@ -330,7 +342,7 @@ export default function CdrFormatClient() {
     setCombinedOutput(null);
     setAnalyzedNumbers([]);
 
-    if (!useApiLookup) {
+    if (liveApi === "none") {
         try {
             const deductRes = await fetch(getApiUrl("/api/tools/cdr-token"), {
                 method: "POST",
@@ -366,56 +378,106 @@ export default function CdrFormatClient() {
         return;
     }
 
-    // Live API Mode
-    // Ding route logic commented out (uncomment to restore Ding lookup):
-    const endpoint = apiRoute === "ding" ? "/api/tools/ding-lookup" : "/api/tools/pta-lookup";
-    for (let i = 0; i < numbers.length; i++) {
-        const currentNum = numbers[i];
+    // ── Live API Mode ──────────────────────────────────────────────
+    // 1. Checksim Live API
+    if (liveApi === "checksim") {
+        if (numbers.length > 20) {
+            toast.error("Max 20 numbers allowed per request for Checksim Live API.");
+            setLoadingLookup(false);
+            setIsProcessing(false);
+            return;
+        }
+
         try {
-            const res = await fetch(getApiUrl(endpoint), {
+            const res = await fetch(getApiUrl("/api/tools/checksim-lookup"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ numbers: [currentNum] }),
+                body: JSON.stringify({ numbers }),
             });
             const data = await res.json();
-            
+
             if (res.status === 403) {
                 setTokenModal({
                     isOpen: true,
                     currentBalance: data.currentBalance || 0,
-                    requiredTokens: (numbers.length - i) * 20,
+                    requiredTokens: numbers.length * 10,
                 });
-                break;
+                setLoadingLookup(false);
+                setIsProcessing(false);
+                return;
             }
 
-            if (res.ok && data.success && data.results && data.results.length > 0) {
-                const result = {
-                    ...data.results[0],
-                    number: formatTo92(data.results[0].number || currentNum)
-                };
-                setAnalyzedNumbers(prev => [...prev, result]);
-            } else {
-                setAnalyzedNumbers(prev => [...prev, { number: formatTo92(currentNum), operator: "Error" }]);
+            if (res.status === 429) {
+                toast.error(data.error || "Rate limit active. 5-minute break required after checking 20 numbers.");
+                setLoadingLookup(false);
+                setIsProcessing(false);
+                return;
             }
-        } catch (error) {
-            setAnalyzedNumbers(prev => [...prev, { number: formatTo92(currentNum), operator: "Failed" }]);
+
+            if (res.ok && data.success && data.results) {
+                const results = data.results.map((r: any) => ({
+                    ...r,
+                    number: formatTo92(r.number || r.phone || "")
+                }));
+                setAnalyzedNumbers(results);
+                setProcessedCount(numbers.length);
+                setProgress(100);
+                toast.success(`Checksim Live identification complete! (${results.length} numbers)`);
+                window.dispatchEvent(new Event("refresh-session"));
+            } else {
+                toast.error(data.error || "Checksim lookup failed.");
+            }
+        } catch (error: any) {
+            toast.error("Network error during Checksim lookup: " + error.message);
+        }
+    } else if (liveApi === "ding") {
+        // 2. Ding Live API
+        if (numbers.length > 50) {
+            toast.error("Max 50 numbers allowed per request for Ding Live API.");
+            setLoadingLookup(false);
+            setIsProcessing(false);
+            return;
         }
 
-        const nextCount = i + 1;
-        setProcessedCount(nextCount);
-        setProgress(Math.round((nextCount / numbers.length) * 100));
+        try {
+            const res = await fetch(getApiUrl("/api/tools/ding-lookup"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ numbers }),
+            });
+            const data = await res.json();
 
-        if (i < numbers.length - 1) {
-            // Ding route doesn't need Easyload's heavy 1.5s delay
-            const delay = apiRoute === "ding" ? 200 : 1500;
-            await new Promise(r => setTimeout(r, delay));
+            if (res.status === 403) {
+                setTokenModal({
+                    isOpen: true,
+                    currentBalance: data.currentBalance || 0,
+                    requiredTokens: numbers.length * 10,
+                });
+                setLoadingLookup(false);
+                setIsProcessing(false);
+                return;
+            }
+
+            if (res.ok && data.success && data.results) {
+                const results = data.results.map((r: any) => ({
+                    ...r,
+                    number: formatTo92(r.number || "")
+                }));
+                setAnalyzedNumbers(results);
+                setProcessedCount(numbers.length);
+                setProgress(100);
+                toast.success(`Ding Live identification complete! (${results.length} numbers) — ${numbers.length * 10} tokens deducted`);
+                window.dispatchEvent(new Event("refresh-session"));
+            } else {
+                toast.error(data.error || "Ding lookup failed.");
+            }
+        } catch (error: any) {
+            toast.error("Network error during Ding lookup: " + error.message);
         }
     }
 
     setLoadingLookup(false);
     setIsProcessing(false);
-    toast.success("Live identification complete!");
-    window.dispatchEvent(new Event("refresh-session"));
   };
 
   const getNumbersForOperator = (operatorKey: string, isImei: boolean = false) => {
@@ -766,6 +828,91 @@ export default function CdrFormatClient() {
     return count;
   }, [selectedCdr, selectedLoc, selectedIdp]);
 
+  const all20SetChecked = batch20Options.cdr && batch20Options.loc && batch20Options.own && batch20Options.imei;
+  const toggleAll20Set = () => {
+    const next = !all20SetChecked;
+    setBatch20Options({ cdr: next, loc: next, own: next, imei: next });
+  };
+
+  const handleGenerate20SetList = () => {
+    const rawLines = rawInput.split(/[\n,]+/).map(n => n.trim()).filter(Boolean);
+    const phones: string[] = [];
+    const imeis: string[] = [];
+
+    rawLines.forEach(l => {
+      const digits = l.replace(/\D/g, "");
+      if (digits.length === 15) {
+        imeis.push(digits);
+      } else if (digits.length >= 10) {
+        phones.push(formatTo92(l));
+      }
+    });
+
+    if (!batch20Options.cdr && !batch20Options.loc && !batch20Options.own && !batch20Options.imei) {
+      toast.error("Please select at least one format (CDR, LOC, OWN, or IMEI).");
+      return;
+    }
+
+    if (phones.length === 0 && imeis.length === 0) {
+      toast.error("Please paste mobile numbers or IMEIs in the input box first.");
+      return;
+    }
+
+    // Chunk in sets of 20 with blank line between sets
+    const chunkIn20 = (lines: string[]) => {
+      const chunks: string[] = [];
+      for (let i = 0; i < lines.length; i += 20) {
+        chunks.push(lines.slice(i, i + 20).join("\n"));
+      }
+      return chunks.join("\n\n");
+    };
+
+    const sections: string[] = [];
+    let totalCount = 0;
+
+    // 1. OWNERSHIP
+    if (batch20Options.own && phones.length > 0) {
+      const lines = phones.map(n => `${n} OWNERSHIP`);
+      sections.push(chunkIn20(lines));
+      totalCount += lines.length;
+    }
+
+    // 2. CDR
+    if (batch20Options.cdr && phones.length > 0) {
+      const lines = phones.map(n => `${n} CDR`);
+      sections.push(chunkIn20(lines));
+      totalCount += lines.length;
+    }
+
+    // 3. LOCATION
+    if (batch20Options.loc && phones.length > 0) {
+      const lines = phones.map(n => `${n} LOCATION`);
+      sections.push(chunkIn20(lines));
+      totalCount += lines.length;
+    }
+
+    // 4. IMEI / TRACKING
+    if (batch20Options.imei && imeis.length > 0) {
+      const lines = imeis.map(i => `${i} TRACKING`);
+      sections.push(chunkIn20(lines));
+      totalCount += lines.length;
+    }
+
+    const fullText = sections.join("\n\n");
+    setCombinedOutput({
+      title: "20-Set Batch Query List",
+      text: fullText,
+      html: `<pre class="font-mono text-slate-800 leading-relaxed text-[12px] p-4 bg-slate-50 rounded-xl border border-slate-100 select-text">${fullText}</pre>`,
+      cdrCount: batch20Options.cdr ? phones.length : 0,
+      locCount: batch20Options.loc ? phones.length : 0,
+      idpCount: 0,
+      totalNumbers: phones.length + imeis.length,
+      numbers: [...phones, ...imeis],
+    });
+    setActiveViewTab("text");
+    toast.success(`Generated 20-Set query list (${totalCount} queries in sets of 20)!`);
+  };
+
   const handleCopy = async () => {
     if (!combinedOutput?.text) {
       toast.error("No output content to copy.");
@@ -1008,7 +1155,63 @@ export default function CdrFormatClient() {
         requiredTokens={tokenModal.requiredTokens}
         toolName="CDR Generator"
       />
-      
+
+      {/* 🔹 SUB-TOOL NAVIGATION SWITCHER */}
+      <div className="bg-white border border-slate-200 p-1.5 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+          <button
+            onClick={() => setActiveToolMode("cdr")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-black text-[11px] uppercase tracking-tight transition-all",
+              activeToolMode === "cdr"
+                ? "bg-white text-indigo-600 shadow-xs"
+                : "text-slate-500 hover:text-slate-800"
+            )}
+          >
+            <FileText size={14} />
+            CDR & IDP Formats
+          </button>
+          <button
+            onClick={() => setActiveToolMode("merger")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-black text-[11px] uppercase tracking-tight transition-all",
+              activeToolMode === "merger"
+                ? "bg-white text-indigo-600 shadow-xs"
+                : "text-slate-500 hover:text-slate-800"
+            )}
+          >
+            <FileSpreadsheet size={14} />
+            Multi-Excel Merger
+            <span className="bg-emerald-500 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full">
+              Location & Ownership
+            </span>
+          </button>
+        </div>
+
+        {activeToolMode === "cdr" ? (
+          <p className="text-[10px] text-slate-400 font-medium px-2 hidden sm:block">
+            Generate formal CDR & IDP Performa documents
+          </p>
+        ) : (
+          <p className="text-[10px] text-slate-400 font-medium px-2 hidden sm:block">
+            Consolidate multiple small Excel files into unified Notepad & Excel
+          </p>
+        )}
+      </div>
+
+      {activeToolMode === "merger" ? (
+        <ExcelDataMerger
+          onExportNumbersToGenerator={(numbers) => {
+            setRawInput(prev => {
+              const existing = prev ? prev.trim() + "\n" : "";
+              return existing + numbers.join("\n");
+            });
+            setActiveToolMode("cdr");
+            toast.success(`${numbers.length} numbers transferred to CDR Generator!`);
+          }}
+        />
+      ) : (
+        <>
       {/* 🔹 TOP SECTION: ULTRA-COMPACT 3 BALANCED COLUMNS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
         
@@ -1020,28 +1223,52 @@ export default function CdrFormatClient() {
                     <CardTitle className="text-[10px] font-black uppercase text-slate-600 tracking-tight">Numbers / IMEIs</CardTitle>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-1.5 py-0.5 rounded-lg">
-                        <span className="text-[8px] font-black uppercase text-slate-400">Live API</span>
-                        <Switch 
-                            checked={useApiLookup} 
-                            onCheckedChange={setUseApiLookup} 
-                            className="h-3.5 w-7 data-[state=checked]:bg-indigo-600 scale-75 origin-right" 
-                        />
-                    </div>
-                    {/* --- Ding / PTA Toggle (Commented out to hide Ding. Uncomment when needed) ---  */}
-                    {useApiLookup && (
-                        <div className="flex items-center gap-1 bg-white border border-slate-200 px-1.5 py-0.5 rounded-lg" title="Toggle: Left for PTA Route, Right for Ding Route">
-                            <span className={cn("text-[8px] font-black uppercase transition-colors", apiRoute === "pta" ? "text-blue-600 font-extrabold" : "text-slate-400")}>
-                                PTA
-                            </span>
+                    {sessionInfo.isSuper ? (
+                        <>
+                            <div className={cn(
+                                "flex items-center gap-1 border px-1.5 py-0.5 rounded-lg transition-all",
+                                liveApi === "ding" ? "bg-indigo-50 border-indigo-200 shadow-2xs" : "bg-white border-slate-200"
+                            )} title="Ding Live Network Lookup">
+                                <span className={cn(
+                                    "text-[8px] font-black uppercase",
+                                    liveApi === "ding" ? "text-indigo-600" : "text-slate-500"
+                                )}>Ding</span>
+                                <Switch 
+                                    checked={liveApi === "ding"} 
+                                    onCheckedChange={(checked) => setLiveApi(checked ? "ding" : "none")} 
+                                    className="h-3.5 w-7 data-[state=checked]:bg-indigo-600 scale-75 origin-right" 
+                                />
+                            </div>
+
+                            <div className={cn(
+                                "flex items-center gap-1 border px-1.5 py-0.5 rounded-lg transition-all",
+                                liveApi === "checksim" ? "bg-indigo-50 border-indigo-200 shadow-2xs" : "bg-white border-slate-200"
+                            )} title="Checksim Live API Lookup (Super Admin Only)">
+                                <span className={cn(
+                                    "text-[8px] font-black uppercase",
+                                    liveApi === "checksim" ? "text-indigo-600" : "text-slate-500"
+                                )}>Checksim</span>
+                                <Switch 
+                                    checked={liveApi === "checksim"} 
+                                    onCheckedChange={(checked) => setLiveApi(checked ? "checksim" : "none")} 
+                                    className="h-3.5 w-7 data-[state=checked]:bg-indigo-600 scale-75 origin-right" 
+                                />
+                            </div>
+                        </>
+                    ) : (
+                        <div className={cn(
+                            "flex items-center gap-1.5 border px-1.5 py-0.5 rounded-lg transition-all",
+                            liveApi === "ding" ? "bg-indigo-50 border-indigo-200 shadow-2xs" : "bg-white border-slate-200"
+                        )} title="Ding Live Network Lookup">
+                            <span className={cn(
+                                "text-[8px] font-black uppercase",
+                                liveApi === "ding" ? "text-indigo-600" : "text-slate-500"
+                            )}>Ding Live</span>
                             <Switch 
-                                checked={apiRoute === "ding"} 
-                                onCheckedChange={(checked) => setApiRoute(checked ? "ding" : "pta")} 
-                                className="h-3.5 w-7 data-[state=checked]:bg-emerald-600 scale-75" 
+                                checked={liveApi === "ding"} 
+                                onCheckedChange={(checked) => setLiveApi(checked ? "ding" : "none")} 
+                                className="h-3.5 w-7 data-[state=checked]:bg-indigo-600 scale-75 origin-right" 
                             />
-                            <span className={cn("text-[8px] font-black uppercase transition-colors", apiRoute === "ding" ? "text-emerald-600 font-extrabold" : "text-slate-400")}>
-                                Ding
-                            </span>
                         </div>
                     )}
                     
@@ -1067,11 +1294,15 @@ export default function CdrFormatClient() {
                     disabled={loadingLookup}
                     className={cn(
                         "w-full h-8 rounded-xl font-black uppercase tracking-tight text-[10px] shadow transition-all shrink-0",
-                        useApiLookup ? "bg-indigo-600 hover:bg-indigo-700" : "bg-orange-600 hover:bg-orange-700"
+                        liveApi !== "none" ? "bg-indigo-600 hover:bg-indigo-700" : "bg-orange-600 hover:bg-orange-700"
                     )}
                 >
                     {loadingLookup ? <Loader2 className="animate-spin mr-1.5 h-3.5 w-3.5"/> : <ShieldCheck size={14} className="mr-1.5" />}
-                    {useApiLookup ? `Live Identify (${apiRoute === "ding" ? "Ding Live" : "PTA Easyload"})` : "Identify Operators"}
+                    {liveApi === "checksim" 
+                        ? "Live Identify (Checksim Live)" 
+                        : liveApi === "ding"
+                        ? "Live Identify (Ding Live)"
+                        : "Identify Operators"}
                 </Button>
             </CardContent>
         </Card>
@@ -1131,156 +1362,344 @@ export default function CdrFormatClient() {
             </CardContent>
         </Card>
 
-        {/* Column 3: Formats (Single Row per Operator with CDR + Date Dropdown + IDP Checkbox) (4 Cols) */}
+        {/* Column 3: Formats (Vertical 20-Set Checkboxes / Operator Rows) (4 Cols) */}
         <Card className="lg:col-span-4 rounded-2xl border-slate-200 shadow-sm overflow-hidden flex flex-col h-[340px]">
             <CardHeader className="bg-slate-50/80 border-b py-1.5 px-3 flex flex-row items-center justify-between shrink-0">
                 <div className="flex items-center gap-1.5">
                     <LayoutGrid size={13} className="text-slate-500" />
                     <CardTitle className="text-[10px] font-black uppercase text-slate-600 tracking-tight">Available Formats</CardTitle>
                 </div>
-                <div className="flex items-center gap-1.5 text-[8px] font-black uppercase">
-                    <button onClick={() => toggleSelectAll(true)} className="text-indigo-600 hover:underline">Select All</button>
-                    <span className="text-slate-300">•</span>
-                    <button onClick={() => toggleSelectAll(false)} className="text-slate-400 hover:underline">None</button>
+
+                {/* View switcher between 20-Set Query and Operators */}
+                <div className="flex bg-slate-200/70 p-0.5 rounded-lg text-[8px] font-black uppercase">
+                    <button
+                        onClick={() => setFormatViewMode("20set")}
+                        className={cn(
+                            "px-2 py-0.5 rounded transition-all flex items-center gap-1",
+                            formatViewMode === "20set" ? "bg-white text-indigo-700 shadow-2xs font-black" : "text-slate-500 hover:text-slate-800"
+                        )}
+                        title="Vertical 20-Set Query List (CDR, LOC, OWN, IMEI)"
+                    >
+                        <Zap size={9} className="fill-indigo-600 text-indigo-600" />
+                        20-Set
+                    </button>
+                    <button
+                        onClick={() => setFormatViewMode("operators")}
+                        className={cn(
+                            "px-2 py-0.5 rounded transition-all",
+                            formatViewMode === "operators" ? "bg-white text-indigo-700 shadow-2xs font-black" : "text-slate-500 hover:text-slate-800"
+                        )}
+                        title="Operator Performa Documents"
+                    >
+                        Performa
+                    </button>
                 </div>
             </CardHeader>
             
-            <CardContent className="p-2 flex-1 overflow-hidden flex flex-col justify-between gap-1.5">
-                {/* 📋 Single Row per Operator with CDR Checkbox, Count, Date Filter & IDP Checkbox */}
-                <div className="space-y-1.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
-                    {OPERATOR_ROWS.map((row) => {
-                        const count = operatorCounts[row.key as keyof typeof operatorCounts] || 0;
-                        const isCdrChecked = !!selectedCdr[row.key];
-                        const isLocChecked = !!selectedLoc[row.key];
-                        const isIdpChecked = !!selectedIdp[row.key];
-                        const durationConfig = formatDurations[row.key] || DEFAULT_DURATIONS[row.key] || { preset: "6m", customDays: 180 };
-
-                        return (
+            <CardContent className="p-2 flex-1 overflow-hidden flex flex-col gap-1.5">
+                {formatViewMode === "20set" ? (
+                    <>
+                        {/* 📋 VERTICAL 20-SET CHECKBOXES */}
+                        <div className="space-y-1.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+                            {/* Check All */}
                             <div
-                                key={row.key}
+                                onClick={toggleAll20Set}
                                 className={cn(
-                                    "flex items-center justify-between px-2 py-1 rounded-xl border transition-all gap-1.5",
-                                    isCdrChecked || isLocChecked || isIdpChecked
-                                        ? "border-indigo-200 bg-white shadow-xs" 
-                                        : "border-slate-100 bg-slate-50/50 opacity-60 hover:opacity-100"
+                                    "flex items-center justify-between px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer select-none",
+                                    all20SetChecked
+                                        ? "border-indigo-300 bg-indigo-50/60 shadow-2xs"
+                                        : "border-slate-200 bg-white hover:bg-slate-50"
                                 )}
                             >
-                                {/* Left: CDR Checkbox + Operator Name */}
-                                <div className="flex items-center gap-1.5 min-w-[72px] flex-1">
+                                <div className="flex items-center gap-2">
                                     <Checkbox 
-                                        id={`chk-cdr-${row.key}`}
-                                        checked={isCdrChecked} 
-                                        onCheckedChange={(c) => setSelectedCdr(prev => ({ ...prev, [row.key]: !!c }))}
+                                        id="chk-20set-all"
+                                        checked={all20SetChecked}
+                                        onCheckedChange={toggleAll20Set}
                                         className="h-3.5 w-3.5 rounded data-[state=checked]:bg-indigo-600 border-slate-300 shrink-0"
                                     />
-                                    <label htmlFor={`chk-cdr-${row.key}`} className="cursor-pointer text-[10px] font-black uppercase text-slate-800 truncate select-none">
-                                        {row.name.replace(" / Warid", "").replace(" All Networks", "")}
+                                    <label htmlFor="chk-20set-all" className="cursor-pointer text-[10px] font-black uppercase text-slate-800">
+                                        Check All (All Formats)
                                     </label>
                                 </div>
-
-                                {/* Count Badge */}
-                                <span className={cn(
-                                    "text-[9px] font-black px-1.5 py-0.2 rounded font-mono shrink-0",
-                                    count > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400"
-                                )}>
-                                    {count}
+                                <span className="text-[8px] font-bold text-indigo-600 uppercase">
+                                    {all20SetChecked ? "All Selected" : "Select All"}
                                 </span>
+                            </div>
 
-                                {/* Date Dropdown for CDR */}
-                                <div className="flex items-center gap-1 shrink-0">
-                                    <div className="w-[74px]">
-                                        <Select 
-                                            value={durationConfig.preset} 
-                                            onValueChange={(val: CdrDurationPreset) => handleDurationPresetChange(row.key, val)}
-                                        >
-                                            <SelectTrigger className="h-6 text-[9px] font-bold uppercase rounded-lg border-slate-200 bg-slate-50 px-1 py-0">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="3m" className="text-[9px] uppercase font-bold">3M</SelectItem>
-                                                <SelectItem value="6m" className="text-[9px] uppercase font-bold">6M</SelectItem>
-                                                <SelectItem value="9m" className="text-[9px] uppercase font-bold">9M</SelectItem>
-                                                <SelectItem value="1y" className="text-[9px] uppercase font-bold">1Y</SelectItem>
-                                                <SelectItem value="custom" className="text-[9px] uppercase font-bold text-orange-600">Custom</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                            {/* 1. CDR */}
+                            <div
+                                onClick={() => setBatch20Options(p => ({ ...p, cdr: !p.cdr }))}
+                                className={cn(
+                                    "flex items-center justify-between px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer select-none",
+                                    batch20Options.cdr
+                                        ? "border-indigo-300 bg-white shadow-2xs"
+                                        : "border-slate-100 bg-slate-50/50 hover:bg-white"
+                                )}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                        id="chk-20set-cdr"
+                                        checked={batch20Options.cdr}
+                                        onCheckedChange={(c) => setBatch20Options(p => ({ ...p, cdr: !!c }))}
+                                        className="h-3.5 w-3.5 rounded data-[state=checked]:bg-indigo-600 border-slate-300 shrink-0"
+                                    />
+                                    <div>
+                                        <label htmlFor="chk-20set-cdr" className="cursor-pointer text-[10px] font-black uppercase text-slate-800 block leading-tight">
+                                            CDR
+                                        </label>
+                                        <span className="text-[8px] font-mono text-slate-400">
+                                            92xxxxxxxxxx CDR
+                                        </span>
                                     </div>
-
-                                    <Input
-                                          type="number"
-                                          min={1}
-                                          max={3650}
-                                          value={durationConfig.customDays}
-                                          onChange={(e) => handleCustomDaysChange(row.key, parseInt(e.target.value) || 0)}
-                                          className={cn(
-                                              "h-6 text-[9px] font-mono font-bold px-1 py-0 rounded border-orange-300 bg-orange-50/50 text-center",
-                                              "transition-all duration-500 ease-out overflow-hidden origin-right",
-                                              durationConfig.preset === "custom"
-                                                  ? "w-12 opacity-100 scale-100 ml-1"
-                                                  : "w-0 opacity-0 scale-90 ml-0 px-0 pointer-events-none border-0"
-                                          )}
-                                          placeholder="d"
-                                          tabIndex={durationConfig.preset !== "custom" ? -1 : 0}
-                                      />
                                 </div>
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded font-mono bg-indigo-50 text-indigo-700 border border-indigo-100 shrink-0">
+                                    20 / set
+                                </span>
+                            </div>
 
-                                {/* LOC Checkbox in the same row */}
-                                {row.hasLoc ? (
-                                    <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-lg shrink-0">
-                                        <Checkbox 
-                                            id={`chk-loc-${row.key}`}
-                                            checked={isLocChecked} 
-                                            onCheckedChange={(c) => setSelectedLoc(prev => ({ ...prev, [row.key]: !!c }))}
-                                            className="h-3 w-3 rounded data-[state=checked]:bg-emerald-600 border-slate-300"
-                                        />
-                                        <label htmlFor={`chk-loc-${row.key}`} className="cursor-pointer text-[8px] font-black uppercase text-emerald-700 select-none">
+                            {/* 2. LOC */}
+                            <div
+                                onClick={() => setBatch20Options(p => ({ ...p, loc: !p.loc }))}
+                                className={cn(
+                                    "flex items-center justify-between px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer select-none",
+                                    batch20Options.loc
+                                        ? "border-emerald-300 bg-white shadow-2xs"
+                                        : "border-slate-100 bg-slate-50/50 hover:bg-white"
+                                )}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                        id="chk-20set-loc"
+                                        checked={batch20Options.loc}
+                                        onCheckedChange={(c) => setBatch20Options(p => ({ ...p, loc: !!c }))}
+                                        className="h-3.5 w-3.5 rounded data-[state=checked]:bg-emerald-600 border-slate-300 shrink-0"
+                                    />
+                                    <div>
+                                        <label htmlFor="chk-20set-loc" className="cursor-pointer text-[10px] font-black uppercase text-slate-800 block leading-tight">
                                             LOC
                                         </label>
+                                        <span className="text-[8px] font-mono text-slate-400">
+                                            92xxxxxxxxxx LOCATION
+                                        </span>
                                     </div>
-                                ) : (
-                                    <div className="w-[42px] shrink-0"></div>
-                                )}
-
-                                {/* IDP Checkbox in the same row */}
-                                {row.hasIdp ? (
-                                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-lg shrink-0">
-                                        <Checkbox 
-                                            id={`chk-idp-${row.key}`}
-                                            checked={isIdpChecked} 
-                                            onCheckedChange={(c) => setSelectedIdp(prev => ({ ...prev, [row.key]: !!c }))}
-                                            className="h-3 w-3 rounded data-[state=checked]:bg-purple-600 border-slate-300"
-                                        />
-                                        <label htmlFor={`chk-idp-${row.key}`} className="cursor-pointer text-[8px] font-black uppercase text-purple-700 select-none">
-                                            IDP
-                                        </label>
-                                    </div>
-                                ) : (
-                                    <div className="w-[42px] shrink-0"></div>
-                                )}
-
-                                {/* Quick Play Button */}
-                                <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleGenerateSingleRow(row)}
-                                    className="h-6 w-6 p-0 rounded-lg text-indigo-600 hover:bg-indigo-50 shrink-0"
-                                    title={`Generate ${row.name}`}
-                                >
-                                    <Play size={10} className="fill-indigo-600" />
-                                </Button>
+                                </div>
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded font-mono bg-emerald-50 text-emerald-700 border border-emerald-100 shrink-0">
+                                    20 / set
+                                </span>
                             </div>
-                        );
-                    })}
-                </div>
 
-                {/* 🚀 Compact Batch Action Button */}
-                <Button 
-                    onClick={handleGenerateSelected}
-                    className="w-full h-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-black uppercase tracking-tight text-[10px] shadow-sm shrink-0"
-                >
-                    <Zap size={12} className="mr-1 fill-white" />
-                    Build Unified Document ({totalSelectedCount})
-                </Button>
+                            {/* 3. OWN */}
+                            <div
+                                onClick={() => setBatch20Options(p => ({ ...p, own: !p.own }))}
+                                className={cn(
+                                    "flex items-center justify-between px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer select-none",
+                                    batch20Options.own
+                                        ? "border-amber-300 bg-white shadow-2xs"
+                                        : "border-slate-100 bg-slate-50/50 hover:bg-white"
+                                )}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                        id="chk-20set-own"
+                                        checked={batch20Options.own}
+                                        onCheckedChange={(c) => setBatch20Options(p => ({ ...p, own: !!c }))}
+                                        className="h-3.5 w-3.5 rounded data-[state=checked]:bg-amber-600 border-slate-300 shrink-0"
+                                    />
+                                    <div>
+                                        <label htmlFor="chk-20set-own" className="cursor-pointer text-[10px] font-black uppercase text-slate-800 block leading-tight">
+                                            OWN
+                                        </label>
+                                        <span className="text-[8px] font-mono text-slate-400">
+                                            92xxxxxxxxxx OWNERSHIP
+                                        </span>
+                                    </div>
+                                </div>
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded font-mono bg-amber-50 text-amber-700 border border-amber-100 shrink-0">
+                                    20 / set
+                                </span>
+                            </div>
+
+                            {/* 4. IMEI */}
+                            <div
+                                onClick={() => setBatch20Options(p => ({ ...p, imei: !p.imei }))}
+                                className={cn(
+                                    "flex items-center justify-between px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer select-none",
+                                    batch20Options.imei
+                                        ? "border-purple-300 bg-white shadow-2xs"
+                                        : "border-slate-100 bg-slate-50/50 hover:bg-white"
+                                )}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                        id="chk-20set-imei"
+                                        checked={batch20Options.imei}
+                                        onCheckedChange={(c) => setBatch20Options(p => ({ ...p, imei: !!c }))}
+                                        className="h-3.5 w-3.5 rounded data-[state=checked]:bg-purple-600 border-slate-300 shrink-0"
+                                    />
+                                    <div>
+                                        <label htmlFor="chk-20set-imei" className="cursor-pointer text-[10px] font-black uppercase text-slate-800 block leading-tight">
+                                            IMEI
+                                        </label>
+                                        <span className="text-[8px] font-mono text-slate-400">
+                                            xxxxxxxxxxxxxxx TRACKING
+                                        </span>
+                                    </div>
+                                </div>
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded font-mono bg-purple-50 text-purple-700 border border-purple-100 shrink-0">
+                                    20 / set
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* 🚀 Action Button */}
+                        <Button 
+                            onClick={handleGenerate20SetList}
+                            className="w-full h-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-black uppercase tracking-tight text-[10px] shadow-sm shrink-0 mt-auto"
+                        >
+                            <Zap size={12} className="mr-1 fill-white" />
+                            Build 20-Set Query Output
+                        </Button>
+                    </>
+                ) : (
+                    <>
+                        {/* 📋 Single Row per Operator with CDR Checkbox, Count, Date Filter & IDP Checkbox */}
+                        <div className="space-y-1.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+                            {OPERATOR_ROWS.map((row) => {
+                                const count = operatorCounts[row.key as keyof typeof operatorCounts] || 0;
+                                const isCdrChecked = !!selectedCdr[row.key];
+                                const isLocChecked = !!selectedLoc[row.key];
+                                const isIdpChecked = !!selectedIdp[row.key];
+                                const durationConfig = formatDurations[row.key] || DEFAULT_DURATIONS[row.key] || { preset: "6m", customDays: 180 };
+
+                                return (
+                                    <div
+                                        key={row.key}
+                                        className={cn(
+                                            "flex items-center justify-between px-2 py-1 rounded-xl border transition-all gap-1.5",
+                                            isCdrChecked || isLocChecked || isIdpChecked
+                                                ? "border-indigo-200 bg-white shadow-xs" 
+                                                : "border-slate-100 bg-slate-50/50 opacity-60 hover:opacity-100"
+                                        )}
+                                    >
+                                        {/* Left: CDR Checkbox + Operator Name */}
+                                        <div className="flex items-center gap-1.5 min-w-[72px] flex-1">
+                                            <Checkbox 
+                                                id={`chk-cdr-${row.key}`}
+                                                checked={isCdrChecked} 
+                                                onCheckedChange={(c) => setSelectedCdr(prev => ({ ...prev, [row.key]: !!c }))}
+                                                className="h-3.5 w-3.5 rounded data-[state=checked]:bg-indigo-600 border-slate-300 shrink-0"
+                                            />
+                                            <label htmlFor={`chk-cdr-${row.key}`} className="cursor-pointer text-[10px] font-black uppercase text-slate-800 truncate select-none">
+                                                {row.name.replace(" / Warid", "").replace(" All Networks", "")}
+                                            </label>
+                                        </div>
+
+                                        {/* Count Badge */}
+                                        <span className={cn(
+                                            "text-[9px] font-black px-1.5 py-0.2 rounded font-mono shrink-0",
+                                            count > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400"
+                                        )}>
+                                            {count}
+                                        </span>
+
+                                        {/* Date Dropdown for CDR */}
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <div className="w-[74px]">
+                                                <Select 
+                                                    value={durationConfig.preset} 
+                                                    onValueChange={(val: CdrDurationPreset) => handleDurationPresetChange(row.key, val)}
+                                                >
+                                                    <SelectTrigger className="h-6 text-[9px] font-bold uppercase rounded-lg border-slate-200 bg-slate-50 px-1 py-0">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="3m" className="text-[9px] uppercase font-bold">3M</SelectItem>
+                                                        <SelectItem value="6m" className="text-[9px] uppercase font-bold">6M</SelectItem>
+                                                        <SelectItem value="9m" className="text-[9px] uppercase font-bold">9M</SelectItem>
+                                                        <SelectItem value="1y" className="text-[9px] uppercase font-bold">1Y</SelectItem>
+                                                        <SelectItem value="custom" className="text-[9px] uppercase font-bold text-orange-600">Custom</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <Input
+                                                  type="number"
+                                                  min={1}
+                                                  max={3650}
+                                                  value={durationConfig.customDays}
+                                                  onChange={(e) => handleCustomDaysChange(row.key, parseInt(e.target.value) || 0)}
+                                                  className={cn(
+                                                      "h-6 text-[9px] font-mono font-bold px-1 py-0 rounded border-orange-300 bg-orange-50/50 text-center",
+                                                      "transition-all duration-500 ease-out overflow-hidden origin-right",
+                                                      durationConfig.preset === "custom"
+                                                          ? "w-12 opacity-100 scale-100 ml-1"
+                                                          : "w-0 opacity-0 scale-90 ml-0 px-0 pointer-events-none border-0"
+                                                  )}
+                                                  placeholder="d"
+                                                  tabIndex={durationConfig.preset !== "custom" ? -1 : 0}
+                                              />
+                                        </div>
+
+                                        {/* LOC Checkbox in the same row */}
+                                        {row.hasLoc ? (
+                                            <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-lg shrink-0">
+                                                <Checkbox 
+                                                    id={`chk-loc-${row.key}`}
+                                                    checked={isLocChecked} 
+                                                    onCheckedChange={(c) => setSelectedLoc(prev => ({ ...prev, [row.key]: !!c }))}
+                                                    className="h-3 w-3 rounded data-[state=checked]:bg-emerald-600 border-slate-300"
+                                                />
+                                                <label htmlFor={`chk-loc-${row.key}`} className="cursor-pointer text-[8px] font-black uppercase text-emerald-700 select-none">
+                                                    LOC
+                                                </label>
+                                            </div>
+                                        ) : (
+                                            <div className="w-[42px] shrink-0"></div>
+                                        )}
+
+                                        {/* IDP Checkbox in the same row */}
+                                        {row.hasIdp ? (
+                                            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-lg shrink-0">
+                                                <Checkbox 
+                                                    id={`chk-idp-${row.key}`}
+                                                    checked={isIdpChecked} 
+                                                    onCheckedChange={(c) => setSelectedIdp(prev => ({ ...prev, [row.key]: !!c }))}
+                                                    className="h-3 w-3 rounded data-[state=checked]:bg-purple-600 border-slate-300"
+                                                />
+                                                <label htmlFor={`chk-idp-${row.key}`} className="cursor-pointer text-[8px] font-black uppercase text-purple-700 select-none">
+                                                    IDP
+                                                </label>
+                                            </div>
+                                        ) : (
+                                            <div className="w-[42px] shrink-0"></div>
+                                        )}
+
+                                        {/* Quick Play Button */}
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => handleGenerateSingleRow(row)}
+                                            className="h-6 w-6 p-0 rounded-lg text-indigo-600 hover:bg-indigo-50 shrink-0"
+                                            title={`Generate ${row.name}`}
+                                        >
+                                            <Play size={10} className="fill-indigo-600" />
+                                        </Button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* 🚀 Compact Batch Action Button */}
+                        <Button 
+                            onClick={handleGenerateSelected}
+                            className="w-full h-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-black uppercase tracking-tight text-[10px] shadow-sm shrink-0 mt-auto"
+                        >
+                            <Zap size={12} className="mr-1 fill-white" />
+                            Build Unified Document ({totalSelectedCount})
+                        </Button>
+                    </>
+                )}
             </CardContent>
         </Card>
       </div>
@@ -1422,6 +1841,8 @@ export default function CdrFormatClient() {
               )}
           </div>
       </Card>
+        </>
+      )}
     </div>
   );
 }
