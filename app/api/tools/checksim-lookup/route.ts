@@ -2,15 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { checkAndDeductTokens } from "@/lib/tokenHelper";
-import { runChecksimLookup } from "@/lib/checksimLookup";
+import { streamChecksimLookup } from "@/lib/checksimLookup";
 
 const SECRET = process.env.SESSION_JWT_SECRET!;
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-// Simple in-memory cooldown tracking per user (5 minutes = 300,000 ms)
-const userCooldowns = new Map<string, number>();
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,30 +32,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Access denied. Checksim Live API is restricted to Super Admins only." }, { status: 403 });
     }
 
-    // Check 5-minute break / cooldown (300,000 ms)
-    const lastRun = userCooldowns.get(decoded.uid) || 0;
-    const now = Date.now();
-    const cooldownTime = 5 * 60 * 500;
-    if (now - lastRun < cooldownTime) {
-      const remainingSecs = Math.ceil((cooldownTime - (now - lastRun)) / 1000);
-      const remainingMins = Math.ceil(remainingSecs / 60);
-      return NextResponse.json({ 
-        error: `Rate limit / Break active. Please wait ${remainingMins} Minutes` 
-      }, { status: 429 });
-    }
-
     // 10 tokens per number deduction
     const tokenCheck = await checkAndDeductTokens(decoded.uid, decoded.role, numbers.length * 10);
     if (!tokenCheck.success) {
       return NextResponse.json({ error: tokenCheck.error }, { status: 403 });
     }
 
-    const results = await runChecksimLookup(numbers);
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        try {
+          for await (const result of streamChecksimLookup(numbers)) {
+            controller.enqueue(encoder.encode(JSON.stringify(result) + "\n"));
+          }
+        } catch (err: any) {
+          console.error("Checksim stream generation error:", err);
+        } finally {
+          controller.close();
+        }
+      },
+    });
 
-    // Update cooldown timestamp
-    userCooldowns.set(decoded.uid, Date.now());
-
-    return NextResponse.json({ success: true, results });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+      },
+    });
   } catch (error: any) {
     console.error("Checksim Lookup Route Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

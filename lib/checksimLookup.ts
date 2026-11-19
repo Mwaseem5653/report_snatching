@@ -184,9 +184,8 @@ function singleChecksimRequest(phone: string, headers: Record<string, string>): 
   });
 }
 
-export async function runChecksimLookup(numbers: string[]): Promise<LookupResult[]> {
+export async function* streamChecksimLookup(numbers: string[]): AsyncGenerator<LookupResult> {
   const headersPool = getAndroidHeadersPool();
-  const results: LookupResult[] = new Array(numbers.length);
 
   for (let i = 0; i < numbers.length; i++) {
     const rawNum = numbers[i];
@@ -207,13 +206,19 @@ export async function runChecksimLookup(numbers: string[]): Promise<LookupResult
       operator = "Error";
     }
 
-    results[i] = { number: formatTo92Number(rawNum), operator };
+    yield { number: formatTo92Number(rawNum), operator };
 
     if (i < numbers.length - 1) {
       await new Promise((r) => setTimeout(r, 150));
     }
   }
+}
 
+export async function runChecksimLookup(numbers: string[]): Promise<LookupResult[]> {
+  const results: LookupResult[] = [];
+  for await (const res of streamChecksimLookup(numbers)) {
+    results.push(res);
+  }
   return results;
 }
 

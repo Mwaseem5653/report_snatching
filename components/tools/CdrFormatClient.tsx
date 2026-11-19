@@ -395,9 +395,9 @@ export default function CdrFormatClient() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ numbers }),
             });
-            const data = await res.json();
 
             if (res.status === 403) {
+                const data = await res.json().catch(() => ({}));
                 setTokenModal({
                     isOpen: true,
                     currentBalance: data.currentBalance || 0,
@@ -408,25 +408,81 @@ export default function CdrFormatClient() {
                 return;
             }
 
-            if (res.status === 429) {
-                toast.error(data.error || "Rate limit active. 5-minute break required after checking 20 numbers.");
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                toast.error(data.error || "Checksim lookup failed.");
                 setLoadingLookup(false);
                 setIsProcessing(false);
                 return;
             }
 
-            if (res.ok && data.success && data.results) {
-                const results = data.results.map((r: any) => ({
-                    ...r,
-                    number: formatTo92(r.number || r.phone || "")
-                }));
-                setAnalyzedNumbers(results);
-                setProcessedCount(numbers.length);
+            const contentType = res.headers.get("content-type") || "";
+            if (contentType.includes("application/x-ndjson") && res.body) {
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
+                const accumulated: any[] = [];
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop() || "";
+
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed) continue;
+                        try {
+                            const item = JSON.parse(trimmed);
+                            if (item && item.number) {
+                                accumulated.push({
+                                    ...item,
+                                    number: formatTo92(item.number || "")
+                                });
+                                setAnalyzedNumbers([...accumulated]);
+                                setProcessedCount(accumulated.length);
+                                setProgress(Math.round((accumulated.length / numbers.length) * 100));
+                            }
+                        } catch (err) {
+                            console.error("Error parsing NDJSON chunk:", err);
+                        }
+                    }
+                }
+
+                if (buffer.trim()) {
+                    try {
+                        const item = JSON.parse(buffer.trim());
+                        if (item && item.number) {
+                            accumulated.push({
+                                ...item,
+                                number: formatTo92(item.number || "")
+                            });
+                            setAnalyzedNumbers([...accumulated]);
+                            setProcessedCount(accumulated.length);
+                        }
+                    } catch (err) {}
+                }
+
                 setProgress(100);
-                toast.success(`Checksim Live identification complete! (${results.length} numbers)`);
+                toast.success(`Checksim Live identification complete! (${accumulated.length} numbers)`);
                 window.dispatchEvent(new Event("refresh-session"));
             } else {
-                toast.error(data.error || "Checksim lookup failed.");
+                const data = await res.json().catch(() => ({}));
+                if (data.success && data.results) {
+                    const results = data.results.map((r: any) => ({
+                        ...r,
+                        number: formatTo92(r.number || r.phone || "")
+                    }));
+                    setAnalyzedNumbers(results);
+                    setProcessedCount(numbers.length);
+                    setProgress(100);
+                    toast.success(`Checksim Live identification complete! (${results.length} numbers)`);
+                    window.dispatchEvent(new Event("refresh-session"));
+                } else {
+                    toast.error(data.error || "Checksim lookup failed.");
+                }
             }
         } catch (error: any) {
             toast.error("Network error during Checksim lookup: " + error.message);
